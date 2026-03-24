@@ -32,7 +32,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import {
+  IconGitBranch,
+  IconCircleCheck,
+} from "@tabler/icons-react"
 
+import { IconMail } from "@tabler/icons-react"
 const data = {
   user: {
     name: "shadcn",
@@ -42,9 +47,31 @@ const data = {
   navMain: [
     {
       title: "Dashboard",
-      url: "#",
+      url: "/dashboard",
       icon: IconDashboard,
     },
+      {
+    title: "Influencers List", 
+    url: "/dashboard/manage-influencers",
+    icon: IconUsers,
+  },
+  {
+    title: "Pipeline",
+    url: "/dashboard/pipeline",
+    icon: IconGitBranch,
+  },
+  {
+    title: "Closed",
+    url: "/dashboard/closed",
+    icon: IconCircleCheck,
+  },
+   {
+    title: "Inbox",
+    url: "/dashboard/inbox",
+    icon: IconMail,
+  },
+
+    
     {
       title: "Lifecycle",
       url: "#",
@@ -52,7 +79,7 @@ const data = {
     },
     {
       title: "Analytics",
-      url: "#",
+      url: "/dashboard/analytics",
       icon: IconChartBar,
     },
     {
@@ -150,7 +177,12 @@ const data = {
   ],
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  setView,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & {
+  setView: (view: string) => void
+}) {
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -160,19 +192,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:p-1.5!"
             >
-              <a href="#">
+              <button onClick={() => setView("dashboard")}>
                 <IconInnerShadowTop className="size-5!" />
                 <span className="text-base font-semibold">Acme Inc.</span>
-              </a>
+              </button>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
+
       <SidebarContent>
-        <NavMain items={data.navMain} />
+   
+       <NavMain items={data.navMain} />
+
         <NavDocuments items={data.documents} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
+
       <SidebarFooter>
         <NavUser user={data.user} />
       </SidebarFooter>
