@@ -27,6 +27,7 @@ interface OnboardingFormProps {
   onBack: () => void
   onSubmit: () => void
   onFormChange: (key: string, value: string) => void
+  onSkip: () => void
   isLoading?: boolean
 }
 
@@ -38,6 +39,7 @@ export function OnboardingForm({
   onBack,
   onSubmit,
   onFormChange,
+  onSkip,
   isLoading = false,
 }: OnboardingFormProps) {
   const steps = [
@@ -160,6 +162,8 @@ export function OnboardingForm({
                     type="button"
                     variant="ghost"
                     className="text-emerald-400 hover:text-lime-300 hover:bg-emerald-500/10 text-sm"
+                    onClick={onSkip}
+                    disabled={isLoading}
                   >
                     Skip &gt;&gt;
                   </Button>
@@ -167,7 +171,7 @@ export function OnboardingForm({
                     type="button"
                     onClick={onNext}
                     disabled={isLoading}
-                    className="h-10 px-8 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 disabled:opacity-50"
+                    className="h-10 px-8 bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold hover:from-emerald-400 hover:to-[#0F6B3E] shadow-lg shadow-emerald-500/50 disabled:opacity-50"
                   >
                     Next Step
                   </Button>
@@ -248,7 +252,7 @@ export function OnboardingForm({
                     type="button"
                     onClick={onNext}
                     disabled={isLoading}
-                    className="h-9 px-6 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold text-sm hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 disabled:opacity-50"
+                    className="h-9 px-6 bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold text-sm hover:from-emerald-400 hover:to-[#0F6B3E] shadow-lg shadow-emerald-500/50 disabled:opacity-50"
                   >
                     Next Step
                   </Button>
@@ -299,7 +303,7 @@ export function OnboardingForm({
                     type="button"
                     onClick={onNext}
                     disabled={isLoading}
-                    className="h-9 px-6 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold text-sm hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 disabled:opacity-50"
+                    className="h-9 px-6 bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold text-sm hover:from-emerald-400 hover:to-[#0F6B3E] shadow-lg shadow-emerald-500/50 disabled:opacity-50"
                   >
                     {isLoading ? 'Completing...' : 'Complete Setup'}
                   </Button>

@@ -20,7 +20,65 @@ export default function OnboardingPage() {
     source: '',
   })
 
+  const handleSkip = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      if (!session?.user) {
+        throw new Error("User session not found");
+      }
+      const userId = (session.user as any).id;
+      if (!userId) {
+        throw new Error("User ID not found in session");
+      }
+      const response = await fetch('/api/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          goal: null,
+          website: null,
+          team_size: null,
+          revenue: null,
+          source: null,
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to save onboarding data');
+      }
+      router.push('/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleNext = () => {
+    // Validation for each step
+    if (step === 1) {
+      // Require a goal to be selected
+      if (!formData.goal) {
+        setError('Please select your primary goal to continue.')
+        return
+      }
+    }
+    if (step === 2) {
+      // Require team size and revenue to be selected
+      if (!formData.teamSize || !formData.revenue) {
+        setError('Please select your team size and monthly revenue to continue.')
+        return
+      }
+    }
+    if (step === 3) {
+      // Require source to be selected
+      if (!formData.source) {
+        setError('Please select how you heard about us to continue.')
+        return
+      }
+    }
+    setError(null)
     if (step < 3) {
       setStep(step + 1)
     } else {
@@ -87,7 +145,7 @@ export default function OnboardingPage() {
 
       <div className="relative mx-auto flex min-h-svh w-full max-w-2xl items-center justify-center px-6 py-10">
         {error && (
-          <div className="absolute top-6 left-6 right-6 rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-300">
+          <div className="fixed right-8 bottom-8 z-50 rounded-lg border border-red-500/50 bg-red-500/90 p-4 text-sm text-white shadow-lg animate-fade-in">
             {error}
           </div>
         )}
@@ -99,6 +157,7 @@ export default function OnboardingPage() {
           onBack={handleBack}
           onSubmit={handleSubmit}
           onFormChange={handleFormChange}
+          onSkip={handleSkip}
           isLoading={isLoading}
         />
       </div>
