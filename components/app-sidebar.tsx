@@ -5,12 +5,18 @@ import {
   IconChartBar,
   IconDashboard,
   IconHelp,
+  IconInnerShadowTop,
   IconSearch,
   IconSettings,
   IconUsers,
   IconGitBranch,
   IconCircleCheck,
   IconMail,
+  IconListDetails,
+  IconFolder,
+  IconCamera,
+  IconFileDescription,
+  IconFileAi,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -22,13 +28,11 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
 } from "@/components/ui/sidebar"
-import {
-  IconGitBranch,
-  IconCircleCheck,
-} from "@tabler/icons-react"
 
-import { IconMail } from "@tabler/icons-react"
 const data = {
   user: {
     name: "Instroom.io",
@@ -145,7 +149,7 @@ export function AppSidebar({
   setView,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  setView: (view: string) => void
+  setView?: (view: string) => void
 }) {
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -156,7 +160,7 @@ export function AppSidebar({
               asChild
               className="data-[slot=sidebar-menu-button]:p-1.5!"
             >
-              <button onClick={() => setView("dashboard")}>
+              <button onClick={() => setView?.("dashboard")}>
                 <IconInnerShadowTop className="size-5!" />
                 <span className="text-base font-semibold">Acme Inc.</span>
               </button>
@@ -169,8 +173,7 @@ export function AppSidebar({
    
        <NavMain items={data.navMain} />
 
-        <NavDocuments items={data.documents} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+<NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
 
       <SidebarFooter>
