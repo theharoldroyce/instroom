@@ -1,0 +1,494 @@
+// This is your Prisma schema file
+// Influencer Collaboration SaaS — Full Database Schema
+// Compatible with MySQL and Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// 1. USERS & AUTHENTICATION
+// ============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?   @map("full_name")
+  password_hash String?
+  image         String?   @map("avatar_url")
+  platform_role String    @default("user") // 'super_admin', 'user'
+  is_active     Boolean   @default(true)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  // Relations
+  accounts              Account[]
+  sessions              Session[]
+  brand_owners          Brand[]           @relation("BrandOwner")
+  brand_members         BrandMember[]
+  brand_invitations     BrandInvitation[]
+  activity_logs         ActivityLog[]
+  notifications         Notification[]
+  user_subscription     UserSubscription?
+  payment_history       PaymentHistory[]
+  onboarding            Onboarding?
+
+  @@index([email])
+  @@index([platform_role])
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String  @map("user_id")
+  type               String
+  provider           String
+  providerAccountId  String  @map("provider_account_id")
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@index([provider, providerAccountId])
+  @@map("Account")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  created_at   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionToken])
+  @@index([userId])
+  @@map("Session")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================================================
+// 1b. ONBOARDING (Creator Analytics)
+// ============================================================================
+
+model Onboarding {
+  id         String   @id @default(cuid())
+  user_id    String   @unique
+  goal       String?
+  website    String?
+  team_size  String?
+  revenue    String?
+  source     String?
+  completed_at DateTime?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// 2. SUBSCRIPTION PLANS
+// ============================================================================
+
+model SubscriptionPlan {
+  id                    String  @id @default(cuid())
+  name                  String  @unique // 'solo', 'team', 'agency'
+  display_name          String
+  price_monthly         Decimal
+  price_yearly          Decimal
+  included_seats        Int     @default(0)
+  max_seats             Int?
+  price_per_extra_seat  Decimal?
+  included_brands       Int     @default(1)
+  max_brands            Int?
+  price_per_extra_brand Decimal?
+  max_influencers       Int?
+  max_campaigns         Int?
+  can_use_api           Boolean @default(false)
+  custom_branding       Boolean @default(false)
+  priority_support      Boolean @default(false)
+  sort_order            Int     @default(0)
+  is_active             Boolean @default(true)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  // Relations
+  user_subscriptions UserSubscription[]
+
+  @@index([name])
+}
+
+// ============================================================================
+// 3. USER SUBSCRIPTIONS (Active Subscription Per Owner)
+// ============================================================================
+
+model UserSubscription {
+  id                   String   @id @default(cuid())
+  user_id              String   @unique
+  plan_id              String
+  stripe_customer_id   String?  @unique
+  stripe_subscription_id String? @unique
+  status               String   @default("trialing") // 'active', 'trialing', 'paused', 'canceled'
+  extra_seats          Int      @default(0)
+  extra_brands         Int      @default(0)
+  started_at           DateTime @default(now())
+  ended_at             DateTime?
+  current_period_start DateTime @default(now())
+  current_period_end   DateTime?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  user User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan    @relation(fields: [plan_id], references: [id])
+  payment_history PaymentHistory[]
+
+  @@index([user_id])
+  @@index([status])
+  @@index([stripe_subscription_id])
+}
+
+// ============================================================================
+// 4. BRAND SEAT OVERRIDES
+// ============================================================================
+
+model BrandSeatOverride {
+  id         String   @id @default(cuid())
+  brand_id   String   @unique
+  extra_seats Int     @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+
+  @@index([brand_id])
+}
+
+// ============================================================================
+// 5. PAYMENT HISTORY
+// ============================================================================
+
+model PaymentHistory {
+  id                  String   @id @default(cuid())
+  user_id             String
+  brand_id            String?
+  subscription_id     String?
+  stripe_payment_id   String?
+  amount              Decimal
+  currency            String   @default("USD")
+  status              String   // 'pending', 'completed', 'failed', 'refunded'
+  description         String?
+  invoice_url         String?
+  created_at          DateTime @default(now())
+
+  user         User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  brand        Brand?              @relation(fields: [brand_id], references: [id], onDelete: SetNull)
+  subscription UserSubscription?   @relation(fields: [subscription_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([brand_id])
+  @@index([subscription_id])
+}
+
+// ============================================================================
+// 6. BRANDS / COMPANIES
+// ============================================================================
+
+model Brand {
+  id           String  @id @default(cuid())
+  owner_id     String
+  name         String
+  slug         String  @unique
+  logo_url     String?
+  description  String? @db.Text
+  website_url  String?
+  is_active    Boolean @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  // Relations
+  owner                  User                @relation("BrandOwner", fields: [owner_id], references: [id], onDelete: Cascade)
+  members                BrandMember[]
+  invitations            BrandInvitation[]
+  influencers            BrandInfluencer[]
+  campaigns              Campaign[]
+  activity_logs          ActivityLog[]
+  payment_history        PaymentHistory[]
+  seat_override          BrandSeatOverride?
+
+  @@index([owner_id])
+  @@index([slug])
+}
+
+// ============================================================================
+// 7. BRAND MEMBERS (Role-Based Access Per Brand)
+// ============================================================================
+
+model BrandMember {
+  id         String   @id @default(cuid())
+  brand_id   String
+  user_id    String
+  role       String   @default("collaborator") // 'owner', 'collaborator', 'viewer'
+  joined_at  DateTime @default(now())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([brand_id, user_id])
+  @@index([user_id])
+  @@index([brand_id])
+}
+
+// ============================================================================
+// 8. BRAND INVITATIONS (Pending Invites)
+// ============================================================================
+
+model BrandInvitation {
+  id             String   @id @default(cuid())
+  brand_id       String
+  email          String
+  invited_by_id  String
+  token          String   @unique
+  role           String   @default("collaborator")
+  status         String   @default("pending") // 'pending', 'accepted', 'declined'
+  expires_at     DateTime
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  brand      Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  invited_by User  @relation(fields: [invited_by_id], references: [id], onDelete: Cascade)
+
+  @@unique([brand_id, email])
+  @@index([token])
+  @@index([email])
+}
+
+// ============================================================================
+// 9. INFLUENCERS (Global — Shared Across All Brands)
+// ============================================================================
+
+model Influencer {
+  id              String  @id @default(cuid())
+  handle          String
+  platform        String  // 'instagram', 'tiktok', 'youtube', etc.
+  full_name       String?
+  email           String?
+  avatar_url      String?
+  bio             String? @db.Text
+  follower_count  Int     @default(0)
+  engagement_rate Decimal @default(0)
+  niche           String?
+  is_verified     Boolean @default(false)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  // Relations
+  brand_influencers BrandInfluencer[]
+
+  @@unique([handle, platform])
+  @@index([handle])
+  @@index([platform])
+  @@index([email])
+  @@index([niche])
+}
+
+// ============================================================================
+// 10. CAMPAIGNS
+// ============================================================================
+
+model Campaign {
+  id          String   @id @default(cuid())
+  brand_id    String
+  name        String
+  description String? @db.Text
+  status      String   @default("draft") // 'draft', 'active', 'completed', 'archived'
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  brand       Brand              @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  influencers BrandInfluencer[]
+
+  @@index([brand_id])
+}
+
+// ============================================================================
+// 11. BRAND_INFLUENCERS (THE CORE JOIN TABLE)
+// ============================================================================
+// This is where ALL brand-specific collaboration data lives.
+// Brand A's relationship with Ms. Aliyah is 100% separate from Brand B's.
+
+model BrandInfluencer {
+  id              String   @id @default(cuid())
+  brand_id        String
+  influencer_id   String
+  campaign_id     String?
+  
+  // Outreach & Status
+  contact_status  String   @default("not_contacted") // 'not_contacted', 'contacted', 'interested', 'agreed'
+  outreach_method String?  // 'email', 'dm', 'phone'
+  
+  // Stages
+  stage           Int      @default(1) // 1: Listed, 2: Contacted, 3: Agreed, 4: Product Sent, 5: Content Posted
+  
+  // Product & Order
+  order_status    String?  // 'pending', 'shipped', 'delivered'
+  product_details String? @db.Text
+  shipped_at      DateTime?
+  delivered_at    DateTime?
+  
+  // Content & Performance
+  content_posted    Boolean @default(false)
+  posted_at         DateTime?
+  post_url          String?
+  post_caption      String? @db.Text
+  likes_count       Int     @default(0)
+  comments_count    Int     @default(0)
+  engagement_count  Int     @default(0)
+  
+  // Agreed Terms
+  agreed_rate       Decimal?
+  currency          String?
+  deliverables      String? @db.Text
+  deadline          DateTime?
+  
+  // Notes
+  notes             String? @db.Text
+  internal_rating   Decimal?
+  
+  // Metadata
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  // Relations
+  brand               Brand            @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  influencer          Influencer       @relation(fields: [influencer_id], references: [id], onDelete: Cascade)
+  campaign            Campaign?        @relation(fields: [campaign_id], references: [id], onDelete: SetNull)
+  outreach_logs       OutreachLog[]
+  content_posts       ContentPost[]
+
+  @@unique([brand_id, influencer_id])
+  @@index([brand_id])
+  @@index([influencer_id])
+  @@index([brand_id, stage])
+  @@index([brand_id, contact_status])
+  @@index([campaign_id])
+  @@index([brand_id, order_status])
+}
+
+// ============================================================================
+// 12. OUTREACH HISTORY (Email/Message Log)
+// ============================================================================
+
+model OutreachLog {
+  id                String   @id @default(cuid())
+  brand_influencer_id String
+  outreach_type     String   // 'email', 'dm', 'phone', 'manual'
+  subject           String?
+  message           String? @db.Text
+  response_received Boolean  @default(false)
+  response_date     DateTime?
+  response_text     String? @db.Text
+  created_at        DateTime @default(now())
+
+  brand_influencer BrandInfluencer @relation(fields: [brand_influencer_id], references: [id], onDelete: Cascade)
+
+  @@index([brand_influencer_id])
+}
+
+// ============================================================================
+// 13. CONTENT SUBMISSIONS
+// ============================================================================
+
+model ContentPost {
+  id                    String   @id @default(cuid())
+  brand_influencer_id   String
+  platform              String   // 'instagram', 'tiktok', 'youtube'
+  post_url              String
+  caption               String? @db.Text
+  posted_date           DateTime
+  likes                 Int      @default(0)
+  comments              Int      @default(0)
+  shares                Int      @default(0)
+  engagement_rate       Decimal  @default(0)
+  saved_count           Int      @default(0)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  brand_influencer BrandInfluencer @relation(fields: [brand_influencer_id], references: [id], onDelete: Cascade)
+
+  @@index([brand_influencer_id])
+}
+
+// ============================================================================
+// 14. ACTIVITY LOG (Audit Trail)
+// ============================================================================
+
+model ActivityLog {
+  id           String   @id @default(cuid())
+  brand_id     String
+  user_id      String
+  action       String   // 'created', 'updated', 'deleted', 'contacted'
+  entity_type  String   // 'influencer', 'campaign', 'brand_member'
+  entity_id    String
+  details      String? @db.Text
+  created_at   DateTime @default(now())
+
+  brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([brand_id])
+  @@index([user_id])
+  @@index([entity_type, entity_id])
+  @@index([created_at])
+}
+
+// ============================================================================
+// 15. NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id          String   @id @default(cuid())
+  user_id     String
+  title       String
+  message     String? @db.Text
+  action_url  String?
+  notification_type String? // 'invitation', 'response', 'post'
+  is_read     Boolean  @default(false)
+  read_at     DateTime?
+  created_at  DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_read])
+}
+
+// ============================================================================
+// 16. PLATFORM SETTINGS (Super Admin Only)
+// ============================================================================
+
+model PlatformSettings {
+  id              String   @id @default(cuid())
+  setting_key     String   @unique
+  setting_value   String?  @db.Text
+  description     String?
+  updated_at      DateTime @updatedAt
+}
