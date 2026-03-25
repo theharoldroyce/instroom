@@ -27,6 +27,7 @@ interface OnboardingFormProps {
   onBack: () => void
   onSubmit: () => void
   onFormChange: (key: string, value: string) => void
+  isLoading?: boolean
 }
 
 export function OnboardingForm({
@@ -37,6 +38,7 @@ export function OnboardingForm({
   onBack,
   onSubmit,
   onFormChange,
+  isLoading = false,
 }: OnboardingFormProps) {
   const steps = [
     { number: 1, title: 'Your Goal' },
@@ -65,9 +67,10 @@ export function OnboardingForm({
               </p>
               <Button
                 onClick={onSubmit}
-                className="h-11 px-10 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50"
+                disabled={isLoading}
+                className="h-11 px-10 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 disabled:opacity-50"
               >
-                Get Started
+                {isLoading ? 'Getting Started...' : 'Get Started'}
               </Button>
             </CardContent>
           </Card>
@@ -163,7 +166,8 @@ export function OnboardingForm({
                   <Button
                     type="button"
                     onClick={onNext}
-                    className="h-10 px-8 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50"
+                    disabled={isLoading}
+                    className="h-10 px-8 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 disabled:opacity-50"
                   >
                     Next Step
                   </Button>
@@ -243,7 +247,8 @@ export function OnboardingForm({
                   <Button
                     type="button"
                     onClick={onNext}
-                    className="h-9 px-6 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold text-sm hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50"
+                    disabled={isLoading}
+                    className="h-9 px-6 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold text-sm hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 disabled:opacity-50"
                   >
                     Next Step
                   </Button>
@@ -293,9 +298,10 @@ export function OnboardingForm({
                   <Button
                     type="button"
                     onClick={onNext}
-                    className="h-9 px-6 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold text-sm hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50"
+                    disabled={isLoading}
+                    className="h-9 px-6 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold text-sm hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 disabled:opacity-50"
                   >
-                    Complete Setup
+                    {isLoading ? 'Completing...' : 'Complete Setup'}
                   </Button>
                 </div>
               </form>
