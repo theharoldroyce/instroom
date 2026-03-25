@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter, usePathname } from "next/navigation"
-import { type Icon } from "@tabler/icons-react"
+import { IconCirclePlusFilled, IconMail, type Icon } from "@tabler/icons-react"
 
 import {
   SidebarGroup,
@@ -26,7 +26,30 @@ export function NavMain({
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
+        
+        {/* Top Actions */}
+        <SidebarMenu>
+          <SidebarMenuItem className="flex items-center gap-2">
+            <SidebarMenuButton
+              tooltip="Quick Create"
+              className="min-w-8 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <IconCirclePlusFilled />
+              <span>Quick Create</span>
+            </SidebarMenuButton>
 
+            <Button
+              size="icon"
+              className="size-8 group-data-[collapsible=icon]:opacity-0"
+              variant="outline"
+            >
+              <IconMail />
+              <span className="sr-only">Inbox</span>
+            </Button>
+          </SidebarMenuItem>
+        </SidebarMenu>
+
+        {/* Navigation Items */}
         <SidebarMenu>
           {items.map((item) => {
             const isActive = pathname === item.url
@@ -36,16 +59,9 @@ export function NavMain({
                 <SidebarMenuButton
                   tooltip={item.title}
                   onClick={() => router.push(item.url)}
-                  className={`
-                    flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors
-                    ${
-                      isActive
-                        ? "bg-[#1FAE5B] text-white font-medium"
-                        : "text-[#F7F9F8] hover:bg-white/10"
-                    }
-                  `}
+                  className={isActive ? "bg-muted font-medium" : ""}
                 >
-                  {item.icon && <item.icon className="h-4 w-4" />}
+                  {item.icon && <item.icon />}
                   <span>{item.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>

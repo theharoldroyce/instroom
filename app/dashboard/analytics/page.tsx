@@ -31,7 +31,7 @@ export default function AnalyticsPage() {
 
       {/* HEADER */}
       <div>
-        {/* <h1 className="text-xl font-semibold">Analytics</h1> */}
+        <h1 className="text-xl font-semibold">Analytics</h1>
         <p className="text-sm text-muted-foreground">
           Here are the latest insights
         </p>
