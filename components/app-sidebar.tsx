@@ -5,18 +5,12 @@ import {
   IconChartBar,
   IconDashboard,
   IconHelp,
-  IconInnerShadowTop,
   IconSearch,
   IconSettings,
   IconUsers,
   IconGitBranch,
   IconCircleCheck,
   IconMail,
-  IconListDetails,
-  IconFolder,
-  IconCamera,
-  IconFileDescription,
-  IconFileAi,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -28,10 +22,9 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
 } from "@/components/ui/sidebar"
+
+import Image from "next/image"
 
 const data = {
   user: {
@@ -41,101 +34,12 @@ const data = {
   },
 
   navMain: [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: IconDashboard,
-    },
-      {
-    title: "Influencers List", 
-    url: "/dashboard/manage-influencers",
-    icon: IconUsers,
-  },
-  {
-    title: "Pipeline",
-    url: "/dashboard/pipeline",
-    icon: IconGitBranch,
-  },
-  {
-    title: "Closed",
-    url: "/dashboard/closed",
-    icon: IconCircleCheck,
-  },
-   {
-    title: "Inbox",
-    url: "/dashboard/inbox",
-    icon: IconMail,
-  },
-
-    
-    {
-      title: "Lifecycle",
-      url: "#",
-      icon: IconListDetails,
-    },
-    {
-      title: "Analytics",
-      url: "/dashboard/analytics",
-      icon: IconChartBar,
-    },
-    {
-      title: "Projects",
-      url: "#",
-      icon: IconFolder,
-    },
-    {
-      title: "Team",
-      url: "#",
-      icon: IconUsers,
-    },
-  ],
-  navClouds: [
-    {
-      title: "Capture",
-      icon: IconCamera,
-      isActive: true,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Proposal",
-      icon: IconFileDescription,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Prompts",
-      icon: IconFileAi,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
+    { title: "Dashboard", url: "/dashboard", icon: IconDashboard },
+    { title: "Inbox", url: "/dashboard/inbox", icon: IconMail },
+    { title: "Influencers List", url: "/dashboard/manage-influencers", icon: IconUsers },
+    { title: "Pipeline", url: "/dashboard/pipeline", icon: IconGitBranch },
+    { title: "Closed", url: "/dashboard/closed", icon: IconCircleCheck },
+    { title: "Analytics", url: "/dashboard/analytics", icon: IconChartBar },
   ],
 
   navSecondary: [
@@ -149,34 +53,40 @@ export function AppSidebar({
   setView,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  setView?: (view: string) => void
+  setView: (view: string) => void
 }) {
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
-            >
-              <button onClick={() => setView?.("dashboard")}>
-                <IconInnerShadowTop className="size-5!" />
-                <span className="text-base font-semibold">Acme Inc.</span>
-              </button>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
+    <Sidebar
+      collapsible="offcanvas"
+      className="bg-[#0F6B3E] text-[#F7F9F8]"
+      {...props}
+    >
 
-      <SidebarContent>
-   
-       <NavMain items={data.navMain} />
+      {/* HEADER */}
+<SidebarHeader className="h-24 flex items-center px--4 border-b border-white/10 bg-[#0F6B3E]">
+  <button
+    onClick={() => setView("dashboard")}
+    className="flex items-center w-full"
+  >
+    <Image
+      src="/INSTROOM WHITE.png"
+      alt="Instroom Logo"
+      width={150}
+      height={32}
+      className="object-contain"
+      priority
+    />
+  </button>
+</SidebarHeader>
 
-<NavSecondary items={data.navSecondary} className="mt-auto" />
+      {/* MENU */}
+      <SidebarContent className="bg-[#0F6B3E] text-[#F7F9F8] px-2">
+        <NavMain items={data.navMain} />
+        <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
 
-      <SidebarFooter>
+      {/* USER */}
+      <SidebarFooter className="border-t border-white/10 bg-[#0F6B3E]">
         <NavUser user={data.user} />
       </SidebarFooter>
 
