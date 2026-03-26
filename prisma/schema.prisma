@@ -16,12 +16,12 @@ datasource db {
 // ============================================================================
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id            String    @id @default(cuid()) @db.VarChar(30)
+  email         String    @unique @db.VarChar(191)
   name          String?   @map("full_name")
   password_hash String?
   image         String?   @map("avatar_url")
-  platform_role String    @default("user") // 'super_admin', 'user'
+  platform_role String    @default("user") @db.VarChar(20) // 'super_admin', 'user'
   is_active     Boolean   @default(true)
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
@@ -43,16 +43,16 @@ model User {
 }
 
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String  @map("user_id")
-  type               String
-  provider           String
-  providerAccountId  String  @map("provider_account_id")
+  id                 String  @id @default(cuid()) @db.VarChar(30)
+  userId             String  @map("user_id") @db.VarChar(30)
+  type               String  @db.VarChar(50)
+  provider           String  @db.VarChar(50)
+  providerAccountId  String  @map("provider_account_id") @db.VarChar(150)
   refresh_token      String? @db.Text
   access_token       String? @db.Text
   expires_at         Int?
-  token_type         String?
-  scope              String?
+  token_type         String? @db.VarChar(50)
+  scope              String? @db.VarChar(255)
   id_token           String? @db.Text
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -64,9 +64,9 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique @map("session_token")
-  userId       String   @map("user_id")
+  id           String   @id @default(cuid()) @db.VarChar(30)
+  sessionToken String   @unique @map("session_token") @db.VarChar(191)
+  userId       String   @map("user_id") @db.VarChar(30)
   expires      DateTime
   created_at   DateTime @default(now())
 
@@ -78,8 +78,8 @@ model Session {
 }
 
 model VerificationToken {
-  identifier String
-  token      String   @unique
+  identifier String @db.VarChar(100)
+  token      String @unique @db.VarChar(100)
   expires    DateTime
 
   @@unique([identifier, token])
@@ -90,8 +90,8 @@ model VerificationToken {
 // ============================================================================
 
 model Onboarding {
-  id         String   @id @default(cuid())
-  user_id    String   @unique
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  user_id    String   @unique @db.VarChar(30)
   goal       String?
   website    String?
   team_size  String?
@@ -109,9 +109,9 @@ model Onboarding {
 // ============================================================================
 
 model SubscriptionPlan {
-  id                    String  @id @default(cuid())
-  name                  String  @unique // 'solo', 'team', 'agency'
-  display_name          String
+  id                    String  @id @default(cuid()) @db.VarChar(30)
+  name                  String  @unique @db.VarChar(50) // 'solo', 'team', 'agency'
+  display_name          String  @db.VarChar(100)
   price_monthly         Decimal
   price_yearly          Decimal
   included_seats        Int     @default(0)
@@ -141,12 +141,12 @@ model SubscriptionPlan {
 // ============================================================================
 
 model UserSubscription {
-  id                   String   @id @default(cuid())
-  user_id              String   @unique
-  plan_id              String
-  stripe_customer_id   String?  @unique
-  stripe_subscription_id String? @unique
-  status               String   @default("trialing") // 'active', 'trialing', 'paused', 'canceled'
+  id                   String   @id @default(cuid()) @db.VarChar(30)
+  user_id              String   @unique @db.VarChar(30)
+  plan_id              String   @db.VarChar(30)
+  stripe_customer_id   String?  @unique @db.VarChar(191)
+  stripe_subscription_id String? @unique @db.VarChar(191)
+  status               String   @default("trialing") @db.VarChar(20) // 'active', 'trialing', 'paused', 'canceled'
   extra_seats          Int      @default(0)
   extra_brands         Int      @default(0)
   started_at           DateTime @default(now())
@@ -170,8 +170,8 @@ model UserSubscription {
 // ============================================================================
 
 model BrandSeatOverride {
-  id         String   @id @default(cuid())
-  brand_id   String   @unique
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  brand_id   String   @unique @db.VarChar(30)
   extra_seats Int     @default(0)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -186,14 +186,14 @@ model BrandSeatOverride {
 // ============================================================================
 
 model PaymentHistory {
-  id                  String   @id @default(cuid())
-  user_id             String
-  brand_id            String?
-  subscription_id     String?
-  stripe_payment_id   String?
+  id                  String   @id @default(cuid()) @db.VarChar(30)
+  user_id             String   @db.VarChar(30)
+  brand_id            String?  @db.VarChar(30)
+  subscription_id     String?  @db.VarChar(30)
+  stripe_payment_id   String?  @db.VarChar(191)
   amount              Decimal
-  currency            String   @default("USD")
-  status              String   // 'pending', 'completed', 'failed', 'refunded'
+  currency            String   @default("USD") @db.VarChar(10)
+  status              String   @db.VarChar(20) // 'pending', 'completed', 'failed', 'refunded'
   description         String?
   invoice_url         String?
   created_at          DateTime @default(now())
@@ -212,10 +212,10 @@ model PaymentHistory {
 // ============================================================================
 
 model Brand {
-  id           String  @id @default(cuid())
-  owner_id     String
-  name         String
-  slug         String  @unique
+  id           String  @id @default(cuid()) @db.VarChar(30)
+  owner_id     String  @db.VarChar(30)
+  name         String  @db.VarChar(191)
+  slug         String  @unique @db.VarChar(191)
   logo_url     String?
   description  String? @db.Text
   website_url  String?
@@ -242,10 +242,10 @@ model Brand {
 // ============================================================================
 
 model BrandMember {
-  id         String   @id @default(cuid())
-  brand_id   String
-  user_id    String
-  role       String   @default("collaborator") // 'owner', 'collaborator', 'viewer'
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  brand_id   String   @db.VarChar(30)
+  user_id    String   @db.VarChar(30)
+  role       String   @default("collaborator") @db.VarChar(20) // 'owner', 'collaborator', 'viewer'
   joined_at  DateTime @default(now())
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -263,13 +263,13 @@ model BrandMember {
 // ============================================================================
 
 model BrandInvitation {
-  id             String   @id @default(cuid())
-  brand_id       String
-  email          String
-  invited_by_id  String
-  token          String   @unique
-  role           String   @default("collaborator")
-  status         String   @default("pending") // 'pending', 'accepted', 'declined'
+  id             String   @id @default(cuid()) @db.VarChar(30)
+  brand_id       String   @db.VarChar(30)
+  email          String   @db.VarChar(191)
+  invited_by_id  String   @db.VarChar(30)
+  token          String   @unique @db.VarChar(191)
+  role           String   @default("collaborator") @db.VarChar(20)
+  status         String   @default("pending") @db.VarChar(20) // 'pending', 'accepted', 'declined'
   expires_at     DateTime
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
@@ -287,16 +287,16 @@ model BrandInvitation {
 // ============================================================================
 
 model Influencer {
-  id              String  @id @default(cuid())
-  handle          String
-  platform        String  // 'instagram', 'tiktok', 'youtube', etc.
+  id              String  @id @default(cuid()) @db.VarChar(30)
+  handle          String  @db.VarChar(191)
+  platform        String  @db.VarChar(50) // 'instagram', 'tiktok', 'youtube', etc.
   full_name       String?
-  email           String?
+  email           String? @db.VarChar(191)
   avatar_url      String?
   bio             String? @db.Text
   follower_count  Int     @default(0)
   engagement_rate Decimal @default(0)
-  niche           String?
+  niche           String? @db.VarChar(100)
   is_verified     Boolean @default(false)
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
@@ -316,11 +316,11 @@ model Influencer {
 // ============================================================================
 
 model Campaign {
-  id          String   @id @default(cuid())
-  brand_id    String
-  name        String
+  id          String   @id @default(cuid()) @db.VarChar(30)
+  brand_id    String   @db.VarChar(30)
+  name        String   @db.VarChar(191)
   description String? @db.Text
-  status      String   @default("draft") // 'draft', 'active', 'completed', 'archived'
+  status      String   @default("draft") @db.VarChar(20) // 'draft', 'active', 'completed', 'archived'
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
@@ -337,24 +337,24 @@ model Campaign {
 // Brand A's relationship with Ms. Aliyah is 100% separate from Brand B's.
 
 model BrandInfluencer {
-  id              String   @id @default(cuid())
-  brand_id        String
-  influencer_id   String
-  campaign_id     String?
-  
+  id              String   @id @default(cuid()) @db.VarChar(30)
+  brand_id        String   @db.VarChar(30)
+  influencer_id   String   @db.VarChar(30)
+  campaign_id     String?  @db.VarChar(30)
+
   // Outreach & Status
-  contact_status  String   @default("not_contacted") // 'not_contacted', 'contacted', 'interested', 'agreed'
-  outreach_method String?  // 'email', 'dm', 'phone'
-  
+  contact_status  String   @default("not_contacted") @db.VarChar(30) // 'not_contacted', 'contacted', 'interested', 'agreed'
+  outreach_method String?  @db.VarChar(20) // 'email', 'dm', 'phone'
+
   // Stages
   stage           Int      @default(1) // 1: Listed, 2: Contacted, 3: Agreed, 4: Product Sent, 5: Content Posted
-  
+
   // Product & Order
-  order_status    String?  // 'pending', 'shipped', 'delivered'
+  order_status    String?  @db.VarChar(20) // 'pending', 'shipped', 'delivered'
   product_details String? @db.Text
   shipped_at      DateTime?
   delivered_at    DateTime?
-  
+
   // Content & Performance
   content_posted    Boolean @default(false)
   posted_at         DateTime?
@@ -363,17 +363,17 @@ model BrandInfluencer {
   likes_count       Int     @default(0)
   comments_count    Int     @default(0)
   engagement_count  Int     @default(0)
-  
+
   // Agreed Terms
   agreed_rate       Decimal?
-  currency          String?
+  currency          String? @db.VarChar(10)
   deliverables      String? @db.Text
   deadline          DateTime?
-  
+
   // Notes
   notes             String? @db.Text
   internal_rating   Decimal?
-  
+
   // Metadata
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
@@ -399,9 +399,9 @@ model BrandInfluencer {
 // ============================================================================
 
 model OutreachLog {
-  id                String   @id @default(cuid())
-  brand_influencer_id String
-  outreach_type     String   // 'email', 'dm', 'phone', 'manual'
+  id                String   @id @default(cuid()) @db.VarChar(30)
+  brand_influencer_id String @db.VarChar(30)
+  outreach_type     String   @db.VarChar(20) // 'email', 'dm', 'phone', 'manual'
   subject           String?
   message           String? @db.Text
   response_received Boolean  @default(false)
@@ -419,9 +419,9 @@ model OutreachLog {
 // ============================================================================
 
 model ContentPost {
-  id                    String   @id @default(cuid())
-  brand_influencer_id   String
-  platform              String   // 'instagram', 'tiktok', 'youtube'
+  id                    String   @id @default(cuid()) @db.VarChar(30)
+  brand_influencer_id   String   @db.VarChar(30)
+  platform              String   @db.VarChar(50) // 'instagram', 'tiktok', 'youtube'
   post_url              String
   caption               String? @db.Text
   posted_date           DateTime
@@ -443,12 +443,12 @@ model ContentPost {
 // ============================================================================
 
 model ActivityLog {
-  id           String   @id @default(cuid())
-  brand_id     String
-  user_id      String
-  action       String   // 'created', 'updated', 'deleted', 'contacted'
-  entity_type  String   // 'influencer', 'campaign', 'brand_member'
-  entity_id    String
+  id           String   @id @default(cuid()) @db.VarChar(30)
+  brand_id     String   @db.VarChar(30)
+  user_id      String   @db.VarChar(30)
+  action       String   @db.VarChar(50) // 'created', 'updated', 'deleted', 'contacted'
+  entity_type  String   @db.VarChar(50) // 'influencer', 'campaign', 'brand_member'
+  entity_id    String   @db.VarChar(30)
   details      String? @db.Text
   created_at   DateTime @default(now())
 
@@ -466,12 +466,12 @@ model ActivityLog {
 // ============================================================================
 
 model Notification {
-  id          String   @id @default(cuid())
-  user_id     String
-  title       String
+  id          String   @id @default(cuid()) @db.VarChar(30)
+  user_id     String   @db.VarChar(30)
+  title       String   @db.VarChar(255)
   message     String? @db.Text
   action_url  String?
-  notification_type String? // 'invitation', 'response', 'post'
+  notification_type String? @db.VarChar(50) // 'invitation', 'response', 'post'
   is_read     Boolean  @default(false)
   read_at     DateTime?
   created_at  DateTime @default(now())
@@ -486,8 +486,8 @@ model Notification {
 // ============================================================================
 
 model PlatformSettings {
-  id              String   @id @default(cuid())
-  setting_key     String   @unique
+  id              String   @id @default(cuid()) @db.VarChar(30)
+  setting_key     String   @unique @db.VarChar(100)
   setting_value   String?  @db.Text
   description     String?
   updated_at      DateTime @updatedAt

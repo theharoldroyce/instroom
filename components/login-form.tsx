@@ -89,18 +89,14 @@ export function LoginForm({
   }
 
   const handleGoogleLogin = async () => {
-    console.log("Google login button clicked")
     try {
       setIsLoading(true)
       setError(null)
-      console.log("About to call signIn('google')")
-      const result = await signIn("google", { 
-        callbackUrl: "/onboarding",
+      await signIn("google", {
+        callbackUrl: "/api/auth/redirect",
         redirect: true
       })
-      console.log("signIn result:", result)
     } catch (err) {
-      console.error("Google login error:", err)
       setError("Google login failed. Please try again.")
     } finally {
       setIsLoading(false)
