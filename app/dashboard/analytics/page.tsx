@@ -1,5 +1,8 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import jsonData from "@/app/dashboard/data.json"
+
 function MetricBox({
   title,
   items,
@@ -12,7 +15,6 @@ function MetricBox({
   return (
     <div className={`rounded-xl border p-4 ${color}`}>
       <div className="text-sm font-medium mb-3">{title}</div>
-
       <div className="grid grid-cols-2 gap-2 text-xs">
         {items.map((item, i) => (
           <div key={i} className="flex justify-between">
@@ -26,14 +28,91 @@ function MetricBox({
 }
 
 export default function AnalyticsPage() {
+  const [influencers, setInfluencers] = useState<any[]>([])
+
+  // Load data from JSON file
+  useEffect(() => {
+    if (jsonData && Array.isArray(jsonData)) {
+      setInfluencers(jsonData)
+    }
+  }, [])
+
+  // Calculate metrics based on pipeline status
+  const calculateMetrics = () => {
+    // Count by platform (assuming Instagram handle indicates platform)
+    const instagramCount = influencers.filter(i => i.instagramHandle?.startsWith('@')).length
+    const tiktokCount = influencers.filter(i => i.instagramHandle?.includes('tiktok') || i.niche === 'TikTok').length
+    
+    // Count by status
+    const totalInfluencers = influencers.length
+    const reachedOut = influencers.filter(i => i.pipelineStatus === "Reached Out").length
+    const inConversation = influencers.filter(i => i.pipelineStatus === "In Conversation").length
+    const onboarded = influencers.filter(i => i.pipelineStatus === "Onboarded").length
+    const prospects = influencers.filter(i => i.pipelineStatus === "Prospect").length
+    const rejected = influencers.filter(i => i.pipelineStatus === "Rejected").length
+    
+    // For order creation, in transit, delivered, posted (not in current data, set to 0)
+    const forOrderCreation = 0
+    const inTransit = 0
+    const delivered = 0
+    const contentPending = 0
+    const posted = 0
+    
+    // Response rate and closing rate calculations
+    const responded = inConversation + onboarded
+    const responseRate = totalInfluencers > 0 ? ((responded / totalInfluencers) * 100).toFixed(1) : "0"
+    const closingRate = totalInfluencers > 0 ? ((onboarded / totalInfluencers) * 100).toFixed(1) : "0"
+    const postRate = totalInfluencers > 0 ? ((posted / totalInfluencers) * 100).toFixed(1) : "0"
+    
+    // Not interested reasons (placeholder data)
+    const notInterested = rejected
+    const notInterestedBreakdown = {
+      paidOnly: 0,
+      noUsageRights: 0,
+      noCreativeFreedom: 0,
+      valuesMismatch: 0,
+      brandConflict: 0,
+      fullyBooked: 0,
+      others: notInterested
+    }
+    
+    // Platform specific counts
+    const platformCounts = {
+      instagram: instagramCount,
+      tiktok: tiktokCount,
+      facebook: 0,
+      youtube: 0
+    }
+    
+    return {
+      totalInfluencers,
+      reachedOut,
+      inConversation,
+      onboarded,
+      prospects,
+      rejected,
+      forOrderCreation,
+      inTransit,
+      delivered,
+      contentPending,
+      posted,
+      responseRate,
+      closingRate,
+      postRate,
+      notInterestedBreakdown,
+      platformCounts
+    }
+  }
+  
+  const metrics = calculateMetrics()
+
   return (
     <div className="flex flex-col gap-6 p-6">
 
       {/* HEADER */}
       <div>
-        {/* <h1 className="text-xl font-semibold">Analytics</h1> */}
         <p className="text-sm text-muted-foreground">
-          Here are the latest insights
+          Here are the latest insights from your influencer campaigns
         </p>
       </div>
 
@@ -74,15 +153,15 @@ export default function AnalyticsPage() {
 
         <div className="grid md:grid-cols-3 gap-4">
           <MetricBox title="Response Rate" color="border-purple-400" items={[
-            { label: "Responses", value: "0.00%" },
+            { label: "Responses", value: `${metrics.responseRate}%` },
           ]} />
 
           <MetricBox title="Closing Rate" color="border-green-400" items={[
-            { label: "Deals Closed", value: "0.00%" },
+            { label: "Deals Closed", value: `${metrics.closingRate}%` },
           ]} />
 
           <MetricBox title="Post Rate" color="border-red-400" items={[
-            { label: "Posted", value: "0.00%" },
+            { label: "Posted", value: `${metrics.postRate}%` },
           ]} />
         </div>
       </div>
@@ -93,15 +172,15 @@ export default function AnalyticsPage() {
 
         <div className="grid md:grid-cols-4 gap-4">
           <MetricBox title="Posted" color="bg-blue-700 text-white" items={[
-            { label: "Total", value: 0 },
+            { label: "Total", value: metrics.posted },
           ]} />
 
           <MetricBox title="Content Pending" color="bg-indigo-600 text-white" items={[
-            { label: "Pending", value: 0 },
+            { label: "Pending", value: metrics.contentPending },
           ]} />
 
           <MetricBox title="Inactive" color="bg-sky-600 text-white" items={[
-            { label: "Inactive", value: 0 },
+            { label: "Inactive", value: metrics.rejected },
           ]} />
 
           <MetricBox title="Content Saved" color="bg-teal-500 text-white" items={[
@@ -137,114 +216,113 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-     
-     {/* SUMMARY INSIGHTS */}
-<div>
-  <h2 className="text-md font-semibold mb-3">Summary Insights</h2>
+      {/* SUMMARY INSIGHTS */}
+      <div>
+        <h2 className="text-md font-semibold mb-3">Summary Insights</h2>
 
-  <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-3 gap-4">
 
-    {/* TOTAL INFLUENCER */}
-    <MetricBox
-      title="Total Influencer: 1"
-      color="border"
-      items={[
-        { label: "Facebook", value: 0 },
-        { label: "Instagram", value: 0 },
-        { label: "TikTok", value: 1 },
-        { label: "YouTube", value: 0 },
-      ]}
-    />
+          {/* TOTAL INFLUENCER */}
+          <MetricBox
+            title={`Total Influencer: ${metrics.totalInfluencers}`}
+            color="border"
+            items={[
+              { label: "Facebook", value: metrics.platformCounts.facebook },
+              { label: "Instagram", value: metrics.platformCounts.instagram },
+              { label: "TikTok", value: metrics.platformCounts.tiktok },
+              { label: "YouTube", value: metrics.platformCounts.youtube },
+            ]}
+          />
 
-    {/* TOTAL REACHED OUT */}
-    <MetricBox
-      title="Total Reached Out: 0"
-      color="border"
-      items={[
-        { label: "Facebook", value: 0 },
-        { label: "Instagram", value: 0 },
-        { label: "TikTok", value: 0 },
-        { label: "YouTube", value: 0 },
-      ]}
-    />
+          {/* TOTAL REACHED OUT */}
+          <MetricBox
+            title={`Total Reached Out: ${metrics.reachedOut + metrics.inConversation + metrics.onboarded}`}
+            color="border"
+            items={[
+              { label: "Facebook", value: 0 },
+              { label: "Instagram", value: metrics.reachedOut + metrics.inConversation + metrics.onboarded },
+              { label: "TikTok", value: 0 },
+              { label: "YouTube", value: 0 },
+            ]}
+          />
 
-    {/* TOTAL WON */}
-    <MetricBox
-      title="Total Won: 0"
-      color="border"
-      items={[
-        { label: "Facebook", value: 0 },
-        { label: "Instagram", value: 0 },
-        { label: "TikTok", value: 0 },
-        { label: "YouTube", value: 0 },
-      ]}
-    />
+          {/* TOTAL WON */}
+          <MetricBox
+            title={`Total Won: ${metrics.onboarded}`}
+            color="border"
+            items={[
+              { label: "Facebook", value: 0 },
+              { label: "Instagram", value: metrics.onboarded },
+              { label: "TikTok", value: 0 },
+              { label: "YouTube", value: 0 },
+            ]}
+          />
 
-  </div>
+        </div>
 
-  {/* SECOND ROW */}
-  <div className="grid md:grid-cols-3 gap-4 mt-4">
+        {/* SECOND ROW */}
+        <div className="grid md:grid-cols-3 gap-4 mt-4">
 
-    {/* TOTAL OUTREACH */}
-    <MetricBox
-      title="Total Outreach: 0"
-      color="border"
-      items={[
-        { label: "No Response", value: 0 },
-        { label: "Responded", value: 0 },
-        { label: "In Progress", value: 0 },
-        { label: "Not Interested", value: 0 },
-        { label: "For Order Creation", value: 0 },
-        { label: "In Transit", value: 0 },
-        { label: "Delivered", value: 0 },
-        { label: "Content Pending", value: 0 },
-        { label: "Posted", value: 0 },
-      ]}
-    />
+          {/* TOTAL OUTREACH */}
+          <MetricBox
+            title={`Total Outreach: ${metrics.totalInfluencers}`}
+            color="border"
+            items={[
+              { label: "No Response", value: metrics.prospects },
+              { label: "Responded", value: metrics.inConversation + metrics.onboarded },
+              { label: "In Progress", value: metrics.inConversation },
+              { label: "Not Interested", value: metrics.rejected },
+              { label: "For Order Creation", value: metrics.forOrderCreation },
+              { label: "In Transit", value: metrics.inTransit },
+              { label: "Delivered", value: metrics.delivered },
+              { label: "Content Pending", value: metrics.contentPending },
+              { label: "Posted", value: metrics.posted },
+            ]}
+          />
 
-    {/* NOT INTERESTED */}
-    <MetricBox
-      title="Not Interested: 0"
-      color="border"
-      items={[
-        { label: "Paid only", value: 0 },
-        { label: "No usage rights", value: 0 },
-        { label: "No creative freedom", value: 0 },
-        { label: "Values mismatch", value: 0 },
-        { label: "Brand conflict", value: 0 },
-        { label: "Fully booked", value: 0 },
-        { label: "Others", value: 0 },
-      ]}
-    />
+          {/* NOT INTERESTED */}
+          <MetricBox
+            title={`Not Interested: ${metrics.rejected}`}
+            color="border"
+            items={[
+              { label: "Paid only", value: metrics.notInterestedBreakdown.paidOnly },
+              { label: "No usage rights", value: metrics.notInterestedBreakdown.noUsageRights },
+              { label: "No creative freedom", value: metrics.notInterestedBreakdown.noCreativeFreedom },
+              { label: "Values mismatch", value: metrics.notInterestedBreakdown.valuesMismatch },
+              { label: "Brand conflict", value: metrics.notInterestedBreakdown.brandConflict },
+              { label: "Fully booked", value: metrics.notInterestedBreakdown.fullyBooked },
+              { label: "Others", value: metrics.notInterestedBreakdown.others },
+            ]}
+          />
 
-    {/* TOTAL WON PIPELINE */}
-    <MetricBox
-      title="Total Won: 0"
-      color="border"
-      items={[
-        { label: "For Order Creation", value: 0 },
-        { label: "In Transit", value: 0 },
-        { label: "Delivered", value: 0 },
-        { label: "Content Pending", value: 0 },
-        { label: "Posted", value: 0 },
-      ]}
-    />
+          {/* TOTAL WON PIPELINE */}
+          <MetricBox
+            title={`Total Won: ${metrics.onboarded}`}
+            color="border"
+            items={[
+              { label: "For Order Creation", value: metrics.forOrderCreation },
+              { label: "In Transit", value: metrics.inTransit },
+              { label: "Delivered", value: metrics.delivered },
+              { label: "Content Pending", value: metrics.contentPending },
+              { label: "Posted", value: metrics.posted },
+            ]}
+          />
 
-  </div>
+        </div>
 
-  {/* GEOGRAPHIC */}
-  <div className="grid md:grid-cols-3 gap-4 mt-4">
-    <MetricBox
-      title="Geographic Agreement Insights"
-      color="border"
-      items={[
-        { label: "PH", value: 0 },
-      ]}
-    />
-  </div>
-</div>
+        {/* GEOGRAPHIC */}
+        <div className="grid md:grid-cols-3 gap-4 mt-4">
+          <MetricBox
+            title="Geographic Agreement Insights"
+            color="border"
+            items={[
+              { label: "PH", value: metrics.totalInfluencers },
+            ]}
+          />
+        </div>
+      </div>
 
-
+      {/* PLATFORM INSIGHTS */}
       <div>
         <h2 className="text-md font-semibold mb-3">Platform Insights</h2>
 
@@ -265,21 +343,21 @@ export default function AnalyticsPage() {
           ]} />
 
           {/* INSTAGRAM */}
-          <MetricBox title="Instagram Total Influencer: 0" color="border" items={[
-            { label: "Outreach", value: 0 },
-            { label: "Responded", value: 0 },
-            { label: "Not Interested", value: 0 },
-            { label: "Content Pending", value: 0 },
-            { label: "Posted", value: 0 },
+          <MetricBox title={`Instagram Total Influencer: ${metrics.platformCounts.instagram}`} color="border" items={[
+            { label: "Outreach", value: metrics.prospects },
+            { label: "Responded", value: metrics.inConversation + metrics.onboarded },
+            { label: "Not Interested", value: metrics.rejected },
+            { label: "Content Pending", value: metrics.contentPending },
+            { label: "Posted", value: metrics.posted },
             { label: "Web Clicks", value: 0 },
             { label: "Sales Quantity", value: 0 },
             { label: "Sales Amount", value: "$0" },
             { label: "CVR", value: 0 },
-            { label: "Won", value: 0 },
+            { label: "Won", value: metrics.onboarded },
           ]} />
 
           {/* TIKTOK */}
-          <MetricBox title="TikTok Total Influencer: 1" color="border" items={[
+          <MetricBox title={`TikTok Total Influencer: ${metrics.platformCounts.tiktok}`} color="border" items={[
             { label: "Outreach", value: 0 },
             { label: "Responded", value: 0 },
             { label: "Not Interested", value: 0 },
