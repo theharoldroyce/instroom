@@ -172,15 +172,13 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
               <Input
                 id="password"
                 type="password"
+                placeholder="Must be at least 8 characters long."
                 value={formData.password}
                 onChange={handleInputChange}
                 disabled={isLoading}
                 required
                 className="border-emerald-300/20 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:border-emerald-300 focus-visible:ring-emerald-400/25 disabled:opacity-50"
               />
-              <FieldDescription className="text-zinc-400">
-                Must be at least 8 characters long.
-              </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="confirm-password" className="text-zinc-100">
@@ -189,22 +187,20 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
               <Input
                 id="confirm-password"
                 type="password"
+                placeholder="Please confirm your password."
                 value={formData.confirmPassword}
                 onChange={handleInputChange}
                 disabled={isLoading}
                 required
                 className="border-emerald-300/20 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:border-emerald-300 focus-visible:ring-emerald-400/25 disabled:opacity-50"
               />
-              <FieldDescription className="text-zinc-400">
-                Please confirm your password.
-              </FieldDescription>
             </Field>
             <FieldGroup>
               <Field className="space-y-2 pt-2">
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="h-10 w-full bg-gradient-to-r from-emerald-500 to-lime-400 text-black hover:from-emerald-400 hover:to-lime-300 disabled:opacity-50"
+                  className="h-10 w-full bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black hover:from-[#0F6B3E] hover:to-[#36C06C] disabled:opacity-50"
                 >
                   {isLoading ? "Creating Account..." : "Create Account"}
                 </Button>
@@ -226,7 +222,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
               <Field>
                 <FieldDescription className="px-6 text-center text-zinc-300">
                   Already have an account?{" "}
-                  <Link href="/login" className="text-emerald-300 hover:text-lime-300">
+                  <Link href="/login" className="text-emerald-300 hover:!text-zinc-100">
                     Sign in
                   </Link>
                 </FieldDescription>

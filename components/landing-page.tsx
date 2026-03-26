@@ -26,12 +26,12 @@ export function LandingPage() {
             <a href="#pricing" className="text-zinc-300 hover:text-emerald-300 transition">Pricing</a>
             <div className="flex gap-3">
               <Link href="/login">
-                <Button variant="ghost" className="text-emerald-400 hover:text-lime-300">
+                <Button variant="ghost" className="text-emerald-400">
                   Sign In
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button className="bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold hover:from-emerald-400 hover:to-lime-300">
+                <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold hover:from-emerald-400 hover:to-lime-300">
                   Get Started
                 </Button>
               </Link>
@@ -55,7 +55,7 @@ export function LandingPage() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
               <Link href="/signup">
-                <Button className="h-12 px-8 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold text-base hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 w-full sm:w-auto">
+                <Button className="h-12 px-8 bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold text-base hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50 w-full sm:w-auto">
                   Start Free Trial
                 </Button>
               </Link>
@@ -140,7 +140,7 @@ export function LandingPage() {
                 Join thousands of creators who are already using Instroom to grow their audience and scale their influence.
               </p>
               <Link href="/signup">
-                <Button className="h-12 px-10 bg-gradient-to-r from-emerald-500 to-lime-400 text-black font-semibold text-base hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50">
+                <Button className="h-12 px-10 bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold text-base hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50">
                   Get Started Now
                 </Button>
               </Link>

@@ -16,12 +16,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (!goal) {
-      return NextResponse.json(
-        { error: "Goal is required" },
-        { status: 400 }
-      )
-    }
+    // Allow all fields to be null for skip functionality
 
     // Check if user exists in database
     const userExists = await prisma.user.findUnique({

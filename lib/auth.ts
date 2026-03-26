@@ -48,36 +48,39 @@ const nextAuthConfig = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null
+          console.log("No credentials provided");
+          return null;
         }
 
         try {
           const user = await prisma.user.findUnique({
             where: { email: credentials.email },
-          })
-
+          });
+          console.log("User found:", user);
           if (!user?.password_hash) {
-            return null
+            console.log("No password hash found for user");
+            return null;
           }
-
+          console.log("Password hash:", user.password_hash);
+          console.log("Entered password:", credentials.password);
           const isPasswordValid = await bcrypt.compare(
             credentials.password,
             user.password_hash
-          )
-
+          );
+          console.log("Password valid?", isPasswordValid);
           if (!isPasswordValid) {
-            return null
+            console.log("Password did not match");
+            return null;
           }
-
           return {
             id: user.id,
             email: user.email,
             name: user.name,
             image: user.image,
-          }
+          };
         } catch (error) {
-          console.error("Auth error:", error)
-          return null
+          console.error("Auth error:", error);
+          return null;
         }
       },
     }),

@@ -165,7 +165,7 @@ export function LoginForm({
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="h-10 w-full bg-gradient-to-r from-emerald-500 to-lime-400 text-black hover:from-emerald-400 hover:to-lime-300 disabled:opacity-50"
+                  className="h-10 w-full bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black hover:from-[#0F6B3E] hover:to-[#36C06C] disabled:opacity-50"
                 >
                   {isLoading ? "Signing in..." : "Sign in with Email"}
                 </Button>
@@ -187,7 +187,7 @@ export function LoginForm({
               <Field>
                 <FieldDescription className="text-center text-zinc-400">
                   Don&apos;t have an account?{" "}
-                  <a href="/signup" className="text-emerald-400 hover:text-lime-300">
+                  <a href="/signup" className="text-emerald-400 hover:!text-zinc-100">
                     Sign up
                   </a>
                 </FieldDescription>
@@ -198,11 +198,11 @@ export function LoginForm({
       </Card>
       <FieldDescription className="px-6 text-center text-zinc-400">
         By clicking continue, you agree to our{" "}
-        <a href="#" className="text-emerald-400 hover:text-lime-300">
+        <a href="#" className="text-emerald-400 hover:!text-zinc-100">
           Terms of Service
         </a>{" "}
         and{" "}
-        <a href="#" className="text-emerald-400 hover:text-lime-300">
+        <a href="#" className="text-emerald-400 hover:!text-zinc-100">
           Privacy Policy
         </a>
         .
