@@ -16,7 +16,7 @@ export default function LandingPage() {
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
             </svg>
           </span>
-          <span className="text-lg font-semibold tracking-tight text-white">Instroom</span>
+          <span className="text-lg font-semibold tracking-tight text-white">Instrom</span>
         </div>
 
         <nav className="hidden items-center gap-7 text-sm text-zinc-400 md:flex">
