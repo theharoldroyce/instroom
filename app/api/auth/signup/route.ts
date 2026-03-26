@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     // Create default subscription (trialing Solo plan)
     const soloPlan = await prisma.subscriptionPlan.findUnique({
-      where: { name: "Solo" },
+      where: { name: "solo" },
     })
 
     if (soloPlan) {
