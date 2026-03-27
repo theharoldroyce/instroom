@@ -10,8 +10,10 @@ import {
   IconBell,
   IconFilter,
   IconClock,
-  IconAlertCircle
+  IconAlertCircle,
+  IconGripVertical
 } from "@tabler/icons-react"
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd"
 
 // Import the JSON data
 import jsonData from "@/app/dashboard/data.json"
@@ -42,11 +44,38 @@ const getColumnKey = (status: string): string => {
       return "conversation"
     case "Onboarded":
       return "onboarded"
+    case "For Order Creation":
+      return "for-creation"
+    case "In-Transit":
+      return "in-transit"
+    case "Delivered":
+      return "delivered"
+    case "Posted":
+      return "posted"
+    case "Completed":
+      return "completed"
     case "Rejected":
       return "rejected"
     default:
       return status.toLowerCase().replace(/\s+/g, '-')
   }
+}
+
+// Map column keys back to pipeline status
+const getStatusFromColumnKey = (columnKey: string): string => {
+  const statusMap: Record<string, string> = {
+    "prospects": "Prospect",
+    "reached": "Reached Out",
+    "conversation": "In Conversation",
+    "onboarded": "Onboarded",
+    "for-creation": "For Order Creation",
+    "in-transit": "In-Transit",
+    "delivered": "Delivered",
+    "posted": "Posted",
+    "completed": "Completed",
+    "rejected": "Rejected"
+  }
+  return statusMap[columnKey] || columnKey
 }
 
 const columns = [
@@ -69,6 +98,7 @@ export default function PipelinePage() {
   const [showFollowUpFilter, setShowFollowUpFilter] = useState(false)
   const [followUpFilter, setFollowUpFilter] = useState<"all" | "overdue" | "today" | "this-week">("all")
   const [selectedInfluencer, setSelectedInfluencer] = useState<Influencer | null>(null)
+  const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null)
 
   // Load data from JSON file on component mount
   useEffect(() => {
@@ -114,6 +144,42 @@ export default function PipelinePage() {
           }
         : item
     ))
+    setShowSuccessMessage("Follow-up scheduled successfully!")
+    setTimeout(() => setShowSuccessMessage(null), 3000)
+  }
+
+  // Handle drag and drop
+  const onDragEnd = (result: DropResult) => {
+    const { destination, source, draggableId } = result
+
+    // If there's no destination or it's the same as source, do nothing
+    if (!destination) return
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return
+
+    // Get the influencer that was dragged
+    const draggedInfluencer = data.find(item => item.id.toString() === draggableId)
+    if (!draggedInfluencer) return
+
+    // Update the influencer's status based on the new column
+    const newStatus = getStatusFromColumnKey(destination.droppableId)
+    
+    // Update the data
+    setData(prev => prev.map(item => 
+      item.id === draggedInfluencer.id 
+        ? { ...item, pipelineStatus: newStatus }
+        : item
+    ))
+
+    // Show success message
+    const columnTitle = columns.find(col => col.key === destination.droppableId)?.title
+    setShowSuccessMessage(`${draggedInfluencer.influencer} moved to ${columnTitle}`)
+    setTimeout(() => setShowSuccessMessage(null), 3000)
+  }
+
+  // Group data by column
+  const getItemsByColumn = (columnKey: string) => {
+    const status = getStatusFromColumnKey(columnKey)
+    return filtered.filter(item => item.pipelineStatus === status)
   }
 
   const filtered = data
@@ -193,6 +259,13 @@ export default function PipelinePage() {
 
   return (
     <div className="flex flex-col gap-4 p-6">
+      {/* Success Message Toast */}
+      {showSuccessMessage && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2">
+          {showSuccessMessage}
+        </div>
+      )}
+
       {selectedInfluencer && (
         <FollowUpModal 
           influencer={selectedInfluencer} 
@@ -289,96 +362,113 @@ export default function PipelinePage() {
         </div>
       </div>
 
-      {/* KANBAN */}
+      {/* KANBAN with Drag and Drop */}
       {view === "kanban" && (
-        <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
-          <div className="flex gap-5 min-w-max">
-            {columns.map((col) => {
-              // Filter items that match this column based on pipeline status
-              const items = filtered.filter((i) => {
-                const columnKey = getColumnKey(i.pipelineStatus)
-                return columnKey === col.key
-              })
-              const needsFollowUpCount = items.filter(i => isFollowUpNeeded(i).needed).length
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
+            <div className="flex gap-5 min-w-max">
+              {columns.map((col) => {
+                const items = getItemsByColumn(col.key)
+                const needsFollowUpCount = items.filter(i => isFollowUpNeeded(i).needed).length
 
-              return (
-                <div key={col.key} className="flex flex-col gap-3 w-[280px] flex-shrink-0">
-                  {/* COLUMN HEADER */}
-                  <div className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex justify-between items-center`}>
-                    <span>{items.length} {col.title}</span>
-                    {needsFollowUpCount > 0 && (
-                      <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
-                        {needsFollowUpCount} need follow-up
-                      </span>
-                    )}
-                  </div>
-
-                  {/* CARDS */}
-                  {items.map((inf) => {
-                    const followUpStatus = isFollowUpNeeded(inf)
-                    return (
+                return (
+                  <Droppable key={col.key} droppableId={col.key}>
+                    {(provided, snapshot) => (
                       <div
-                        key={inf.id}
-                        className={`bg-gray-50 border rounded-xl p-4 hover:shadow-md transition ${
-                          followUpStatus.needed ? 'border-red-300 bg-red-50/30' : 'border-gray-200'
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={`flex flex-col gap-3 w-[280px] flex-shrink-0 transition-colors ${
+                          snapshot.isDraggingOver ? 'bg-gray-50 rounded-lg' : ''
                         }`}
                       >
-                        <div className="flex items-center gap-4">
-                          {/* PROFILE AVATAR */}
-                          <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-[#1FAE5B] flex items-center justify-center text-white font-medium">
-                            {inf.influencer?.charAt(0) || "?"}
-                          </div>
-
-                          {/* INFO */}
-                          <div className="flex flex-col leading-tight flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-medium text-sm">{inf.influencer}</span>
-                              {getFollowUpBadge(inf)}
-                            </div>
-                            <span className="text-xs text-gray-500">{inf.instagramHandle}</span>
-                            <div className="flex gap-2 mt-1">
-                              <span className="text-xs text-gray-400">👥 {inf.followers}</span>
-                              <span className="text-xs text-gray-400">💬 {inf.engagementRate}</span>
-                            </div>
-                            <span className="text-xs text-gray-400 mt-1">🏷️ {inf.niche}</span>
-                            {/* {inf.nextFollowUp && (
-                              <span className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                                <IconCalendar size={12} />
-                                Next: {new Date(inf.nextFollowUp).toLocaleDateString()}
-                              </span>
-                            )} */}
-                            {/* {inf.followUpCount && inf.followUpCount > 0 && (
-                              <span className="text-xs text-gray-400">
-                                Follow-ups: {inf.followUpCount}
-                              </span>
-                            )} */}
-                          </div>
+                        {/* COLUMN HEADER */}
+                        <div className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex justify-between items-center`}>
+                          <span>{items.length} {col.title}</span>
+                          {needsFollowUpCount > 0 && (
+                            <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
+                              {needsFollowUpCount} need follow-up
+                            </span>
+                          )}
                         </div>
 
-                        {/* FOLLOW-UP BUTTON */}
-                        {/* {(inf.pipelineStatus === "Prospect" || inf.pipelineStatus === "Reached Out" || inf.pipelineStatus === "In Conversation") && (
-                          <button
-                            onClick={() => setSelectedInfluencer(inf)}
-                            className="mt-3 w-full text-xs bg-white border rounded-lg px-3 py-2 hover:bg-gray-50 transition flex items-center justify-center gap-1"
-                          >
-                            <IconBell size={12} />
-                            {inf.nextFollowUp ? 'Schedule Follow-up' : 'Set Reminder'}
-                          </button>
-                        )} */}
-                      </div>
-                    )
-                  })}
+                        {/* CARDS */}
+                        {items.map((inf, index) => {
+                          const followUpStatus = isFollowUpNeeded(inf)
+                          return (
+                            <Draggable key={inf.id} draggableId={inf.id.toString()} index={index}>
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={`bg-gray-50 border rounded-xl p-4 hover:shadow-md transition ${
+                                    followUpStatus.needed ? 'border-red-300 bg-red-50/30' : 'border-gray-200'
+                                  } ${snapshot.isDragging ? 'shadow-lg rotate-2' : ''}`}
+                                >
+                                  <div className="flex items-center gap-4">
+                                    {/* DRAG HANDLE */}
+                                    <div
+                                      {...provided.dragHandleProps}
+                                      className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+                                    >
+                                      <IconGripVertical size={16} />
+                                    </div>
 
-                  {/* DROP AREA */}
-                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center text-sm text-gray-500 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition cursor-pointer">
-                    <span>Drop Here</span>
-                    <IconPlus size={16} />
-                  </div>
-                </div>
-              )
-            })}
+                                    {/* PROFILE AVATAR */}
+                                    <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-[#1FAE5B] flex items-center justify-center text-white font-medium">
+                                      {inf.influencer?.charAt(0) || "?"}
+                                    </div>
+
+                                    {/* INFO */}
+                                    <div className="flex flex-col leading-tight flex-1">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="font-medium text-sm">{inf.influencer}</span>
+                                        {getFollowUpBadge(inf)}
+                                      </div>
+                                      <span className="text-xs text-gray-500">{inf.instagramHandle}</span>
+                                      <div className="flex gap-2 mt-1">
+                                        <span className="text-xs text-gray-400">👥 {inf.followers}</span>
+                                        <span className="text-xs text-gray-400">💬 {inf.engagementRate}</span>
+                                      </div>
+                                      <span className="text-xs text-gray-400 mt-1">🏷️ {inf.niche}</span>
+                                      {inf.nextFollowUp && (
+                                        <span className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                          <IconCalendar size={12} />
+                                          Next: {new Date(inf.nextFollowUp).toLocaleDateString()}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* FOLLOW-UP BUTTON */}
+                                  {(inf.pipelineStatus === "Prospect" || inf.pipelineStatus === "Reached Out" || inf.pipelineStatus === "In Conversation") && (
+                                    <button
+                                      onClick={() => setSelectedInfluencer(inf)}
+                                      className="mt-3 w-full text-xs bg-white border rounded-lg px-3 py-2 hover:bg-gray-50 transition flex items-center justify-center gap-1"
+                                    >
+                                      <IconBell size={12} />
+                                      {inf.nextFollowUp ? 'Schedule Follow-up' : 'Set Reminder'}
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </Draggable>
+                          )
+                        })}
+                        {provided.placeholder}
+
+                        {/* DROP AREA */}
+                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center text-sm text-gray-500 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition cursor-pointer">
+                          <span>Drop Here</span>
+                          <IconPlus size={16} />
+                        </div>
+                      </div>
+                    )}
+                  </Droppable>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        </DragDropContext>
       )}
 
       {/* LIST VIEW */}
@@ -418,13 +508,34 @@ export default function PipelinePage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        inf.pipelineStatus === "Onboarded" ? "bg-green-100 text-green-700" :
-                        inf.pipelineStatus === "Rejected" ? "bg-red-100 text-red-700" :
-                        "bg-[#1FAE5B]/15 text-[#0F6B3E]"
-                      }`}>
-                        {inf.pipelineStatus}
-                      </span>
+                      <select
+                        value={inf.pipelineStatus}
+                        onChange={(e) => {
+                          setData(prev => prev.map(item =>
+                            item.id === inf.id
+                              ? { ...item, pipelineStatus: e.target.value }
+                              : item
+                          ))
+                          setShowSuccessMessage(`${inf.influencer} status updated to ${e.target.value}`)
+                          setTimeout(() => setShowSuccessMessage(null), 3000)
+                        }}
+                        className={`px-2 py-1 rounded text-xs border ${
+                          inf.pipelineStatus === "Onboarded" ? "bg-green-100 text-green-700" :
+                          inf.pipelineStatus === "Rejected" ? "bg-red-100 text-red-700" :
+                          "bg-[#1FAE5B]/15 text-[#0F6B3E]"
+                        }`}
+                      >
+                        <option value="Prospect">Prospect</option>
+                        <option value="Reached Out">Reached Out</option>
+                        <option value="In Conversation">In Conversation</option>
+                        <option value="Onboarded">Onboarded</option>
+                        <option value="For Order Creation">For Order Creation</option>
+                        <option value="In-Transit">In-Transit</option>
+                        <option value="Delivered">Delivered</option>
+                        <option value="Posted">Posted</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
