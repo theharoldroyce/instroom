@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sidebar"
 
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 
 const data = {
   user: {
@@ -50,11 +51,9 @@ const data = {
 }
 
 export function AppSidebar({
-  setView,
   ...props
-}: React.ComponentProps<typeof Sidebar> & {
-  setView: (view: string) => void
-}) {
+}: React.ComponentProps<typeof Sidebar>) {
+  const router = useRouter()
   return (
     <Sidebar
       collapsible="offcanvas"
@@ -65,7 +64,7 @@ export function AppSidebar({
       {/* HEADER */}
 <SidebarHeader className="h-24 flex items-center px--4 border-b border-white/10 bg-[#0F6B3E]">
   <button
-    onClick={() => setView("dashboard")}
+    onClick={() => router.push("/dashboard")}
     className="flex items-center w-full"
   >
     <Image
