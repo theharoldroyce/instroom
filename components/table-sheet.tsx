@@ -7,7 +7,7 @@ import {
   useCallback,
   KeyboardEvent,
 } from "react"
-import { IconTrash, IconPlus, IconCheck, IconX } from "@tabler/icons-react"
+import { IconTrash, IconPlus, IconX } from "@tabler/icons-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,7 +35,7 @@ export type CustomColumn = {
   id: string
   field_key: string   // maps to BrandCustomField.field_key
   field_name: string  // maps to BrandCustomField.field_name
-  field_type: "text" | "number" | "select"
+  field_type: "text" | "number" | "dropdown" | "multi-select" | "date" | "boolean" | "url"
   field_options?: string[]
 }
 
@@ -58,7 +58,7 @@ type CustomColDef = {
   label: string
   group: "Brand Details"
   minWidth: number
-  type: "text" | "number" | "select"
+  type: "text" | "number" | "dropdown" | "multi-select" | "date" | "boolean" | "url"
   options?: string[]
   isCustom: true
   customId: string
@@ -157,8 +157,10 @@ export default function TableSheet({
   const [currentPage, setCurrentPage] = useState(1)
 
   // Add-column panel
-  const [addingCol, setAddingCol]   = useState(false)
-  const [newColName, setNewColName] = useState("")
+  const [addingCol, setAddingCol]     = useState(false)
+  const [newColName, setNewColName]   = useState("")
+  const [newColType, setNewColType]   = useState<CustomColumn["field_type"]>("text")
+  const [newColOpts, setNewColOpts]   = useState("")
 
   const editInputRef   = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
   const newColInputRef = useRef<HTMLInputElement>(null)
@@ -368,11 +370,15 @@ export default function TableSheet({
     const name = newColName.trim()
     if (!name) return
     const fieldKey = name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
+    const hasOptions = newColType === "dropdown" || newColType === "multi-select"
     const col: CustomColumn = {
       id: crypto.randomUUID(),
       field_key: fieldKey,
       field_name: name,
-      field_type: "text",
+      field_type: newColType,
+      field_options: hasOptions
+        ? newColOpts.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined,
     }
     setCustomCols((prev) => {
       const next = [...prev, col]
@@ -381,6 +387,8 @@ export default function TableSheet({
     })
     setRows((prev) => prev.map((r) => ({ ...r, custom: { ...r.custom, [fieldKey]: "" } })))
     setNewColName("")
+    setNewColType("text")
+    setNewColOpts("")
     setAddingCol(false)
     containerRef.current?.focus()
   }
@@ -685,54 +693,70 @@ export default function TableSheet({
       {!readOnly && addingCol && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={(e) => { if (e.target === e.currentTarget) setAddingCol(false) }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setAddingCol(false) } }}
         >
-          <div className="bg-white rounded-2xl shadow-xl w-[400px] p-6 flex flex-col gap-5">
+          <div className="bg-white rounded-2xl shadow-xl w-[360px] p-6 flex flex-col gap-4">
 
             {/* Header */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-gray-800">New Column</h3>
-              <button
-                onClick={() => setAddingCol(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
-              >
-                <IconX size={18} />
-              </button>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Add custom column</h3>
+              <p className="text-xs text-gray-400 mt-0.5">→ brand_custom_fields.create()</p>
             </div>
 
-            {/* Input */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-gray-600">Column name</label>
+            {/* Column name */}
+            <input
+              ref={newColInputRef}
+              type="text"
+              value={newColName}
+              onChange={(e) => setNewColName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmAddCol()
+                if (e.key === "Escape") setAddingCol(false)
+              }}
+              placeholder="Column name (e.g. Dog Breed)"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"
+            />
+
+            {/* Type selector */}
+            <select
+              value={newColType}
+              onChange={(e) => setNewColType(e.target.value as CustomColumn["field_type"])}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full bg-white"
+            >
+              <option value="text">Text</option>
+              <option value="number">Number</option>
+              <option value="dropdown">Dropdown</option>
+              <option value="multi-select">Multi-select</option>
+              <option value="date">Date</option>
+              <option value="boolean">Yes / No</option>
+              <option value="url">URL</option>
+            </select>
+
+            {/* Options input for dropdown / multi-select */}
+            {(newColType === "dropdown" || newColType === "multi-select") && (
               <input
-                ref={newColInputRef}
                 type="text"
-                value={newColName}
-                onChange={(e) => setNewColName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") confirmAddCol()
-                  if (e.key === "Escape") setAddingCol(false)
-                }}
-                placeholder="e.g. Budget, Product Sent…"
+                value={newColOpts}
+                onChange={(e) => setNewColOpts(e.target.value)}
+                placeholder="Options: Golden Retriever, Poodle, Bulldog"
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"
               />
-              <p className="text-xs text-gray-400">This will be added as a custom field under Brand Details.</p>
-            </div>
+            )}
 
             {/* Actions */}
-            <div className="flex justify-end gap-2">
+            <div className="flex gap-2 pt-1">
               <button
                 onClick={() => setAddingCol(false)}
-                className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition"
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm text-red-500 hover:bg-gray-50 transition"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmAddCol}
                 disabled={!newColName.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                className="flex-1 px-4 py-2 rounded-lg bg-gray-400 text-white text-sm hover:bg-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
-                <IconCheck size={14} />
-                Add Column
+                Add
               </button>
             </div>
 
