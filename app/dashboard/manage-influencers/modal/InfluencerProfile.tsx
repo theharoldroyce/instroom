@@ -4,11 +4,12 @@ import { useState } from "react"
 import { Drawer, DrawerContent, DrawerClose, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
 
-export default function InfluencerProfile({ data, close }: any) {
+export default function InfluencerProfile({ data, onUpdate, close }: any) {
   const [pipelineStatus, setPipelineStatus] = useState(data.pipelineStatus || "Prospect")
-  const [campaignType, setCampaignType] = useState("Gifting")
-  const [notes, setNotes] = useState("")
+  const [campaignType, setCampaignType] = useState(data.campaignType || "Gifting")
+  const [notes, setNotes] = useState(data.notes || "")
   const [activeTab, setActiveTab] = useState("basic")
+  const [visible, setVisible] = useState(false)
 
   const [openStatus, setOpenStatus] = useState(false)
   const [openCampaign, setOpenCampaign] = useState(false)
@@ -16,39 +17,13 @@ export default function InfluencerProfile({ data, close }: any) {
   const statusOptions = ["Prospect", "Reached Out", "In Conversation", "Onboarded", "Rejected"]
   const campaignOptions = ["Gifting", "Paid", "Affiliate"]
 
-  const inputClass =
-    "border rounded-lg px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/20 focus:border-[#1FAE5B]"
+  useEffect(() => {
+    requestAnimationFrame(() => setVisible(true))
+  }, [])
 
-  const getDisplayStatus = (status: string) => {
-    switch (status) {
-      case "Onboarded":
-        return "Active"
-      case "In Conversation":
-        return "Negotiation"
-      case "Reached Out":
-      case "Prospect":
-        return "For Outreach"
-      case "Rejected":
-        return "Closed"
-      default:
-        return status
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    const display = getDisplayStatus(status)
-    switch (display) {
-      case "For Outreach":
-        return "bg-[#1FAE5B]/15 text-[#0F6B3E]"
-      case "Negotiation":
-        return "bg-blue-100 text-blue-700"
-      case "Active":
-        return "bg-green-100 text-green-700"
-      case "Closed":
-        return "bg-gray-100 text-gray-700"
-      default:
-        return "bg-gray-100 text-gray-700"
-    }
+  const handleClose = () => {
+    setVisible(false)
+    setTimeout(close, 300)
   }
 
   const getCampaignColor = (type: string) => {
@@ -187,10 +162,7 @@ export default function InfluencerProfile({ data, close }: any) {
                     : "border-transparent text-gray-400"
                 }`}
               >
-                {tab === "basic" && "Basic Information"}
-                {tab === "order" && "Order Details"}
-                {tab === "post" && "Post Insight"}
-                {tab === "stats" && "Statistics"}
+                {label}
               </button>
             ))}
           </div>
@@ -205,18 +177,37 @@ export default function InfluencerProfile({ data, close }: any) {
                 <div><p className="text-xs text-gray-500">Avg Views</p><p className="font-semibold">0</p></div>
                 <div><p className="text-xs text-gray-500">GMV</p><p className="font-semibold">$</p></div>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 px-6 py-6 text-sm">
-                <div><p className="text-xs text-gray-500">Email</p><p className="text-gray-400">Not provided</p></div>
-                <div><p className="text-xs text-gray-500">Username</p><p>{data.instagramHandle}</p></div>
-                <div><p className="text-xs text-gray-500">Location</p><p className="text-gray-400">-</p></div>
-                <div><p className="text-xs text-gray-500">Niche</p><p>{data.niche}</p></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-5 py-5 text-sm">
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Email</p>
+                  <p className={data.email ? "text-[#1FAE5B]" : "text-gray-400"}>{data.email || "Not provided"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Username</p>
+                  <p>{data.instagramHandle || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Location</p>
+                  <p className={data.location ? "" : "text-gray-400"}>{data.location || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Niche</p>
+                  <p>{data.niche || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Gender</p>
+                  <p className={data.gender ? "" : "text-gray-400"}>{data.gender || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Platform</p>
+                  <p>{data.platform || "Instagram"}</p>
+                </div>
               </div>
-
-              <div className="px-6 pb-6">
-                <p className="text-xs text-gray-500 mb-2">Notes</p>
+              <div className="px-5 pb-5">
+                <p className="text-xs text-gray-400 mb-2">Notes</p>
                 <textarea
-                  className="w-full border rounded-lg p-3 text-sm h-[100px]"
+                  className="w-full border border-gray-200 rounded-lg p-3 text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/20 focus:border-[#1FAE5B]"
+                  placeholder="Add a note..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />

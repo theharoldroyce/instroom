@@ -51,7 +51,6 @@ const data = {
 }
 
 export function AppSidebar({
-  setView,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   setView: (view: string) => void

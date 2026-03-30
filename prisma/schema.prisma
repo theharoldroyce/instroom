@@ -4,6 +4,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -37,6 +38,7 @@ model User {
   user_subscription     UserSubscription?
   payment_history       PaymentHistory[]
   onboarding            Onboarding?
+  createdCustomFields   BrandCustomField[]
 
   @@index([email])
   @@index([platform_role])
@@ -233,6 +235,7 @@ model Brand {
   activity_logs          ActivityLog[]
   payment_history        PaymentHistory[]
   seat_override          BrandSeatOverride?
+  customFields           BrandCustomField[]
 
   @@index([owner_id])
   @@index([slug])
@@ -385,6 +388,7 @@ model BrandInfluencer {
   campaign            Campaign?        @relation(fields: [campaign_id], references: [id], onDelete: SetNull)
   outreach_logs       OutreachLog[]
   content_posts       ContentPost[]
+  customValues        BrandInfluencerCustomValue[]
 
   @@unique([brand_id, influencer_id])
   @@index([brand_id])
@@ -492,4 +496,55 @@ model PlatformSettings {
   setting_value   String?  @db.Text
   description     String?
   updated_at      DateTime @updatedAt
+}
+
+// ============================================================================
+// 17. BRAND CUSTOM FIELDS (Field Definitions)
+// ============================================================================
+
+model BrandCustomField {
+  id              String   @id @default(cuid()) @db.VarChar(30)
+  brand_id        String   @db.VarChar(30)
+  field_name      String   @db.VarChar(100)
+  field_key       String   @db.VarChar(100)
+  field_type      String   @default("text") @db.VarChar(20)
+  field_options   Json     @default("[]")
+  description     String?  @db.VarChar(500)
+  placeholder     String?  @db.VarChar(255)
+  is_required     Boolean  @default(false)
+  sort_order      Int      @default(0)
+  is_visible      Boolean  @default(true)
+  validation_rules Json    @default("{}")
+  created_by      String?  @db.VarChar(30)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  brand           Brand    @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  creator         User?    @relation(fields: [created_by], references: [id])
+  values          BrandInfluencerCustomValue[]
+
+  @@unique([brand_id, field_key])
+  @@index([brand_id])
+  @@index([brand_id, sort_order])
+}
+
+// ============================================================================
+// 18. BRAND INFLUENCER CUSTOM VALUES (Actual Data)
+// ============================================================================
+
+model BrandInfluencerCustomValue {
+  id                  String   @id @default(cuid()) @db.VarChar(30)
+  brand_influencer_id String   @db.VarChar(30)
+  custom_field_id     String   @db.VarChar(30)
+  value               String?  @db.Text
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  brand_influencer    BrandInfluencer   @relation(fields: [brand_influencer_id], references: [id], onDelete: Cascade)
+  custom_field        BrandCustomField  @relation(fields: [custom_field_id], references: [id], onDelete: Cascade)
+
+  @@unique([brand_influencer_id, custom_field_id])
+  @@index([brand_influencer_id])
+  @@index([custom_field_id])
+  @@index([custom_field_id, value(length: 191)])
 }
