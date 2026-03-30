@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { OnboardingForm } from '@/components/onboarding-form'
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const [step, setStep] = useState(1)
   const [showWelcome, setShowWelcome] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -19,6 +19,39 @@ export default function OnboardingPage() {
     revenue: '',
     source: '',
   })
+  const [subscriptionChecked, setSubscriptionChecked] = useState(false)
+  const [isSubscribed, setIsSubscribed] = useState(false)
+
+  useEffect(() => {
+    const checkSubscription = async () => {
+      if (status === "loading") return;
+      if (!session?.user) {
+        router.replace("/signup");
+        return;
+      }
+      const userId = (session.user as any).id;
+      if (!userId) {
+        router.replace("/signup");
+        return;
+      }
+      const res = await fetch("/api/subscription/check", {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId }),
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        if (data.error === "No active or trialing subscription. Please subscribe first.") {
+          router.replace("/pricing"); 
+          return;
+        }
+        throw new Error(data.error || "Failed to check subscription");
+      }
+      setIsSubscribed(true);
+      setSubscriptionChecked(true);
+    }
+    checkSubscription()
+  }, [status, session, router])
 
   const handleSkip = async () => {
     setIsLoading(true);
@@ -149,17 +182,20 @@ export default function OnboardingPage() {
             {error}
           </div>
         )}
-        <OnboardingForm
-          step={step}
-          showWelcome={showWelcome}
-          formData={formData}
-          onNext={handleNext}
-          onBack={handleBack}
-          onSubmit={handleSubmit}
-          onFormChange={handleFormChange}
-          onSkip={handleSkip}
-          isLoading={isLoading}
-        />
+        {/* Only show onboarding form if subscription is checked and user is subscribed */}
+        {subscriptionChecked && isSubscribed && (
+          <OnboardingForm
+            step={step}
+            showWelcome={showWelcome}
+            formData={formData}
+            onNext={handleNext}
+            onBack={handleBack}
+            onSubmit={handleSubmit}
+            onFormChange={handleFormChange}
+            onSkip={handleSkip}
+            isLoading={isLoading}
+          />
+        )}
       </div>
     </div>
   )

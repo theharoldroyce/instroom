@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Drawer, DrawerContent, DrawerClose, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
+import { cn } from "@/lib/utils"
 
 export default function InfluencerProfile({ data, close }: any) {
   const [pipelineStatus, setPipelineStatus] = useState(data.pipelineStatus || "Prospect")
@@ -9,7 +10,11 @@ export default function InfluencerProfile({ data, close }: any) {
   const [notes, setNotes] = useState("")
   const [activeTab, setActiveTab] = useState("basic")
 
+  const [openStatus, setOpenStatus] = useState(false)
+  const [openCampaign, setOpenCampaign] = useState(false)
+
   const statusOptions = ["Prospect", "Reached Out", "In Conversation", "Onboarded", "Rejected"]
+  const campaignOptions = ["Gifting", "Paid", "Affiliate"]
 
   const inputClass =
     "border rounded-lg px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/20 focus:border-[#1FAE5B]"
@@ -46,51 +51,113 @@ export default function InfluencerProfile({ data, close }: any) {
     }
   }
 
+  const getCampaignColor = (type: string) => {
+    switch (type) {
+      case "Gifting":
+        return "bg-purple-100 text-purple-700"
+      case "Paid":
+        return "bg-yellow-100 text-yellow-700"
+      case "Affiliate":
+        return "bg-indigo-100 text-indigo-700"
+      default:
+        return "bg-gray-100 text-gray-700"
+    }
+  }
+
   return (
     <Drawer open={true} direction="right" onOpenChange={open => { if (!open) close(); }}>
       <DrawerContent className="w-2/3 max-w-full ml-auto h-full rounded-none p-0 bg-white border-l-4 border-[#1FAE5B] shadow-2xl">
+
         <DrawerHeader>
-          <DrawerTitle>Influencer Profile</DrawerTitle>
+          <DrawerTitle className="text-2xl">Influencer Profile</DrawerTitle>
         </DrawerHeader>
-        {/* STICKY HEADER */}
+
         <div className="sticky top-0 z-20 bg-white border-b flex items-center justify-between p-6">
-          {/* LEFT SIDE */}
           <div className="flex items-center gap-4">
+
             <div className="w-14 h-14 rounded-full bg-[#1FAE5B] text-white flex items-center justify-center font-semibold ring-4 ring-[#1FAE5B]/20">
               {data.influencer?.[0] ?? "?"}
             </div>
+
             <div>
               <p className="font-bold text-lg">{data.influencer}</p>
               <p className="text-xs text-gray-500">{data.instagramHandle}</p>
             </div>
+
             {/* PIPELINE STATUS */}
-            <div className="flex flex-col text-xs ml-6">
+            <div className="flex flex-col text-xs ml-6 relative">
               <span className="text-gray-500 mb-1">Pipeline status</span>
-              <select
-                className="border rounded-lg px-3 py-2 text-sm bg-white"
-                value={pipelineStatus}
-                onChange={(e) => setPipelineStatus(e.target.value)}
+
+              <button
+                onClick={() => setOpenStatus(!openStatus)}
+                className={cn(
+                  "flex items-center justify-between px-3 py-2 rounded-lg text-sm shadow-sm border w-[135px]",
+                  getStatusColor(pipelineStatus)
+                )}
               >
-                {statusOptions.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
+                {pipelineStatus}
+                <span className="text-xs">▼</span>
+              </button>
+
+              {openStatus && (
+                <div className="absolute top-full mt-2 w-full bg-white border rounded-lg shadow-lg z-50">
+                  {statusOptions.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        setPipelineStatus(s)
+                        setOpenStatus(false)
+                      }}
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between",
+                        getStatusColor(s)
+                      )}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
             {/* CAMPAIGN TYPE */}
-            <div className="flex flex-col text-xs ml-4">
+            <div className="flex flex-col text-xs ml-4 relative">
               <span className="text-gray-500 mb-1">Campaign type</span>
-              <select
-                className="border rounded-lg px-3 py-2 text-sm bg-white"
-                value={campaignType}
-                onChange={(e) => setCampaignType(e.target.value)}
+
+              <button
+                onClick={() => setOpenCampaign(!openCampaign)}
+                className={cn(
+                  "flex items-center justify-between px-3 py-2 rounded-lg text-sm shadow-sm border w-[100px]",
+                  getCampaignColor(campaignType)
+                )}
               >
-                <option>Gifting</option>
-                <option>Paid</option>
-                <option>Affiliate</option>
-              </select>
+                {campaignType}
+                <span className="text-xs">▼</span>
+              </button>
+
+              {openCampaign && (
+                <div className="absolute top-full mt-2 w-full bg-white border rounded-lg shadow-lg z-50">
+                  {campaignOptions.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => {
+                        setCampaignType(c)
+                        setOpenCampaign(false)
+                      }}
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-sm hover:bg-gray-50",
+                        getCampaignColor(c)
+                      )}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
           </div>
-          {/* CLOSE BUTTON */}
+          
           <DrawerClose asChild>
             <button
               onClick={close}
@@ -100,14 +167,14 @@ export default function InfluencerProfile({ data, close }: any) {
             </button>
           </DrawerClose>
         </div>
-        {/* CARD: ACTION BUTTONS */}
+
         <div className="bg-gray-50 rounded-xl shadow-sm mx-6 mt-6 p-4 flex gap-2 flex-wrap">
           <button className="bg-[#1FAE5B] hover:bg-[#0F6B3E] text-white px-4 py-2 rounded-lg text-sm transition">TikTok</button>
           <button className="bg-[#E6F9F0] hover:bg-[#C2F2DE] text-[#1FAE5B] px-4 py-2 rounded-lg text-sm border border-[#1FAE5B]/30 transition">Send Email</button>
           <button className="bg-[#E6F9F0] hover:bg-[#C2F2DE] text-[#1FAE5B] px-4 py-2 rounded-lg text-sm border border-[#1FAE5B]/30 transition">Send DM</button>
           <button className="bg-[#E6F9F0] hover:bg-[#C2F2DE] text-[#1FAE5B] px-4 py-2 rounded-lg text-sm border border-[#1FAE5B]/30 transition">Follow up</button>
         </div>
-        {/* CARD: TABS */}
+
         <div className="bg-gray-50 rounded-xl shadow-sm mx-6 mt-4 p-4 border-b">
           <div className="flex gap-6 text-sm">
             {["basic", "order", "post", "stats"].map((tab) => (
@@ -128,24 +195,24 @@ export default function InfluencerProfile({ data, close }: any) {
             ))}
           </div>
         </div>
-        {/* CONTENT CARDS */}
+
         <div className="flex-1 overflow-y-auto px-6 pb-6">
-          {/* BASIC */}
           {activeTab === "basic" && (
             <div className="bg-white rounded-xl shadow p-6 mt-6">
-              {/* ...existing content... */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50 px-6 py-5 border-b rounded-xl">
                 <div><p className="text-xs text-gray-500">Followers</p><p className="font-semibold">{data.followers}</p></div>
                 <div><p className="text-xs text-gray-500">Eng Rate</p><p className="font-semibold">{data.engagementRate}</p></div>
                 <div><p className="text-xs text-gray-500">Avg Views</p><p className="font-semibold">0</p></div>
                 <div><p className="text-xs text-gray-500">GMV</p><p className="font-semibold">$</p></div>
               </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 px-6 py-6 text-sm">
                 <div><p className="text-xs text-gray-500">Email</p><p className="text-gray-400">Not provided</p></div>
                 <div><p className="text-xs text-gray-500">Username</p><p>{data.instagramHandle}</p></div>
                 <div><p className="text-xs text-gray-500">Location</p><p className="text-gray-400">-</p></div>
                 <div><p className="text-xs text-gray-500">Niche</p><p>{data.niche}</p></div>
               </div>
+
               <div className="px-6 pb-6">
                 <p className="text-xs text-gray-500 mb-2">Notes</p>
                 <textarea
@@ -156,7 +223,7 @@ export default function InfluencerProfile({ data, close }: any) {
               </div>
             </div>
           )}
-          {/* ORDER */}
+
           {activeTab === "order" && (
             <div className="bg-white rounded-xl shadow p-6 mt-6">
               <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -173,7 +240,7 @@ export default function InfluencerProfile({ data, close }: any) {
               </div>
             </div>
           )}
-          {/* POST */}
+
           {activeTab === "post" && (
             <div className="bg-white rounded-xl shadow p-6 mt-6">
               <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -190,13 +257,14 @@ export default function InfluencerProfile({ data, close }: any) {
               </div>
             </div>
           )}
-          {/* STATS */}
+
           {activeTab === "stats" && (
             <div className="bg-white rounded-xl shadow p-6 mt-6 text-gray-400 text-sm">
               No statistics yet.
             </div>
           )}
         </div>
+
       </DrawerContent>
     </Drawer>
   )

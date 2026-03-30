@@ -146,7 +146,8 @@ model UserSubscription {
   plan_id              String   @db.VarChar(30)
   stripe_customer_id   String?  @unique @db.VarChar(191)
   stripe_subscription_id String? @unique @db.VarChar(191)
-  status               String   @default("trialing") @db.VarChar(20) // 'active', 'trialing', 'paused', 'canceled'
+  status               String   @default("trialing") @db.VarChar(20) // 'active', 'trialing', 'past due', 'paused', 'canceled', 'expired'
+  billing_cycle        String   @default("monthly") @db.VarChar(10) // 'monthly' or 'yearly'
   extra_seats          Int      @default(0)
   extra_brands         Int      @default(0)
   started_at           DateTime @default(now())

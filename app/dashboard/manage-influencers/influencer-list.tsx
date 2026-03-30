@@ -31,6 +31,10 @@ export default function InfluencerList() {
     "select" | "manual" | "instagram" | "tiktok"
   >("select")
 
+  // pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [rowsPerPage, setRowsPerPage] = useState(10)
+
   // Load data from JSON file on component mount
   useEffect(() => {
     if (jsonData && Array.isArray(jsonData)) {
@@ -39,7 +43,8 @@ export default function InfluencerList() {
   }, [])
 
   // Function to delete an influencer
-  const deleteInfluencer = (id: number) => {
+  const deleteInfluencer = (id: number, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent row click from triggering
     setInfluencers(prev => prev.filter(item => item.id !== id))
   }
 
@@ -81,6 +86,33 @@ export default function InfluencerList() {
       default:
         return "bg-gray-100 text-gray-700"
     }
+  }
+
+  // pagination logic
+  const indexOfLast = currentPage * rowsPerPage
+  const indexOfFirst = indexOfLast - rowsPerPage
+  const currentRows = influencers.slice(indexOfFirst, indexOfLast)
+  const totalPages = Math.ceil(influencers.length / rowsPerPage)
+
+  // Handle rows per page change
+  const handleRowsPerPageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setRowsPerPage(Number(e.target.value))
+    setCurrentPage(1) // Reset to first page when changing rows per page
+  }
+
+  // Reset to first page when data changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [influencers.length])
+
+  // Handle checkbox click to prevent row click
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+  }
+
+  // Handle dropdown click to prevent row click
+  const handleDropdownClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
   }
 
   return (
@@ -170,102 +202,210 @@ export default function InfluencerList() {
 
         </div>
 
-        {/* TABLE VIEW */}
-        {view === "table" && (
+{/* TABLE VIEW */}
+{view === "table" && (
 
-          <div className="border rounded-xl overflow-hidden">
+  <div className="border rounded-xl overflow-auto">
 
-            <table className="w-full text-sm">
+    <table className="min-w-[2100px] w-full text-sm">
 
-              <thead className="border-b">
-                <tr>
-                  <th className="px-3 py-2"></th>
-                  <th className="px-3 py-2">Profile</th>
-                  <th className="px-3 py-2">Influencer</th>
-                  <th className="px-3 py-2">Username</th>
-                  <th className="px-3 py-2">Followers</th>
-                  <th className="px-3 py-2">ENG</th>
-                  <th className="px-3 py-2">Niche</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Created</th>
-                  <th className="px-3 py-2">Action</th>
-                </tr>
-              </thead>
+      <thead className="border-b bg-gray-50">
+        <tr>
+          <th className="px-3 py-2 w-12">#</th>
+          <th className="px-3 py-2 w-10">✓</th>
+          <th className="px-3 py-2">Profile</th>
+          
+          {/* About Influencer Section */}
+          <th colSpan={7} className="px-3 py-2 text-center bg-gray-100 border-x">
+            About Influencer
+          </th>
+          
+          {/* Outreach Info Section */}
+          <th colSpan={8} className="px-3 py-2 text-center bg-gray-100">
+            Outreach Info
+          </th>
+          <th className="px-3 py-2">Action</th>
+        </tr>
+        <tr className="border-b">
+          <th className="px-3 py-2 w-12"></th>
+          <th className="px-3 py-2 w-10"></th>
+          <th className="px-3 py-2"></th>
+          
+          {/* About Influencer Sub-headers */}
+          <th className="px-3 py-2">Username Handle</th>
+          <th className="px-3 py-2">Niche</th>
+          <th className="px-3 py-2">Gender</th>
+          <th className="px-3 py-2">Location</th>
+          <th className="px-3 py-2">Follower Count</th>
+          <th className="px-3 py-2">Engagement Rate (%)</th>
+          <th className="px-3 py-2">Social Link</th>
+          
+          {/* Outreach Info Sub-headers */}
+          <th className="px-3 py-2">First Name</th>
+          <th className="px-3 py-2">Contact Info</th>
+          <th className="px-3 py-2">Sourced Date</th>
+          <th className="px-3 py-2">Sourced By</th>
+          <th className="px-3 py-2">Service Duplicate IG</th>
+          <th className="px-3 py-2">Approve / Decline</th>
+          <th className="px-3 py-2">Transferred Date</th>
+          <th className="px-3 py-2">Notes</th>
+          <th className="px-3 py-2"></th>
+        </tr>
+      </thead>
 
-              <tbody>
+      <tbody>
 
-                {influencers.map((item) => {
-                  const displayStatus = getDisplayStatus(item.pipelineStatus)
-                  
-                  return (
-                    <tr key={item.id} className="border-t hover:bg-gray-50">
+        {currentRows.map((item, idx) => {
+          const rowNumber = indexOfFirst + idx + 1
+          return (
+            <tr 
+              key={item.id} 
+              className="border-t hover:bg-gray-50 cursor-pointer"
+              onClick={() => setProfile(item)}
+            >
+              <td className="px-3 py-2 text-center text-gray-500 text-xs">
+                {rowNumber}
+              </td>
+              <td className="px-3 py-2" onClick={handleCheckboxClick}>
+                <input type="checkbox" onClick={handleCheckboxClick} />
+              </td>
 
-                      <td className="px-3 py-2">
-                        <input type="checkbox" />
-                      </td>
+              <td className="px-3 py-2">
+                <div className="w-9 h-9 rounded-full bg-[#1FAE5B]/20 flex items-center justify-center">
+                  <span className="text-sm font-medium">
+                    {item.firstName?.charAt(0) || item.influencer?.charAt(0) || "?"}
+                  </span>
+                </div>
+              </td>
 
-                      <td
-                        className="px-3 py-2 cursor-pointer"
-                        onClick={() => setProfile(item)}
-                      >
-                        <div className="w-9 h-9 rounded-full bg-[#1FAE5B]/20 flex items-center justify-center">
-                          <span className="text-sm font-medium">
-                            {item.influencer?.charAt(0) || "?"}
-                          </span>
-                        </div>
-                      </td>
+              {/* About Influencer Data */}
+              <td className="px-3 py-2 text-[#0F6B3E] font-medium">
+                {item.instagramHandle || "-"}
+              </td>
+              <td className="px-3 py-2">{item.niche || "-"}</td>
+              <td className="px-3 py-2">{item.gender || "-"}</td>
+              <td className="px-3 py-2">{item.location || "-"}</td>
+              <td className="px-3 py-2">{item.followers || "-"}</td>
+              <td className="px-3 py-2">{item.engagementRate || "-"}%</td>
+              <td className="px-3 py-2" onClick={handleDropdownClick}>
+                {item.socialLink ? (
+                  <a href={item.socialLink} target="_blank" className="text-blue-600" onClick={(e) => e.stopPropagation()}>
+                    Link
+                  </a>
+                ) : "-"}
+              </td>
 
-                      <td className="px-3 py-2 font-medium">
-                        {item.influencer}
-                      </td>
+              {/* Outreach Info Data */}
+              <td className="px-3 py-2">{item.firstName || item.influencer || "-"}</td>
+              <td className="px-3 py-2">{item.contactInfo || item.email || "-"}</td>
+              <td className="px-3 py-2">{item.sourcedDate || "-"}</td>
+              <td className="px-3 py-2">{item.sourcedBy || "-"}</td>
+              <td className="px-3 py-2">{item.duplicateIG || "-"}</td>
+              
+              <td className="px-3 py-2" onClick={handleDropdownClick}>
+                <select
+                  value={item.approval || ""}
+                  onChange={(e) => {
+                    const newValue = e.target.value
+                    setInfluencers(prev => prev.map(i => 
+                      i.id === item.id ? { ...i, approval: newValue } : i
+                    ))
+                  }}
+                  onClick={handleDropdownClick}
+                  className="border rounded px-2 py-1 text-sm bg-white"
+                >
+                  <option value="">Select</option>
+                  <option value="Approve">Approve</option>
+                  <option value="Decline">Decline</option>
+                </select>
+              </td>
 
-                      <td className="px-3 py-2 text-[#0F6B3E] font-medium">
-                        {item.instagramHandle}
-                      </td>
+              <td className="px-3 py-2">{item.transferredDate || "-"}</td>
+              <td className="px-3 py-2">{item.notes || "-"}</td>
 
-                      <td className="px-3 py-2">{item.followers}</td>
-                      <td className="px-3 py-2">{item.engagementRate}</td>
-                      <td className="px-3 py-2">{item.niche}</td>
+              <td className="px-3 py-2" onClick={handleDropdownClick}>
+                <button
+                  onClick={(e) => deleteInfluencer(item.id, e)}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  <IconTrash size={16} />
+                </button>
+              </td>
 
-                      <td className="px-3 py-2">
-                        <span className={`px-2 py-[2px] rounded text-xs ${getStatusColor(displayStatus)}`}>
-                          {displayStatus}
-                        </span>
-                      </td>
+            </tr>
+          )
+        })}
 
-                      <td className="px-3 py-2">
-                        <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-xs">JD</span>
-                        </div>
-                      </td>
+        {currentRows.length === 0 && (
+          <tr>
+            <td colSpan={20} className="text-center py-8 text-gray-500">
+              No influencers found
+            </td>
+          </tr>
+        )}
 
-                      <td className="px-3 py-2">
-                        <button 
-                          onClick={() => deleteInfluencer(item.id)}
-                          className="text-red-500 hover:text-red-700 transition"
-                        >
-                          <IconTrash size={16} />
-                        </button>
-                      </td>
+      </tbody>
 
-                    </tr>
-                  )
-                })}
+    </table>
 
-                {influencers.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="text-center py-8 text-gray-500">
-                      No influencers found. Click "+ New Influencer" to add some.
-                    </td>
-                  </tr>
-                )}
+  </div>
 
-              </tbody>
+)}
 
-            </table>
+        {/* PAGINATION (BOTTOM) */}
+        {view === "table" && influencers.length > 0 && (
+          <div className="flex justify-between items-center gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-600">Rows per page:</span>
+              <select
+                value={rowsPerPage}
+                onChange={handleRowsPerPageChange}
+                className="border rounded px-2 py-1 bg-white"
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
 
+            <div className="flex items-center gap-3">
+              <span className="text-gray-600">
+                Showing {indexOfFirst + 1} to {Math.min(indexOfLast, influencers.length)} of {influencers.length} entries
+              </span>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                  disabled={currentPage === 1}
+                  className={`border px-3 py-1 rounded transition ${
+                    currentPage === 1 
+                      ? 'opacity-50 cursor-not-allowed' 
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  Prev
+                </button>
+                
+                <span className="px-3 py-1">
+                  Page {currentPage} of {totalPages}
+                </span>
+                
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className={`border px-3 py-1 rounded transition ${
+                    currentPage === totalPages 
+                      ? 'opacity-50 cursor-not-allowed' 
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
-
         )}
 
         {/* KANBAN VIEW */}
@@ -297,11 +437,11 @@ export default function InfluencerList() {
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-8 h-8 rounded-full bg-[#1FAE5B]/20 flex items-center justify-center">
                             <span className="text-xs font-medium">
-                              {item.influencer?.charAt(0) || "?"}
+                              {item.influencer?.charAt(0) || item.firstName?.charAt(0) || "?"}
                             </span>
                           </div>
                           <div className="flex-1">
-                            <p className="font-medium text-sm">{item.influencer}</p>
+                            <p className="font-medium text-sm">{item.influencer || item.firstName}</p>
                             <p className="text-xs text-gray-500">{item.instagramHandle}</p>
                           </div>
                         </div>

@@ -5,26 +5,37 @@ export async function POST(req: NextRequest) {
   try {
     const { goal, website, team_size, revenue, source, user_id } = await req.json()
 
-    console.log("Onboarding POST request received:", { user_id, goal })
-
-    // Validate required fields
     if (!user_id) {
-      console.error("No user_id provided")
       return NextResponse.json(
         { error: "User ID is required" },
         { status: 400 }
       )
     }
-
-    // Allow all fields to be null for skip functionality
-
-    // Check if user exists in database
+    
     const userExists = await prisma.user.findUnique({
       where: { id: user_id },
     })
-    console.log("User exists in database:", !!userExists)
+    if (!userExists) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      )
+    }
 
-    // Update or create onboarding record
+    const subscription = await prisma.userSubscription.findFirst({
+      where: {
+        user_id,
+        status: { in: ["active", "trialing"] },
+      },
+    })
+    if (!subscription) {
+      return NextResponse.json(
+        { error: "No active or trialing subscription. Please subscribe first." },
+        { status: 403 }
+      )
+    }
+
+  
     const onboarding = await prisma.onboarding.upsert({
       where: { user_id },
       update: {
@@ -51,10 +62,6 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error("Onboarding error details:", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    })
     return NextResponse.json(
       { 
         error: "Failed to save onboarding data",

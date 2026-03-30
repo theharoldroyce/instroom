@@ -44,7 +44,6 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     e.preventDefault()
     setError(null)
 
-    // Validation
     if (!formData.name.trim()) {
       setError("Full name is required")
       return
@@ -83,7 +82,6 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         throw new Error(data.error || "Signup failed")
       }
 
-      // Sign in automatically after signup
       const signInResult = await signIn("credentials", {
         email: formData.email,
         password: formData.password,
@@ -95,8 +93,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         return
       }
 
-      // Redirect to onboarding
-      router.push("/onboarding")
+      router.push("/pricing")
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
     } finally {
@@ -107,7 +104,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   const handleGoogleSignup = async () => {
     try {
       setIsLoading(true)
-      await signIn("google", { callbackUrl: "/onboarding" })
+      await signIn("google", { callbackUrl: "/pricing" })
     } catch (err) {
       setError("Google signup failed. Please try again.")
     } finally {
