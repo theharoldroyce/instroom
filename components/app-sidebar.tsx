@@ -77,7 +77,7 @@ export function AppSidebar({
     >
 
       {/* HEADER */}
-      <SidebarHeader className="h-24 flex items-center px--4 border-b border-white/10 bg-[#0F6B3E]">
+      <SidebarHeader className="h-24 flex items-center px-4 border-b border-white/10 bg-[#0F6B3E]">
         <Link href="/dashboard" className="flex items-center w-full">
           <Image
             src="/INSTROOM WHITE.png"

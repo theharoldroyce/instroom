@@ -193,7 +193,7 @@ export default function AccountSettingsPage() {
 
       <div className="settings-root flex w-full min-h-screen" style={{ background: "#f7f5f2" }}>
         <div className="w-[350px] flex-shrink-0">
-          <AppSidebar setView={() => {}} />
+          <AppSidebar />
         </div>
 
         <main className="flex-1 min-h-screen px-10 py-12 w-full">
