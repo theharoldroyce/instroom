@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sidebar"
 
 import Image from "next/image"
+import Link from "next/link"
 import { useSession } from "next-auth/react"
 
 const data = {
@@ -52,9 +53,7 @@ const data = {
 
 export function AppSidebar({
   ...props
-}: React.ComponentProps<typeof Sidebar> & {
-  setView: (view: string) => void
-}) {
+}: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
 
   // Fallback if session is not loaded yet
@@ -79,10 +78,7 @@ export function AppSidebar({
 
       {/* HEADER */}
       <SidebarHeader className="h-24 flex items-center px--4 border-b border-white/10 bg-[#0F6B3E]">
-        <button
-          onClick={() => setView("dashboard")}
-          className="flex items-center w-full"
-        >
+        <Link href="/dashboard" className="flex items-center w-full">
           <Image
             src="/INSTROOM WHITE.png"
             alt="Instroom Logo"
@@ -91,7 +87,7 @@ export function AppSidebar({
             className="object-contain"
             priority
           />
-        </button>
+        </Link>
       </SidebarHeader>
 
       {/* MENU */}
