@@ -1,8 +1,7 @@
 "use client";
-export const dynamic = "force-dynamic";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
 
 const planSummaries: Record<string, string> = {
@@ -57,7 +56,7 @@ const plans = {
 };
 
 
-export default function PaymentPage() {
+function PaymentContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const planKey = (searchParams.get("plan") || "team") as keyof typeof plans;
@@ -235,5 +234,13 @@ export default function PaymentPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PaymentPage() {
+  return (
+    <Suspense>
+      <PaymentContent />
+    </Suspense>
   );
 }
