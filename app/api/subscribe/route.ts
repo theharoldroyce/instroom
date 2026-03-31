@@ -5,16 +5,36 @@ const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {
-    const { userId, planId } = await req.json();
+    const { userId, planId, cycle, extraSeats = 0, extraBrands = 0 } = await req.json();
 
-    if (!userId || !planId) {
-      return NextResponse.json({ error: "Missing userId or planId" }, { status: 400 });
+    if (!userId || !planId || !cycle) {
+      return NextResponse.json({ error: "Missing userId, planId, or cycle" }, { status: 400 });
     }
 
-    const subscription = await prisma.userSubscription.create({
-      data: {
+    const plan = await prisma.subscriptionPlan.findUnique({
+      where: { name: planId }, 
+    });
+
+    if (!plan) {
+      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+    }
+
+    const subscription = await prisma.userSubscription.upsert({
+      where: { user_id: userId },
+      update: {
+        plan_id: plan.id,
+        billing_cycle: cycle,
+        extra_brands: extraBrands,
+        extra_seats: extraSeats,
+        status: "active",
+      },
+      create: {
         user_id: userId,
-        plan_id: planId,
+        plan_id: plan.id,
+        billing_cycle: cycle,
+        extra_brands: extraBrands,
+        extra_seats: extraSeats,
+        status: "active",
       },
     });
 

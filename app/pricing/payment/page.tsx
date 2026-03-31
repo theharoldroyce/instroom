@@ -1,8 +1,9 @@
 "use client";
-
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState, Suspense } from "react";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
+import Script from "next/script";
+import { useEffect, useRef } from "react";
 
 const planSummaries: Record<string, string> = {
   solo: "1 brand (cannot add more), 0 seats (buy up to 5)",
@@ -55,14 +56,35 @@ const plans = {
   },
 };
 
+const paypalPlanIds: Record<string, Record<string, string>> = {
+  solo: {
+    monthly: "P-63P34771UM342062VNHFUESI",
+    yearly: "P-6G718963T9494763UNHFV53Q", 
+  },
+  team: {
+    monthly: "P-45T35817BC411342UNHFUHAA",
+    yearly: "P-00X123422A829354VNHFV6IY", 
+  },
+  agency: {
+    monthly: "P-6D9298534V9299530NHFUIMQ",
+    yearly: "P-7X6695370D0386640NHFV6VI", 
+  },
+};
 
-function PaymentContent() {
+declare global {
+  interface Window {
+    paypal?: any;
+  }
+}
+
+export default function PaymentPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const planKey = (searchParams.get("plan") || "team") as keyof typeof plans;
   const cycle = (searchParams.get("cycle") === "yearly") ? "yearly" : "monthly";
   const plan = plans[planKey] || plans.team;
   const [loading, setLoading] = useState(false);
+  const [paypalLoaded, setPaypalLoaded] = useState(false);
 
   const { data: session } = useSession();
   const userId = session?.user?.id;
@@ -97,6 +119,61 @@ function PaymentContent() {
       alert("Failed to subscribe. Please try again.");
     }
   };
+
+  const paypalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!paypalLoaded) return;
+    if (typeof window === "undefined") return;
+    if (!paypalRef.current) return;
+
+    paypalRef.current.innerHTML = "";
+
+    const planId = paypalPlanIds[planKey][cycle];
+    let button: any;
+
+    if (window.paypal && planId) {
+      button = window.paypal.Buttons({
+        style: {
+          shape: 'pill',
+          color: 'silver',
+          layout: 'vertical',
+          label: 'subscribe'
+        },
+        createSubscription: function(data: any, actions: any) {
+          return actions.subscription.create({
+            plan_id: planId
+          });
+        },
+        onApprove: function(data: any, actions: any) {
+          fetch('/api/subscription/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subscriptionID: data.subscriptionID,
+              userId,
+              plan: planKey,
+              cycle,
+            }),
+          }).then(() => {
+            window.location.href = '/onboarding';
+          });
+        }
+      });
+      button.render(paypalRef.current);
+    }
+
+    // Always return a cleanup function
+    return () => {
+      if (paypalRef.current) {
+        paypalRef.current.innerHTML = "";
+      }
+      // Optionally, destroy the PayPal button instance if available
+      if (button && button.close) {
+        button.close();
+      }
+    };
+  }, [planKey, cycle, userId, paypalLoaded]);
 
   return (
     <div className="min-h-screen bg-[#0b0f0d] text-white flex items-center justify-center px-4 py-12">
@@ -156,91 +233,16 @@ function PaymentContent() {
         <div className="md:w-1/2 p-8 flex flex-col justify-center">
           <h2 className="text-2xl font-bold mb-2 text-center md:text-left">Payment Information</h2>
           <p className="text-zinc-400 text-center md:text-left mb-8">
-            {plan.price_monthly === 0
-              ? "No payment required for this plan."
-              : "Enter your payment details to complete your subscription."}
+            Click the PayPal button below to complete your subscription.
           </p>
-          <form onSubmit={handlePayment} className="space-y-5">
-            <div>
-              <label className="block text-sm mb-1" htmlFor="name">
-                Name on card
-              </label>
-              <input
-                id="name"
-                type="text"
-                placeholder="Full name"
-                className="w-full rounded-lg border border-emerald-400/20 bg-[#101513] px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                required
-                disabled={plan.price_monthly === 0}
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-1" htmlFor="card">
-                Card number
-              </label>
-              <input
-                id="card"
-                type="text"
-                placeholder="1234 5678 9012 3456"
-                className="w-full rounded-lg border border-emerald-400/20 bg-[#101513] px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                required
-                disabled={plan.price_monthly === 0}
-              />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-sm mb-1" htmlFor="exp">
-                  Expiry date
-                </label>
-                <input
-                  id="exp"
-                  type="text"
-                  placeholder="MM/YY"
-                  className="w-full rounded-lg border border-emerald-400/20 bg-[#101513] px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                  required
-                  disabled={plan.price_monthly === 0}
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm mb-1" htmlFor="cvc">
-                  CVC
-                </label>
-                <input
-                  id="cvc"
-                  type="text"
-                  placeholder="CVC"
-                  className="w-full rounded-lg border border-emerald-400/20 bg-[#101513] px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                  required
-                  disabled={plan.price_monthly === 0}
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loading || price === 0}
-              className={`w-full rounded-full py-3 font-semibold text-base transition-all ${
-                price === 0
-                  ? "bg-zinc-700 text-zinc-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-emerald-500 to-lime-400 text-black hover:opacity-90"
-              }`}
-            >
-              {loading
-                ? "Processing..."
-                : price === 0
-                ? "No payment required"
-                : `Start ${plan.display_name} Subscription (${cycle === "yearly" ? "Yearly" : "Monthly"})`}
-            </button>
-          </form>
+          <Script
+            src="https://www.paypal.com/sdk/js?client-id=AWn3RAfG6hw-ygZmYNREpv8yGm5DGn3lV8en44bBl0C40_sF5EgJXwpcc6Zkd7tbGf04uUx1F1v0V5Rb&vault=true&intent=subscription"
+            strategy="afterInteractive"
+            onLoad={() => setPaypalLoaded(true)}
+          />
+          <div ref={paypalRef}></div>
         </div>
       </div>
     </div>
-  );
-}
-
-export default function PaymentPage() {
-  return (
-    <Suspense>
-      <PaymentContent />
-    </Suspense>
   );
 }
