@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Drawer, DrawerContent, DrawerClose, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +25,19 @@ export default function InfluencerProfile({ data, onUpdate, close }: any) {
     setVisible(false)
     setTimeout(close, 300)
   }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "Prospect": return "bg-gray-100 text-gray-700"
+      case "Reached Out": return "bg-blue-100 text-blue-700"
+      case "In Conversation": return "bg-yellow-100 text-yellow-700"
+      case "Onboarded": return "bg-green-100 text-green-700"
+      case "Rejected": return "bg-red-100 text-red-700"
+      default: return "bg-gray-100 text-gray-700"
+    }
+  }
+
+  const inputClass = "border border-gray-200 rounded-lg px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/20 focus:border-[#1FAE5B]"
 
   const getCampaignColor = (type: string) => {
     switch (type) {
@@ -162,7 +175,7 @@ export default function InfluencerProfile({ data, onUpdate, close }: any) {
                     : "border-transparent text-gray-400"
                 }`}
               >
-                {label}
+                {tab}
               </button>
             ))}
           </div>
