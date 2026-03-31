@@ -41,7 +41,7 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="relative z-10 mx-auto max-w-7xl px-6 pb-24 pt-20 text-center lg:px-10 lg:pt-32">
         <p className="mb-6 inline-flex items-center rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3 py-1 text-xs font-medium tracking-wide text-emerald-300">
-          Instroom • Creator Analytics
+          Instroom • Creator Analytics . test
         </p>
 
         <h1 className="mx-auto max-w-3xl text-5xl font-semibold leading-tight tracking-tight text-white md:text-6xl lg:text-7xl">
