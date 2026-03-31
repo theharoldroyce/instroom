@@ -1,6 +1,6 @@
 "use client";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import Script from "next/script";
 import { useEffect, useRef } from "react";
@@ -77,7 +77,7 @@ declare global {
   }
 }
 
-export default function PaymentPage() {
+function PaymentPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const planKey = (searchParams.get("plan") || "team") as keyof typeof plans;
@@ -244,5 +244,13 @@ export default function PaymentPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0b0f0d] flex items-center justify-center text-white">Loading...</div>}>
+      <PaymentPageInner />
+    </Suspense>
   );
 }
