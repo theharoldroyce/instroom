@@ -16,13 +16,6 @@ export default function LoginPage() {
         />
       </div>
 
-      <div className="fixed top-32 left-30 z-50 max-w-xs">
-        <h2 className="font-manrope text-xl font-bold text-[#1FAE5B] leading-snug text-center">
-          <span className="block">Simplify your</span>
-          <span className="block text-[#0F6B3E] whitespace-nowrap">INFLUENCER MARKETING WORKFLOW</span>
-        </h2>
-      </div>
-
       <div className="absolute top-0 left-0 w-96 h-96 rounded-full bg-[#1FAE5B]/8 blur-3xl -translate-x-1/2 -translate-y-1/2" />
       <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-[#0F6B3E]/6 blur-3xl translate-x-1/3 translate-y-1/3" />
       <div className="absolute top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
