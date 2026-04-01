@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { sendWelcomeEmail } from "@/lib/email"
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,28 +47,9 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Create onboarding record
-    await prisma.onboarding.create({
-      data: {
-        user_id: user.id,
-      },
-    })
 
-    // Create default subscription (trialing Solo plan)
-    const soloPlan = await prisma.subscriptionPlan.findUnique({
-      where: { name: "solo" },
-    })
-
-    if (soloPlan) {
-      await prisma.userSubscription.create({
-        data: {
-          user_id: user.id,
-          plan_id: soloPlan.id,
-          status: "trialing",
-          current_period_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days trial
-        },
-      })
-    }
+    // Send welcome email
+    await sendWelcomeEmail(user.email, user.name || "User")
 
     return NextResponse.json(
       {

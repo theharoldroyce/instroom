@@ -2,6 +2,7 @@ import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "./prisma"
+import { sendWelcomeEmail } from "./email"
 import bcrypt from "bcryptjs"
 
 declare module "next-auth" {
@@ -21,24 +22,6 @@ const nextAuthConfig = {
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
-      authorization: {
-        params: {
-          access_type: "offline",
-          prompt: "consent",
-        },
-      },
-      profile(profile: any) {
-        console.log("=== GoogleProvider profile callback ===")
-        console.log("Raw Google profile:", profile)
-        console.log("picture field:", profile.picture)
-        
-        return {
-          id: profile.sub,
-          name: profile.name,
-          email: profile.email,
-          image: profile.picture || null, 
-        }
-      },
     }),
     CredentialsProvider({
       name: "Credentials",
@@ -87,29 +70,14 @@ const nextAuthConfig = {
     async signIn({ user, account, profile }: any) {
       // For Google OAuth, create user record if it doesn't exist
       if (account?.provider === "google" && profile?.email) {
-        console.log("=== Google OAuth signIn START ===")
-        console.log("Profile object keys:", Object.keys(profile))
-        console.log("Full Profile object:", JSON.stringify(profile))
-        
-        // Ensure image is extracted - try both 'image' (from profile callback) and 'picture' (raw Google)
+        // Extract avatar from profile
         const avatarUrl = profile.image || profile.picture || null
-        console.log("Avatar URL to be saved:", avatarUrl)
-        console.log("Profile:", { 
-          email: profile.email, 
-          name: profile.name,
-          image: profile.image,
-          picture: profile.picture,
-          avatarUrl: avatarUrl
-        })
-        console.log("Account:", { provider: account.provider, providerAccountId: account.providerAccountId })
         
         try {
           // Find or create user
-          console.log("Looking up user by email:", profile.email)
           let dbUser = await prisma.user.findUnique({
             where: { email: profile.email },
           })
-          console.log("User lookup result:", dbUser ? "Found existing user" : "No user found, creating new")
           
           if (!dbUser) {
             dbUser = await prisma.user.create({
@@ -121,96 +89,49 @@ const nextAuthConfig = {
                 is_active: true,
               },
             })
-            console.log("User created successfully:", dbUser.id, "Image saved:", dbUser.image)
+            
+            // Send welcome email to new user
+            try {
+              await sendWelcomeEmail(dbUser.email, dbUser.name || "User")
+            } catch (emailError) {
+              console.error("Failed to send welcome email:", emailError instanceof Error ? emailError.message : String(emailError))
+              // Continue anyway, don't fail the signin
+            }
           } else {
             dbUser = await prisma.user.update({
               where: { email: profile.email },
               data: {
                 name: profile.name || dbUser.name,
-                image: avatarUrl || dbUser.image, // Update avatar if available
+                image: avatarUrl || dbUser.image,
               },
             })
-            console.log("User updated. Image:", dbUser.image)
           }
           
           if (dbUser) {
-            // Override user.id with database ID (not Google sub ID)
+            // Set user ID to database ID
             user.id = dbUser.id
             user.email = dbUser.email
             user.name = dbUser.name
             user.image = dbUser.image
-            console.log("User object updated with database ID:", dbUser.id)
             
-            // Create onboarding record if it doesn't exist
-            console.log("Checking for existing onboarding...")
+            // Ensure onboarding record exists
             const onboarding = await prisma.onboarding.findUnique({
               where: { user_id: dbUser.id },
             })
             
             if (!onboarding) {
-              console.log("Creating onboarding record...")
               await prisma.onboarding.create({
                 data: { user_id: dbUser.id },
               })
-              console.log("Onboarding created")
-            } else {
-              console.log("Onboarding already exists")
             }
             
-            // Create subscription if it doesn't exist
-            console.log("Checking for existing subscription...")
-            const subscription = await prisma.userSubscription.findUnique({
-              where: { user_id: dbUser.id },
-            })
-            
-            if (!subscription) {
-              console.log("Creating subscription...")
-              const trialPlan = await prisma.subscriptionPlan.findFirst({
-                where: { name: "Solo" },
-              })
-              
-              if (trialPlan) {
-                console.log("Found Solo plan:", trialPlan.id)
-                const trialEndDate = new Date()
-                trialEndDate.setDate(trialEndDate.getDate() + 14)
-                
-                await prisma.userSubscription.create({
-                  data: {
-                    user_id: dbUser.id,
-                    plan_id: trialPlan.id,
-                    status: "trialing",
-                    current_period_end: trialEndDate,
-                  },
-                })
-                console.log("Subscription created")
-              } else {
-                console.error("Solo plan not found!")
-              }
-            } else {
-              console.log("Subscription already exists")
-            }
-            
-            // Create Account record for provider tracking
-            console.log("Creating/updating Account record...")
-            console.log("Full account object:", JSON.stringify(account, null, 2))
-            console.log("Account tokens:", {
-              access_token: account.access_token ? "Present" : "NULL",
-              refresh_token: account.refresh_token ? "Present" : "NULL",
-              expires_at: account.expires_at,
-              token_type: account.token_type,
-              scope: account.scope,
-              id_token: account.id_token ? "Present" : "NULL"
-            })
+            // Create/update account record for provider tracking
             try {
-              if (!account.providerAccountId) {
-                console.error("Missing providerAccountId in account object")
-                console.log("Account object:", account)
-              } else {
-                await prisma.account.upsert({
-                  where: {
-                    provider_providerAccountId: {
-                      provider: account.provider,
-                      providerAccountId: account.providerAccountId,
+              await prisma.account.upsert({
+                where: {
+                  provider_providerAccountId: {
+                    provider: account.provider,
+                    providerAccountId: account.providerAccountId,
                     },
                   },
                   create: {
@@ -234,17 +155,12 @@ const nextAuthConfig = {
                     id_token: account.id_token || null,
                   },
                 })
-                console.log("Account record created/updated")
-              }
             } catch (accountError) {
-              console.error("Error creating Account record:", accountError)
-              // Continue anyway, don't fail the signin
+              console.error("Account record error:", accountError instanceof Error ? accountError.message : String(accountError))
             }
           }
         } catch (error) {
-          console.error("=== Google OAuth signIn FAILED ===")
-          console.error("Error in signIn callback:", error)
-          console.error("Error details:", error instanceof Error ? error.message : String(error))
+          console.error("Google OAuth error:", error instanceof Error ? error.message : String(error))
           return false
         }
       }

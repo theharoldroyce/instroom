@@ -143,21 +143,21 @@ model SubscriptionPlan {
 // ============================================================================
 
 model UserSubscription {
-  id                   String   @id @default(cuid()) @db.VarChar(30)
-  user_id              String   @unique @db.VarChar(30)
-  plan_id              String   @db.VarChar(30)
-  stripe_customer_id   String?  @unique @db.VarChar(191)
-  stripe_subscription_id String? @unique @db.VarChar(191)
-  status               String   @default("trialing") @db.VarChar(20) // 'active', 'trialing', 'past due', 'paused', 'canceled', 'expired'
-  billing_cycle        String   @default("monthly") @db.VarChar(10) // 'monthly' or 'yearly'
-  extra_seats          Int      @default(0)
-  extra_brands         Int      @default(0)
-  started_at           DateTime @default(now())
-  ended_at             DateTime?
-  current_period_start DateTime @default(now())
-  current_period_end   DateTime?
-  created_at           DateTime @default(now())
-  updated_at           DateTime @updatedAt
+  id                     String   @id @default(cuid()) @db.VarChar(30)
+  user_id                String   @unique @db.VarChar(30)
+  plan_id                String   @db.VarChar(30)
+  payment_customer_id    String?  @unique @db.VarChar(191)
+  payment_subscription_id String? @unique @db.VarChar(191)
+  status                 String   @default("trialing") @db.VarChar(20) // 'active', 'trialing', 'past due', 'paused', 'canceled', 'expired'
+  billing_cycle          String   @default("monthly") @db.VarChar(10) // 'monthly' or 'yearly'
+  extra_seats            Int      @default(0)
+  extra_brands           Int      @default(0)
+  started_at             DateTime @default(now())
+  ended_at               DateTime?
+  current_period_start   DateTime @default(now())
+  current_period_end     DateTime?
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
 
   user User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   plan SubscriptionPlan    @relation(fields: [plan_id], references: [id])
@@ -165,7 +165,7 @@ model UserSubscription {
 
   @@index([user_id])
   @@index([status])
-  @@index([stripe_subscription_id])
+  @@index([payment_subscription_id])
 }
 
 // ============================================================================

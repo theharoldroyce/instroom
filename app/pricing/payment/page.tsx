@@ -91,35 +91,6 @@ function PaymentPageInner() {
 
   const price = cycle === "yearly" ? plan.price_yearly : plan.price_monthly;
 
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    if (!userId) {
-      alert("You must be logged in to subscribe.");
-      setLoading(false);
-      return;
-    }
-
-    const res = await fetch("/api/subscribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        planId: planKey,
-        cycle,
-      }),
-    });
-
-    setLoading(false);
-
-    if (res.ok) {
-      router.push("/onboarding");
-    } else {
-      alert("Failed to subscribe. Please try again.");
-    }
-  };
-
   const paypalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -236,7 +207,7 @@ function PaymentPageInner() {
             Click the PayPal button below to complete your subscription.
           </p>
           <Script
-            src="https://www.paypal.com/sdk/js?client-id=AWn3RAfG6hw-ygZmYNREpv8yGm5DGn3lV8en44bBl0C40_sF5EgJXwpcc6Zkd7tbGf04uUx1F1v0V5Rb&vault=true&intent=subscription"
+            src={`https://www.paypal.com/sdk/js?client-id=${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}&vault=true&intent=subscription`}
             strategy="afterInteractive"
             onLoad={() => setPaypalLoaded(true)}
           />
