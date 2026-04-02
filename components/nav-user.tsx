@@ -46,15 +46,6 @@ export function NavUser({
 
   const { isMobile } = useSidebar()
   const [mounted, setMounted] = useState(false)
-  const router = useRouter()
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) return null
-
-  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
