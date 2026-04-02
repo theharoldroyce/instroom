@@ -62,7 +62,6 @@ export function LoginForm({
         return
       }
 
-      // Check if user has completed onboarding
       try {
         const onboardingResponse = await fetch("/api/check-onboarding", {
           method: "POST",
@@ -74,7 +73,6 @@ export function LoginForm({
           const { isComplete } = await onboardingResponse.json()
           router.push(isComplete ? "/dashboard" : "/onboarding")
         } else {
-          // Default to onboarding if check fails
           router.push("/onboarding")
         }
       } catch (err) {
@@ -105,23 +103,26 @@ export function LoginForm({
 
   return (
     <div className="flex flex-col gap-6">
-      <Card className={className} {...props}>
-        <CardHeader className="gap-3">
-          <CardTitle className="text-2xl text-white">Sign in to Instroom</CardTitle>
-          <CardDescription className="text-zinc-300">
+      <Card className={cn(className, "rounded-2xl shadow-lg p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden")}
+        {...props}
+      >
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
+        <CardHeader className="gap-2 pb-2 pt-4">
+          <CardTitle className="text-2xl font-bold text-gray-900">Sign in to Instroom</CardTitle>
+          <CardDescription className="text-sm text-gray-600">
             Choose your preferred login method
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {error && (
-            <div className="mb-4 rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-300">
+            <div className="mb-6 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-3 text-sm text-[#C87500]">
               {error}
             </div>
           )}
           <form onSubmit={handleSubmit}>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="email" className="text-zinc-100">
+                <FieldLabel htmlFor="email" className="font-medium text-gray-700 text-sm">
                   Email
                 </FieldLabel>
                 <Input
@@ -132,17 +133,17 @@ export function LoginForm({
                   onChange={handleInputChange}
                   disabled={isLoading}
                   required
-                  className="border-emerald-300/20 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:border-emerald-300 focus-visible:ring-emerald-400/25 disabled:opacity-50"
+                  className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors"
                 />
               </Field>
               <Field>
                 <div className="flex items-center">
-                  <FieldLabel htmlFor="password" className="text-zinc-100">
+                  <FieldLabel htmlFor="password" className="font-medium text-gray-700 text-sm">
                     Password
                   </FieldLabel>
                   <a
                     href="#"
-                    className="ml-auto text-xs text-emerald-500 underline-offset-4 hover:text-emerald-400 hover:underline"
+                    className="ml-auto text-xs text-[#0F6B3E] underline-offset-4 hover:text-[#1FAE5B] hover:underline"
                   >
                     Forgot your password?
                   </a>
@@ -154,14 +155,14 @@ export function LoginForm({
                   onChange={handleInputChange}
                   disabled={isLoading}
                   required
-                  className="border-emerald-300/20 bg-black/30 text-white placeholder:text-zinc-400 focus-visible:border-emerald-300 focus-visible:ring-emerald-400/25 disabled:opacity-50"
+                  className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors"
                 />
               </Field>
-              <Field className="space-y-2 pt-2">
+              <Field className="space-y-3 pt-4">
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="h-10 w-full bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black hover:from-[#0F6B3E] hover:to-[#36C06C] disabled:opacity-50"
+                  className="h-11 w-full bg-[#1FAE5B] text-white font-semibold rounded-lg shadow-md hover:bg-[#17a04e] hover:shadow-lg transition-all disabled:opacity-50"
                 >
                   {isLoading ? "Signing in..." : "Sign in with Email"}
                 </Button>
@@ -169,7 +170,7 @@ export function LoginForm({
                   type="button"
                   onClick={handleGoogleLogin}
                   disabled={isLoading}
-                  className="h-10 w-full border border-emerald-300/30 bg-emerald-500/5 text-zinc-100 hover:bg-emerald-500/10 disabled:opacity-50"
+                  className="h-11 w-full border-2 border-[#0F6B3E]/20 bg-[#0F6B3E]/5 text-[#0F6B3E] rounded-lg hover:bg-[#0F6B3E]/10 hover:border-[#0F6B3E]/40 transition-all font-medium"
                 >
                   <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -180,10 +181,10 @@ export function LoginForm({
                   Sign in with Google
                 </Button>
               </Field>
-              <Field>
-                <FieldDescription className="text-center text-zinc-400">
+              <Field className="pt-2 border-t border-gray-100">
+                <FieldDescription className="text-center text-gray-600">
                   Don&apos;t have an account?{" "}
-                  <a href="/signup" className="text-emerald-400 hover:!text-zinc-100">
+                  <a href="/signup" className="text-[#0F6B3E] hover:text-[#1FAE5B] font-semibold">
                     Sign up
                   </a>
                 </FieldDescription>
@@ -192,13 +193,13 @@ export function LoginForm({
           </form>
         </CardContent>
       </Card>
-      <FieldDescription className="px-6 text-center text-zinc-400">
+      <FieldDescription className="px-6 text-center text-[#1E1E1E]">
         By clicking continue, you agree to our{" "}
-        <a href="#" className="text-emerald-400 hover:!text-zinc-100">
+        <a href="#" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
           Terms of Service
         </a>{" "}
         and{" "}
-        <a href="#" className="text-emerald-400 hover:!text-zinc-100">
+        <a href="#" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
           Privacy Policy
         </a>
         .

@@ -16,31 +16,35 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkSubscription = async () => {
-      if (status === "loading") return
-      if (!session?.user) {
-        router.replace("/signup")
-        return
-      }
-      const userId = (session.user as any).id
-      if (!userId) {
-        router.replace("/signup")
-        return
-      }
-      const res = await fetch("/api/subscription/check", {
-        method: "POST",
-        body: JSON.stringify({ user_id: userId }),
-        headers: { "Content-Type": "application/json" },
-      })
-      if (!res.ok) {
+      try {
+        if (status === "loading") return
+        if (!session?.user) {
+          router.replace("/signup")
+          return
+        }
+        const userId = (session.user as any).id
+        if (!userId) {
+          router.replace("/signup")
+          return
+        }
+        const res = await fetch("/api/subscription/check", {
+          method: "POST",
+          body: JSON.stringify({ user_id: userId }),
+          headers: { "Content-Type": "application/json" },
+        })
+        if (!res.ok) {
+          return
+        }
         const data = await res.json()
-        if (data.error === "No active or trialing subscription. Please subscribe first.") {
+        if (!data.active) {
           router.replace("/pricing")
           return
         }
-        throw new Error(data.error || "Failed to check subscription")
+        setIsSubscribed(true)
+        setSubscriptionChecked(true)
+      } catch (err) {
+        router.replace("/pricing")
       }
-      setIsSubscribed(true)
-      setSubscriptionChecked(true)
     }
     checkSubscription()
   }, [status, session, router])
