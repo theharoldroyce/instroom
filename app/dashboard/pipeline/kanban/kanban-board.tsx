@@ -2,15 +2,23 @@
 
 import { useState, useEffect } from "react"
 import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import { useDroppable } from "@dnd-kit/core"
+import { useDraggable } from "@dnd-kit/core"
+import {
   IconLayoutKanban,
   IconList,
   IconSearch,
   IconPlus,
   IconFilter,
-<<<<<<< Updated upstream
-  IconClock,
-  IconAlertCircle
-=======
   IconGripVertical,
   IconLocation,
   IconBrandInstagram,
@@ -19,8 +27,7 @@ import {
   IconBrandTwitter,
   IconX,
   IconChevronLeft,
-  IconLayoutList
->>>>>>> Stashed changes
+  IconLayoutList,
 } from "@tabler/icons-react"
 
 // Import the JSON data
@@ -43,7 +50,7 @@ type Influencer = {
 
 // Map pipeline status to column keys
 const getColumnKey = (status: string): string => {
-  switch(status) {
+  switch (status) {
     case "Prospect":
       return "prospects"
     case "Reached Out":
@@ -52,11 +59,27 @@ const getColumnKey = (status: string): string => {
       return "conversation"
     case "Onboarded":
       return "onboarded"
+    case "For Order Creation":
+      return "for-creation"
+    case "In-Transit":
+      return "in-transit"
+    case "Delivered":
+      return "delivered"
+    case "Posted":
+      return "posted"
+    case "Completed":
+      return "completed"
     case "Rejected":
       return "rejected"
     default:
-      return status.toLowerCase().replace(/\s+/g, '-')
+      return status.toLowerCase().replace(/\s+/g, "-")
   }
+}
+
+// Map column keys back to pipeline status
+const getStatusFromColumnKey = (key: string): string => {
+  const col = columns.find((c) => c.key === key)
+  return col ? col.status : key
 }
 
 const columns = [
@@ -80,7 +103,7 @@ const locations = ["All", "USA", "UK", "Canada", "Australia", "India", "Europe",
 
 // Platform icons mapping
 const getPlatformIcon = (platform?: string) => {
-  switch(platform?.toLowerCase()) {
+  switch (platform?.toLowerCase()) {
     case "instagram":
       return <IconBrandInstagram size={14} className="text-pink-500" />
     case "tiktok":
@@ -94,23 +117,69 @@ const getPlatformIcon = (platform?: string) => {
   }
 }
 
+// Droppable column component
+function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col gap-3 w-[320px] flex-shrink-0 transition-colors ${
+        isOver ? "bg-gray-50 rounded-lg" : ""
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
+// Draggable card component
+function DraggableCard({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id })
+  const style = transform
+    ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
+    : undefined
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-gray-50 border rounded-xl p-4 hover:shadow-md transition border-gray-200 ${
+        isDragging ? "shadow-lg opacity-50" : ""
+      }`}
+    >
+      <div className="flex items-center gap-4">
+        {/* DRAG HANDLE */}
+        <div
+          {...listeners}
+          {...attributes}
+          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
+        >
+          <IconGripVertical size={16} />
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export default function PipelinePage() {
   const [view, setView] = useState<"kanban" | "list">("kanban")
   const [data, setData] = useState<Influencer[]>([])
   const [search, setSearch] = useState("")
-  const [selectedInfluencer, setSelectedInfluencer] = useState<Influencer | null>(null)
-<<<<<<< Updated upstream
-=======
   const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null)
-  
+  const [activeId, setActiveId] = useState<string | null>(null)
+
   // Filter states
   const [platformFilter, setPlatformFilter] = useState<string>("All")
   const [locationFilter, setLocationFilter] = useState<string>("All")
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
-  
+
   // Column list view state
   const [activeListColumn, setActiveListColumn] = useState<string | null>(null)
->>>>>>> Stashed changes
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  )
 
   // Load data from JSON file on component mount
   useEffect(() => {
@@ -121,60 +190,39 @@ export default function PipelinePage() {
         location: item.location || "USA",
         lastContact: item.lastContact || undefined,
         notes: item.notes || "",
-        priority: item.priority || "medium"
+        priority: item.priority || "medium",
       }))
       setData(transformedData)
     }
   }, [])
 
-<<<<<<< Updated upstream
-  // Function to check if follow-up is needed
-  const isFollowUpNeeded = (influencer: Influencer): { needed: boolean; type: "overdue" | "today" | "this-week" | "none" } => {
-    if (!influencer.nextFollowUp) return { needed: false, type: "none" }
-    
-    const today = new Date()
-    const followUpDate = new Date(influencer.nextFollowUp)
-    const diffDays = Math.ceil((followUpDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    
-    if (diffDays < 0) return { needed: true, type: "overdue" }
-    if (diffDays === 0) return { needed: true, type: "today" }
-    if (diffDays <= 7) return { needed: true, type: "this-week" }
-    
-    return { needed: false, type: "none" }
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
   }
 
-  // Function to update follow-up
-  const updateFollowUp = (id: number, newDate: string) => {
-    setData(prev => prev.map(item => 
-      item.id === id 
-        ? { 
-            ...item, 
-            nextFollowUp: newDate,
-            followUpCount: (item.followUpCount || 0) + 1,
-            lastContact: new Date().toISOString().split('T')[0]
-          }
-        : item
-    ))
-=======
   // Handle drag and drop
-  const onDragEnd = (result: DropResult) => {
-    const { destination, source, draggableId } = result
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
 
-    if (!destination) return
-    if (destination.droppableId === source.droppableId && destination.index === source.index) return
+    if (!over) return
 
-    const draggedInfluencer = data.find(item => item.id.toString() === draggableId)
+    const draggedId = active.id as string
+    const destinationKey = over.id as string
+
+    const draggedInfluencer = data.find((item) => item.id.toString() === draggedId)
     if (!draggedInfluencer) return
 
-    const newStatus = getStatusFromColumnKey(destination.droppableId)
-    
-    setData(prev => prev.map(item => 
-      item.id === draggedInfluencer.id 
-        ? { ...item, pipelineStatus: newStatus }
-        : item
-    ))
+    const newStatus = getStatusFromColumnKey(destinationKey)
+    if (draggedInfluencer.pipelineStatus === newStatus) return
 
-    const columnTitle = columns.find(col => col.key === destination.droppableId)?.title
+    setData((prev) =>
+      prev.map((item) =>
+        item.id === draggedInfluencer.id ? { ...item, pipelineStatus: newStatus } : item
+      )
+    )
+
+    const columnTitle = columns.find((col) => col.key === destinationKey)?.title
     setShowSuccessMessage(`${draggedInfluencer.influencer} moved to ${columnTitle}`)
     setTimeout(() => setShowSuccessMessage(null), 3000)
   }
@@ -186,13 +234,12 @@ export default function PipelinePage() {
     } else {
       setActiveListColumn(columnKey)
     }
->>>>>>> Stashed changes
   }
 
   // Group data by column with filters applied
   const getItemsByColumn = (columnKey: string) => {
     const status = getStatusFromColumnKey(columnKey)
-    return filteredData.filter(item => item.pipelineStatus === status)
+    return filteredData.filter((item) => item.pipelineStatus === status)
   }
 
   // Clear all filters
@@ -206,9 +253,10 @@ export default function PipelinePage() {
 
   // Filtered data
   const filteredData = data
-    .filter((d) =>
-      d.influencer.toLowerCase().includes(search.toLowerCase()) ||
-      d.instagramHandle.toLowerCase().includes(search.toLowerCase())
+    .filter(
+      (d) =>
+        d.influencer.toLowerCase().includes(search.toLowerCase()) ||
+        d.instagramHandle.toLowerCase().includes(search.toLowerCase())
     )
     .filter((d) => {
       if (platformFilter !== "All" && d.platform !== platformFilter) return false
@@ -222,21 +270,18 @@ export default function PipelinePage() {
   // Check if any filter is active
   const hasActiveFilters = platformFilter !== "All" || locationFilter !== "All" || search !== ""
 
+  // Get the active dragged influencer for the overlay
+  const activeInfluencer = activeId
+    ? data.find((item) => item.id.toString() === activeId)
+    : null
+
   return (
     <div className="flex flex-col gap-4 p-6">
-<<<<<<< Updated upstream
-      {selectedInfluencer && (
-        <FollowUpModal 
-          influencer={selectedInfluencer} 
-          onClose={() => setSelectedInfluencer(null)} 
-        />
-=======
       {/* Success Message Toast */}
       {showSuccessMessage && (
         <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2">
           {showSuccessMessage}
         </div>
->>>>>>> Stashed changes
       )}
 
       {/* HEADER */}
@@ -261,8 +306,8 @@ export default function PipelinePage() {
             <button
               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
               className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 border ${
-                hasActiveFilters 
-                  ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" 
+                hasActiveFilters
+                  ? "bg-[#1FAE5B] text-white border-[#1FAE5B]"
                   : "border-[#0F6B3E]/20"
               }`}
             >
@@ -274,7 +319,7 @@ export default function PipelinePage() {
                 </span>
               )}
             </button>
-            
+
             {showFilterDropdown && (
               <div className="absolute top-full mt-1 right-0 bg-white border rounded-lg shadow-lg z-10 min-w-[280px] p-4">
                 <div className="space-y-4">
@@ -286,12 +331,14 @@ export default function PipelinePage() {
                       onChange={(e) => setPlatformFilter(e.target.value)}
                       className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm"
                     >
-                      {platforms.map(platform => (
-                        <option key={platform} value={platform}>{platform}</option>
+                      {platforms.map((platform) => (
+                        <option key={platform} value={platform}>
+                          {platform}
+                        </option>
                       ))}
                     </select>
                   </div>
-                  
+
                   {/* Location Filter */}
                   <div>
                     <label className="block text-sm font-medium mb-2">Location</label>
@@ -300,12 +347,14 @@ export default function PipelinePage() {
                       onChange={(e) => setLocationFilter(e.target.value)}
                       className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm"
                     >
-                      {locations.map(location => (
-                        <option key={location} value={location}>{location}</option>
+                      {locations.map((location) => (
+                        <option key={location} value={location}>
+                          {location}
+                        </option>
                       ))}
                     </select>
                   </div>
-                  
+
                   {hasActiveFilters && (
                     <button
                       onClick={clearAllFilters}
@@ -332,7 +381,7 @@ export default function PipelinePage() {
                   : "border border-[#0F6B3E]/20"
               }`}
             >
-              <IconLayoutKanban size={16}/>
+              <IconLayoutKanban size={16} />
               Kanban
             </button>
             <button
@@ -346,26 +395,13 @@ export default function PipelinePage() {
                   : "border border-[#0F6B3E]/20"
               }`}
             >
-              <IconList size={16}/>
+              <IconList size={16} />
               List
             </button>
           </div>
         </div>
       </div>
 
-<<<<<<< Updated upstream
-      {/* KANBAN */}
-      {view === "kanban" && (
-        <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
-          <div className="flex gap-5 min-w-max">
-            {columns.map((col) => {
-              // Filter items that match this column based on pipeline status
-              const items = filtered.filter((i) => {
-                const columnKey = getColumnKey(i.pipelineStatus)
-                return columnKey === col.key
-              })
-              const needsFollowUpCount = items.filter(i => isFollowUpNeeded(i).needed).length
-=======
       {/* Active Filters Summary */}
       {hasActiveFilters && (
         <div className="flex items-center justify-between gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg flex-wrap">
@@ -406,226 +442,161 @@ export default function PipelinePage() {
 
       {/* KANBAN with Drag and Drop */}
       {view === "kanban" && (
-        <DragDropContext onDragEnd={onDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
           <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
             <div className="flex gap-5 min-w-max">
               {columns.map((col) => {
                 const items = getItemsByColumn(col.key)
                 const isListView = activeListColumn === col.key
->>>>>>> Stashed changes
 
-              return (
-                <div key={col.key} className="flex flex-col gap-3 w-[280px] flex-shrink-0">
-                  {/* COLUMN HEADER */}
-                  <div className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex justify-between items-center`}>
-                    <span>{items.length} {col.title}</span>
-                    {needsFollowUpCount > 0 && (
-                      <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
-                        {needsFollowUpCount} need follow-up
-                      </span>
-                    )}
-                  </div>
-
-                  {/* CARDS */}
-                  {items.map((inf) => {
-                    const followUpStatus = isFollowUpNeeded(inf)
-                    return (
-                      <div
-<<<<<<< Updated upstream
-                        key={inf.id}
-                        className={`bg-gray-50 border rounded-xl p-4 hover:shadow-md transition ${
-                          followUpStatus.needed ? 'border-red-300 bg-red-50/30' : 'border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          {/* PROFILE AVATAR */}
-                          <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-[#1FAE5B] flex items-center justify-center text-white font-medium">
-                            {inf.influencer?.charAt(0) || "?"}
-                          </div>
-
-                          {/* INFO */}
-                          <div className="flex flex-col leading-tight flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-medium text-sm">{inf.influencer}</span>
-                              {getFollowUpBadge(inf)}
-                            </div>
-                            <span className="text-xs text-gray-500">{inf.instagramHandle}</span>
-                            <div className="flex gap-2 mt-1">
-                              <span className="text-xs text-gray-400">👥 {inf.followers}</span>
-                              <span className="text-xs text-gray-400">💬 {inf.engagementRate}</span>
-                            </div>
-                            <span className="text-xs text-gray-400 mt-1">🏷️ {inf.niche}</span>
-                            {/* {inf.nextFollowUp && (
-                              <span className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                                <IconCalendar size={12} />
-                                Next: {new Date(inf.nextFollowUp).toLocaleDateString()}
-                              </span>
-                            )} */}
-                            {/* {inf.followUpCount && inf.followUpCount > 0 && (
-                              <span className="text-xs text-gray-400">
-                                Follow-ups: {inf.followUpCount}
-                              </span>
-                            )} */}
-                          </div>
-                        </div>
-
-                        {/* FOLLOW-UP BUTTON */}
-                        {/* {(inf.pipelineStatus === "Prospect" || inf.pipelineStatus === "Reached Out" || inf.pipelineStatus === "In Conversation") && (
-                          <button
-                            onClick={() => setSelectedInfluencer(inf)}
-                            className="mt-3 w-full text-xs bg-white border rounded-lg px-3 py-2 hover:bg-gray-50 transition flex items-center justify-center gap-1"
-                          >
-                            <IconBell size={12} />
-                            {inf.nextFollowUp ? 'Schedule Follow-up' : 'Set Reminder'}
-                          </button>
-                        )} */}
-=======
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className={`flex flex-col gap-3 w-[320px] flex-shrink-0 transition-colors ${
-                          snapshot.isDraggingOver ? 'bg-gray-50 rounded-lg' : ''
-                        }`}
-                      >
-                        {/* COLUMN HEADER */}
-                        <div className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex justify-between items-center`}>
-                          <div className="flex items-center gap-2">
-                            {isListView ? (
-                              <button
-                                onClick={() => setActiveListColumn(null)}
-                                className="hover:bg-white/20 rounded p-1 transition"
-                              >
-                                <IconChevronLeft size={16} />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleColumnClick(col.key)}
-                                className="hover:bg-white/20 rounded p-1 transition"
-                                title="View as list"
-                              >
-                                <IconLayoutList size={16} />
-                              </button>
-                            )}
-                            <span>{items.length} {col.title}</span>
-                          </div>
-                        </div>
-
-                        {/* CONTENT - Either List View or Cards View */}
+                return (
+                  <DroppableColumn key={col.key} id={col.key}>
+                    {/* COLUMN HEADER */}
+                    <div
+                      className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex justify-between items-center`}
+                    >
+                      <div className="flex items-center gap-2">
                         {isListView ? (
-                          // LIST VIEW FOR THIS COLUMN
-                          <div className="bg-white border rounded-lg overflow-hidden">
-                            {items.length === 0 ? (
-                              <div className="p-8 text-center text-gray-500 text-sm">
-                                No influencers in this stage
-                              </div>
-                            ) : (
-                              <div className="divide-y">
-                                {items.map((inf) => (
-                                  <div key={inf.id} className="p-3 hover:bg-gray-50 transition">
-                                    <div className="flex items-start gap-3">
-                                      <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-[#1FAE5B] flex items-center justify-center text-white font-medium text-sm">
-                                        {inf.influencer?.charAt(0) || "?"}
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between">
-                                          <p className="font-medium text-sm truncate">{inf.influencer}</p>
-                                        </div>
-                                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                          {getPlatformIcon(inf.platform)}
-                                          {inf.instagramHandle}
-                                        </p>
-                                        <div className="flex gap-2 mt-1 text-xs text-gray-400">
-                                          <span>👥 {inf.followers}</span>
-                                          <span>💬 {inf.engagementRate}</span>
-                                          <span className="flex items-center gap-1">
-                                            <IconLocation size={10} />
-                                            {inf.location}
-                                          </span>
-                                        </div>
-                                        <p className="text-xs text-gray-400 mt-1">🏷️ {inf.niche}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                          <button
+                            onClick={() => setActiveListColumn(null)}
+                            className="hover:bg-white/20 rounded p-1 transition"
+                          >
+                            <IconChevronLeft size={16} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleColumnClick(col.key)}
+                            className="hover:bg-white/20 rounded p-1 transition"
+                            title="View as list"
+                          >
+                            <IconLayoutList size={16} />
+                          </button>
+                        )}
+                        <span>
+                          {items.length} {col.title}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* CONTENT - Either List View or Cards View */}
+                    {isListView ? (
+                      // LIST VIEW FOR THIS COLUMN
+                      <div className="bg-white border rounded-lg overflow-hidden">
+                        {items.length === 0 ? (
+                          <div className="p-8 text-center text-gray-500 text-sm">
+                            No influencers in this stage
                           </div>
                         ) : (
-                          // CARD VIEW (Original Kanban Cards)
-                          <>
-                            {items.map((inf, index) => (
-                              <Draggable key={inf.id} draggableId={inf.id.toString()} index={index}>
-                                {(provided, snapshot) => (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    className={`bg-gray-50 border rounded-xl p-4 hover:shadow-md transition border-gray-200 ${snapshot.isDragging ? 'shadow-lg rotate-2' : ''}`}
-                                  >
-                                    <div className="flex items-center gap-4">
-                                      {/* DRAG HANDLE */}
-                                      <div
-                                        {...provided.dragHandleProps}
-                                        className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
-                                      >
-                                        <IconGripVertical size={16} />
-                                      </div>
-
-                                      {/* PROFILE AVATAR */}
-                                      <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-[#1FAE5B] flex items-center justify-center text-white font-medium">
-                                        {inf.influencer?.charAt(0) || "?"}
-                                      </div>
-
-                                      {/* INFO */}
-                                      <div className="flex flex-col leading-tight flex-1">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="font-medium text-sm">{inf.influencer}</span>
-                                        </div>
-                                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                                          {getPlatformIcon(inf.platform)}
-                                          {inf.instagramHandle}
-                                        </span>
-                                        <div className="flex gap-2 mt-1">
-                                          <span className="text-xs text-gray-400">👥 {inf.followers}</span>
-                                          <span className="text-xs text-gray-400">💬 {inf.engagementRate}</span>
-                                        </div>
-                                        <div className="flex gap-2 mt-1">
-                                          <span className="text-xs text-gray-400">🏷️ {inf.niche}</span>
-                                          {inf.location && (
-                                            <span className="text-xs text-gray-400 flex items-center gap-1">
-                                              <IconLocation size={10} />
-                                              {inf.location}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
+                          <div className="divide-y">
+                            {items.map((inf) => (
+                              <div key={inf.id} className="p-3 hover:bg-gray-50 transition">
+                                <div className="flex items-start gap-3">
+                                  <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-[#1FAE5B] flex items-center justify-center text-white font-medium text-sm">
+                                    {inf.influencer?.charAt(0) || "?"}
                                   </div>
-                                )}
-                              </Draggable>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between">
+                                      <p className="font-medium text-sm truncate">
+                                        {inf.influencer}
+                                      </p>
+                                    </div>
+                                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                      {getPlatformIcon(inf.platform)}
+                                      {inf.instagramHandle}
+                                    </p>
+                                    <div className="flex gap-2 mt-1 text-xs text-gray-400">
+                                      <span>👥 {inf.followers}</span>
+                                      <span>💬 {inf.engagementRate}</span>
+                                      <span className="flex items-center gap-1">
+                                        <IconLocation size={10} />
+                                        {inf.location}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-1">🏷️ {inf.niche}</p>
+                                  </div>
+                                </div>
+                              </div>
                             ))}
-                            {provided.placeholder}
-
-                            {/* DROP AREA */}
-                            <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center text-sm text-gray-500 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition cursor-pointer">
-                              <span>Drop Here</span>
-                              <IconPlus size={16} />
-                            </div>
-                          </>
+                          </div>
                         )}
->>>>>>> Stashed changes
                       </div>
-                    )
-                  })}
+                    ) : (
+                      // CARD VIEW (Kanban Cards)
+                      <>
+                        {items.map((inf) => (
+                          <DraggableCard key={inf.id} id={inf.id.toString()}>
+                            {/* PROFILE AVATAR */}
+                            <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-[#1FAE5B] flex items-center justify-center text-white font-medium">
+                              {inf.influencer?.charAt(0) || "?"}
+                            </div>
 
-                  {/* DROP AREA */}
-                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center text-sm text-gray-500 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition cursor-pointer">
-                    <span>Drop Here</span>
-                    <IconPlus size={16} />
+                            {/* INFO */}
+                            <div className="flex flex-col leading-tight flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-sm">{inf.influencer}</span>
+                              </div>
+                              <span className="text-xs text-gray-500 flex items-center gap-1">
+                                {getPlatformIcon(inf.platform)}
+                                {inf.instagramHandle}
+                              </span>
+                              <div className="flex gap-2 mt-1">
+                                <span className="text-xs text-gray-400">
+                                  👥 {inf.followers}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  💬 {inf.engagementRate}
+                                </span>
+                              </div>
+                              <div className="flex gap-2 mt-1">
+                                <span className="text-xs text-gray-400">🏷️ {inf.niche}</span>
+                                {inf.location && (
+                                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                                    <IconLocation size={10} />
+                                    {inf.location}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </DraggableCard>
+                        ))}
+
+                        {/* DROP AREA */}
+                        <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center text-sm text-gray-500 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition cursor-pointer">
+                          <span>Drop Here</span>
+                          <IconPlus size={16} />
+                        </div>
+                      </>
+                    )}
+                  </DroppableColumn>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Drag Overlay */}
+          <DragOverlay>
+            {activeInfluencer ? (
+              <div className="bg-gray-50 border rounded-xl p-4 shadow-lg rotate-2 border-gray-200 w-[280px]">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-[#1FAE5B] flex items-center justify-center text-white font-medium">
+                    {activeInfluencer.influencer?.charAt(0) || "?"}
+                  </div>
+                  <div className="flex flex-col leading-tight">
+                    <span className="font-medium text-sm">{activeInfluencer.influencer}</span>
+                    <span className="text-xs text-gray-500">
+                      {activeInfluencer.instagramHandle}
+                    </span>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        </div>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {/* LIST VIEW (Global List View) */}
@@ -646,53 +617,6 @@ export default function PipelinePage() {
               </tr>
             </thead>
             <tbody>
-<<<<<<< Updated upstream
-              {filtered.map((inf) => {
-                const followUpStatus = isFollowUpNeeded(inf)
-                return (
-                  <tr key={inf.id} className="border-t hover:bg-gray-50">
-                    <td className="px-4 py-3 flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full overflow-hidden border border-gray-200 flex-shrink-0 bg-[#1FAE5B] flex items-center justify-center text-white font-medium text-sm">
-                        {inf.influencer?.charAt(0) || "?"}
-                      </div>
-                      {inf.influencer}
-                    </td>
-                    <td className="px-4 py-3 text-[#0F6B3E] font-medium">{inf.instagramHandle}</td>
-                    <td className="px-4 py-3">{inf.followers}</td>
-                    <td className="px-4 py-3">{inf.engagementRate}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">
-                        {inf.niche}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        inf.pipelineStatus === "Onboarded" ? "bg-green-100 text-green-700" :
-                        inf.pipelineStatus === "Rejected" ? "bg-red-100 text-red-700" :
-                        "bg-[#1FAE5B]/15 text-[#0F6B3E]"
-                      }`}>
-                        {inf.pipelineStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {getFollowUpBadge(inf)}
-                        {inf.followUpCount && inf.followUpCount > 0 && (
-                          <span className="text-xs text-gray-500">
-                            ({inf.followUpCount} follow-ups)
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
-                      {inf.lastContact ? new Date(inf.lastContact).toLocaleDateString() : 'Never'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {(inf.pipelineStatus === "Prospect" || inf.pipelineStatus === "Reached Out" || inf.pipelineStatus === "In Conversation") && (
-                        <button
-                          onClick={() => setSelectedInfluencer(inf)}
-                          className="text-xs bg-[#1FAE5B] text-white px-3 py-1 rounded-lg hover:bg-[#0F6B3E] transition flex items-center gap-1"
-=======
               {filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
@@ -715,7 +639,9 @@ export default function PipelinePage() {
                           <span>{inf.platform}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[#0F6B3E] font-medium">{inf.instagramHandle}</td>
+                      <td className="px-4 py-3 text-[#0F6B3E] font-medium">
+                        {inf.instagramHandle}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           <IconLocation size={14} className="text-gray-400" />
@@ -733,20 +659,25 @@ export default function PipelinePage() {
                         <select
                           value={inf.pipelineStatus}
                           onChange={(e) => {
-                            setData(prev => prev.map(item =>
-                              item.id === inf.id
-                                ? { ...item, pipelineStatus: e.target.value }
-                                : item
-                            ))
-                            setShowSuccessMessage(`${inf.influencer} status updated to ${e.target.value}`)
+                            setData((prev) =>
+                              prev.map((item) =>
+                                item.id === inf.id
+                                  ? { ...item, pipelineStatus: e.target.value }
+                                  : item
+                              )
+                            )
+                            setShowSuccessMessage(
+                              `${inf.influencer} status updated to ${e.target.value}`
+                            )
                             setTimeout(() => setShowSuccessMessage(null), 3000)
                           }}
                           className={`px-2 py-1 rounded text-xs border ${
-                            inf.pipelineStatus === "Onboarded" ? "bg-green-100 text-green-700" :
-                            inf.pipelineStatus === "Rejected" ? "bg-red-100 text-red-700" :
-                            "bg-[#1FAE5B]/15 text-[#0F6B3E]"
+                            inf.pipelineStatus === "Onboarded"
+                              ? "bg-green-100 text-green-700"
+                              : inf.pipelineStatus === "Rejected"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-[#1FAE5B]/15 text-[#0F6B3E]"
                           }`}
->>>>>>> Stashed changes
                         >
                           <option value="Prospect">Prospect</option>
                           <option value="Reached Out">Reached Out</option>
@@ -761,7 +692,9 @@ export default function PipelinePage() {
                         </select>
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
-                        {inf.lastContact ? new Date(inf.lastContact).toLocaleDateString() : 'Never'}
+                        {inf.lastContact
+                          ? new Date(inf.lastContact).toLocaleDateString()
+                          : "Never"}
                       </td>
                     </tr>
                   )
