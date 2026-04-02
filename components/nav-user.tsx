@@ -32,6 +32,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { signOut } from "next-auth/react"
 
 export function NavUser({
   user,
@@ -44,6 +45,14 @@ export function NavUser({
 }) {
 
   const { isMobile } = useSidebar()
+  const [mounted, setMounted] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) return null
 
   const [mounted, setMounted] = useState(false)
 
