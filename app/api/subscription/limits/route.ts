@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth"
 
 export async function GET(
   req: Request,
-  { params }: { params: { brandId?: string } }
+  { params }: { params: Promise<{ brandId?: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -13,9 +13,10 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const { brandId: paramBrandId } = await params
     const url = new URL(req.url)
     const type = url.searchParams.get("type") // "brand" or "collaborator"
-    const brandId = params.brandId || url.searchParams.get("brandId")
+    const brandId = paramBrandId || url.searchParams.get("brandId")
 
     if (type === "brand") {
       const limits = await canAddBrand(session.user.id)
