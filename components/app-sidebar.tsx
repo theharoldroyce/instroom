@@ -25,8 +25,6 @@ import {
 } from "@/components/ui/sidebar"
 
 import Image from "next/image"
-import Link from "next/link"
-import { useSession } from "next-auth/react"
 
 const data = {
   user: {
@@ -52,23 +50,11 @@ const data = {
 }
 
 export function AppSidebar({
+  setView,
   ...props
-}: React.ComponentProps<typeof Sidebar>) {
-  const { data: session } = useSession()
-
-  // Fallback if session is not loaded yet
-  const user = session?.user
-    ? {
-        name: session.user.name || "User",
-        email: session.user.email || "",
-        avatar: session.user.image || "/avatars/instroom.jpg",
-      }
-    : {
-        name: "Instroom.io",
-        email: "instroom@example.com",
-        avatar: "/avatars/instroom.jpg",
-      }
-
+}: React.ComponentProps<typeof Sidebar> & {
+  setView: (view: string) => void
+}) {
   return (
     <Sidebar
       collapsible="offcanvas"
@@ -77,18 +63,21 @@ export function AppSidebar({
     >
 
       {/* HEADER */}
-      <SidebarHeader className="h-24 flex items-center px-4 border-b border-white/10 bg-[#0F6B3E]">
-        <Link href="/dashboard" className="flex items-center w-full">
-          <Image
-            src="/INSTROOM WHITE.png"
-            alt="Instroom Logo"
-            width={150}
-            height={32}
-            className="object-contain"
-            priority
-          />
-        </Link>
-      </SidebarHeader>
+<SidebarHeader className="h-24 flex items-center px--4 border-b border-white/10 bg-[#0F6B3E]">
+  <button
+    onClick={() => setView("dashboard")}
+    className="flex items-center w-full"
+  >
+    <Image
+      src="/INSTROOM WHITE.png"
+      alt="Instroom Logo"
+      width={150}
+      height={32}
+      className="object-contain"
+      priority
+    />
+  </button>
+</SidebarHeader>
 
       {/* MENU */}
       <SidebarContent className="bg-[#0F6B3E] text-[#F7F9F8] px-2">
@@ -98,7 +87,7 @@ export function AppSidebar({
 
       {/* USER */}
       <SidebarFooter className="border-t border-white/10 bg-[#0F6B3E]">
-        <NavUser user={user} />
+        <NavUser user={data.user} />
       </SidebarFooter>
 
     </Sidebar>

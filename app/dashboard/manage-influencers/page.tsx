@@ -1,6 +1,7 @@
 "use client"
 
 import TableSheet from "@/components/table-sheet"
+// import InfluencerList from "./influencer-list"
 
 export default function InfluencersPage() {
   return (
@@ -8,6 +9,7 @@ export default function InfluencersPage() {
 
       <div>
         <TableSheet />
+         {/* <InfluencerList /> */}
       </div>
 
     </div>
