@@ -372,14 +372,15 @@ export default function AnalyticsPage() {
     dataToUse.forEach(i => {
       const platform = i.platform || (i.instagramHandle?.startsWith('@') ? 'Instagram' : i.niche === 'TikTok' ? 'TikTok' : 'YouTube')
       if (platform === 'Instagram' || platform === 'TikTok' || platform === 'YouTube') {
+        const p = platform as keyof typeof platformStats
         if (i.pipelineStatus === 'Posted') {
-          platformStats[platform].posted++
-          platformStats[platform].views += i.views || 0
-          platformStats[platform].likes += i.likes || 0
-          platformStats[platform].comments += i.comments || 0
+          platformStats[p].posted++
+          platformStats[p].views += i.views || 0
+          platformStats[p].likes += i.likes || 0
+          platformStats[p].comments += i.comments || 0
         }
         if (i.pipelineStatus === 'Posted' || i.pipelineStatus === 'Content Pending') {
-          platformStats[platform].received++
+          platformStats[p].received++
         }
       }
     })
