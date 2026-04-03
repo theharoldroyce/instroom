@@ -53,7 +53,7 @@ export function AppSidebar({
   setView,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  setView: (view: string) => void
+  setView?: (view: string) => void
 }) {
   return (
     <Sidebar
@@ -65,7 +65,7 @@ export function AppSidebar({
       {/* HEADER */}
 <SidebarHeader className="h-24 flex items-center px--4 border-b border-white/10 bg-[#0F6B3E]">
   <button
-    onClick={() => setView("dashboard")}
+    onClick={() => setView?.("dashboard")}
     className="flex items-center w-full"
   >
     <Image
