@@ -3,10 +3,27 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { sendWelcomeEmail } from "@/lib/email"
 
+// Helper function to sanitize HTML/XSS
+const sanitizeInput = (input: string): string => {
+  return input
+    .trim()
+    .replace(/[<>]/g, (char) => {
+      return char === '<' ? '&lt;' : '&gt;'
+    })
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+}
+
+// Helper function to validate email
+const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { email, password, name } = body
+    let { email, password, name } = body
 
     // Validation
     if (!email || !password || !name) {
@@ -15,6 +32,30 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Trim whitespace
+    email = email.trim()
+    name = name.trim()
+    password = password.trim()
+
+    // Validate email format
+    if (!validateEmail(email)) {
+      return NextResponse.json(
+        { error: "Invalid email format" },
+        { status: 400 }
+      )
+    }
+
+    // Validate name (no special characters that could indicate injection)
+    if (name.length < 2 || name.length > 100) {
+      return NextResponse.json(
+        { error: "Name must be between 2 and 100 characters" },
+        { status: 400 }
+      )
+    }
+
+    // Sanitize name to prevent XSS
+    const sanitizedName = sanitizeInput(name)
 
     if (password.length < 8) {
       return NextResponse.json(
@@ -38,15 +79,14 @@ export async function POST(req: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create user
+    // Create user with sanitized data
     const user = await prisma.user.create({
       data: {
         email,
-        name,
+        name: sanitizedName,
         password_hash: hashedPassword,
       },
     })
-
 
     // Send welcome email
     await sendWelcomeEmail(user.email, user.name || "User")

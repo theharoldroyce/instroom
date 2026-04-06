@@ -22,6 +22,29 @@ import { Input } from "@/components/ui/input"
 
 import { cn } from "@/lib/utils"
 
+// Validation helper functions
+const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
+const checkPasswordStrength = (password: string) => {
+  return {
+    hasMinLength: password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber: /\d/.test(password),
+    hasSpecialChar: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+  }
+}
+
+const getPasswordStrengthLevel = (requirements: ReturnType<typeof checkPasswordStrength>): 'weak' | 'medium' | 'strong' => {
+  const met = Object.values(requirements).filter(Boolean).length
+  if (met <= 2) return 'weak'
+  if (met <= 4) return 'medium'
+  return 'strong'
+}
+
 export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
@@ -32,6 +55,14 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     password: "",
     confirmPassword: "",
   })
+  const [passwordStrength, setPasswordStrength] = useState({
+    hasMinLength: false,
+    hasUppercase: false,
+    hasLowercase: false,
+    hasNumber: false,
+    hasSpecialChar: false,
+  })
+  const [passwordStrengthLevel, setPasswordStrengthLevel] = useState<'weak' | 'medium' | 'strong'>('weak')
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target
@@ -39,6 +70,14 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       const key = id === "confirm-password" ? "confirmPassword" : id
       return { ...prev, [key]: value }
     })
+    
+    // Update password strength when password field changes
+    if (id === "password") {
+      const strength = checkPasswordStrength(value)
+      setPasswordStrength(strength)
+      setPasswordStrengthLevel(getPasswordStrengthLevel(strength))
+    }
+    
     setError(null)
   }
 
@@ -56,8 +95,31 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       return
     }
 
+    if (!validateEmail(formData.email)) {
+      setError("Please enter a valid email address")
+      return
+    }
+
     if (formData.password.length < 8) {
       setError("Password must be at least 8 characters long")
+      return
+    }
+
+    const passwordRequirements = checkPasswordStrength(formData.password)
+    if (!passwordRequirements.hasUppercase) {
+      setError("Password must contain at least one uppercase letter")
+      return
+    }
+    if (!passwordRequirements.hasLowercase) {
+      setError("Password must contain at least one lowercase letter")
+      return
+    }
+    if (!passwordRequirements.hasNumber) {
+      setError("Password must contain at least one number")
+      return
+    }
+    if (!passwordRequirements.hasSpecialChar) {
+      setError("Password must contain at least one special character (!@#$%^&*)")
       return
     }
 
@@ -119,13 +181,13 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       <Card className={cn("rounded-2xl shadow-lg p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden")}>
         {/* Decorative accent line at top */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
-        <CardHeader className="gap-2 pb-2 pt-4">
+        <CardHeader className="gap-2 pb-1 pt-4">
           <CardTitle className="text-2xl font-bold text-gray-900">Create an account</CardTitle>
           <CardDescription className="text-sm text-gray-600">
             Enter your information below to create your account
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent className="pt-1">
           {error && (
             <div className="mb-6 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-3 text-sm text-[#C87500]">
               {error}
@@ -181,6 +243,67 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                   required
                   className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors"
                 />
+                
+                {/* Password Strength Indicator */}
+                {formData.password && (
+                  <div className="mt-3 space-y-2">
+                    {/* Strength Bar */}
+                    <div className="flex gap-1">
+                      <div className={`h-1 flex-1 rounded-full transition-colors ${passwordStrength.hasMinLength ? 'bg-green-500' : 'bg-gray-200'}`} />
+                      <div className={`h-1 flex-1 rounded-full transition-colors ${passwordStrength.hasUppercase && passwordStrength.hasLowercase ? 'bg-green-500' : 'bg-gray-200'}`} />
+                      <div className={`h-1 flex-1 rounded-full transition-colors ${passwordStrength.hasNumber && passwordStrength.hasSpecialChar ? 'bg-green-500' : 'bg-gray-200'}`} />
+                    </div>
+                    
+                    {/* Strength Label */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-gray-600">Strength:</span>
+                      <span className={cn(
+                        "text-xs font-semibold",
+                        passwordStrengthLevel === 'weak' && 'text-red-500',
+                        passwordStrengthLevel === 'medium' && 'text-yellow-500',
+                        passwordStrengthLevel === 'strong' && 'text-green-500'
+                      )}>
+                        {passwordStrengthLevel === 'weak' && 'Weak'}
+                        {passwordStrengthLevel === 'medium' && 'Medium'}
+                        {passwordStrengthLevel === 'strong' && 'Strong'}
+                      </span>
+                    </div>
+
+                    {/* Requirements Checklist */}
+                    <div className="text-xs space-y-1 mt-2">
+                      <div className={`flex items-center gap-2 ${passwordStrength.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
+                        <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${passwordStrength.hasMinLength ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          {passwordStrength.hasMinLength && <span className="text-white text-xs">✓</span>}
+                        </span>
+                        At least 8 characters
+                      </div>
+                      <div className={`flex items-center gap-2 ${passwordStrength.hasUppercase ? 'text-green-600' : 'text-gray-500'}`}>
+                        <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${passwordStrength.hasUppercase ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          {passwordStrength.hasUppercase && <span className="text-white text-xs">✓</span>}
+                        </span>
+                        One uppercase letter (A-Z)
+                      </div>
+                      <div className={`flex items-center gap-2 ${passwordStrength.hasLowercase ? 'text-green-600' : 'text-gray-500'}`}>
+                        <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${passwordStrength.hasLowercase ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          {passwordStrength.hasLowercase && <span className="text-white text-xs">✓</span>}
+                        </span>
+                        One lowercase letter (a-z)
+                      </div>
+                      <div className={`flex items-center gap-2 ${passwordStrength.hasNumber ? 'text-green-600' : 'text-gray-500'}`}>
+                        <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${passwordStrength.hasNumber ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          {passwordStrength.hasNumber && <span className="text-white text-xs">✓</span>}
+                        </span>
+                        One number (0-9)
+                      </div>
+                      <div className={`flex items-center gap-2 ${passwordStrength.hasSpecialChar ? 'text-green-600' : 'text-gray-500'}`}>
+                        <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${passwordStrength.hasSpecialChar ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          {passwordStrength.hasSpecialChar && <span className="text-white text-xs">✓</span>}
+                        </span>
+                        One special character (!@#$%^&*)
+                      </div>
+                    </div>
+                  </div>
+                )}
               </Field>
               <Field>
                 <FieldLabel htmlFor="confirm-password" className="font-medium text-gray-700 text-sm">

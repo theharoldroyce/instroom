@@ -10,6 +10,7 @@ export default function AccountSettingsPage() {
   const [subscription, setSubscription] = useState<any>(null);
   const [fullName, setFullName] = useState("");
   const [brandCount, setBrandCount] = useState<number>(0);
+  const [hasAPIAccess, setHasAPIAccess] = useState<boolean>(false);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -39,6 +40,20 @@ export default function AccountSettingsPage() {
     fetchBrandCount();
   }, [session?.user?.id]);
 
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    async function checkAPIAccess() {
+      try {
+        const res = await fetch("/api/subscription/api-access");
+        const data = await res.json();
+        setHasAPIAccess(data.hasAccess || false);
+      } catch (error) {
+        setHasAPIAccess(false);
+      }
+    }
+    checkAPIAccess();
+  }, [session?.user?.id]);
+
   if (!session || !subscription) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-50">
@@ -50,36 +65,64 @@ export default function AccountSettingsPage() {
     );
   }
 
-  const planMeta: Record<string, { label: string; color: string; items: { icon: string; text: string }[] }> = {
-    solo: {
-      label: "Solo",
-      color: "bg-stone-100 text-stone-700",
-      items: [
-        { icon: "▸", text: `${brandCount} of 1 Brands used` },
-        { icon: "✕", text: "Extra brands not available" },
-      ],
-    },
-    team: {
-      label: "Team",
-      color: "bg-emerald-50 text-emerald-800",
-      items: [
-        { icon: "▸", text: `${brandCount} of 3 Brands used` },
-        { icon: "▸", text: "10 collaborator seats per brand" },
-      ],
-    },
-    agency: {
-      label: "Agency",
-      color: "bg-amber-50 text-amber-800",
-      items: [
-        { icon: "▸", text: `${brandCount} of 10 Brands used` },
-        { icon: "▸", text: "30 collaborator seats per brand" },
-        { icon: "★", text: "Custom Branding — Active" },
-        { icon: "★", text: "Priority Support — Active" },
-      ],
-    },
+  // Build dynamic plan items based on subscription plan data
+  const buildPlanItems = () => {
+    if (!subscription.plan) return [];
+    
+    const maxBrands = subscription.plan.max_brands || subscription.plan.included_brands;
+    const maxSeats = subscription.plan.max_seats || subscription.plan.included_seats;
+    
+    const items: { icon: string; text: string }[] = [];
+    
+    // Brand limit
+    if (maxBrands === null || maxBrands > 100) {
+      items.push({ icon: "▸", text: `${brandCount} Brands — Unlimited` });
+    } else {
+      items.push({ icon: "▸", text: `${brandCount} of ${maxBrands} Brands used` });
+    }
+    
+    // Seat limit
+    if (maxSeats === null || maxSeats > 100) {
+      items.push({ icon: "▸", text: "Collaborators — Unlimited" });
+    } else {
+      const seatText = subscription.plan.included_seats > 0 
+        ? `${maxSeats} collaborator seats included`
+        : `Up to ${maxSeats} collaborators (paid add-on: $${Number(subscription.plan.price_per_extra_seat)}/seat)`;
+      items.push({ icon: "▸", text: seatText });
+    }
+    
+    // Plan-specific features
+    if (subscription.plan.can_use_api === true) {
+      items.push({ icon: "★", text: "API Access — Active" });
+    }
+    if (subscription.plan.custom_branding === true) {
+      items.push({ icon: "★", text: "Custom Branding — Active" });
+    }
+    if (subscription.plan.priority_support === true) {
+      items.push({ icon: "★", text: "Priority Support — Active" });
+    }
+    
+    return items;
   };
 
-  const plan = planMeta[subscription.plan] ?? planMeta["solo"];
+  const planColors: Record<string, string> = {
+    solo: "bg-stone-100 text-stone-700",
+    team: "bg-emerald-50 text-emerald-800",
+    agency: "bg-amber-50 text-amber-800",
+  };
+
+  const planLabel = {
+    solo: "Solo",
+    team: "Team",
+    agency: "Agency",
+  };
+
+  const planName = subscription.plan?.name?.toLowerCase() || "solo";
+  const plan = {
+    label: planLabel[planName as keyof typeof planLabel] || "Solo",
+    color: planColors[planName as keyof typeof planColors] || planColors.solo,
+    items: buildPlanItems(),
+  };
 
   return (
     <SidebarProvider className="flex w-full">
@@ -311,7 +354,7 @@ export default function AccountSettingsPage() {
 
               <div className="space-y-0">
                 {[
-                  { label: "Current Plan", value: subscription.plan_name || plan.label },
+                  { label: "Current Plan", value: subscription.plan?.display_name || plan.label },
                   { label: "Billing Cycle", value: subscription.billing_cycle },
                   { label: "Status", value: subscription.status },
                   { label: "Renewal Date", value: subscription.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString() : "—" },
