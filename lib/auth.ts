@@ -4,6 +4,7 @@ import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "./prisma"
 import { sendWelcomeEmail } from "./email"
 import bcrypt from "bcryptjs"
+import { checkLoginRateLimit, resetLoginRateLimit, getClientIp } from "./rate-limit"
 
 declare module "next-auth" {
   interface Session {
@@ -167,11 +168,14 @@ const nextAuthConfig = {
       return true
     },
     
-    // JWT callback: store user ID and email
+    // JWT callback: store user ID and email, and set 30-minute expiration
     jwt({ token, user }: any) {
       if (user) {
         token.id = user.id
         token.email = user.email
+        // Set token expiration to 30 minutes from now
+        token.iat = Math.floor(Date.now() / 1000)
+        token.exp = Math.floor(Date.now() / 1000) + 30 * 60
       }
       return token
     },

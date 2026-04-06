@@ -1,12 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   IconLayoutKanban,
   IconList,
   IconSearch,
-  IconPlus
+  IconPlus,
+  IconAlertCircle
 } from "@tabler/icons-react"
+
+type Campaign = {
+  id: string
+  name: string
+  status: string
+  influencers?: unknown[]
+}
 
 type Influencer = {
   id: string
@@ -24,22 +32,108 @@ const columns = [
   { key: "rejected", title: "Rejected", color: "bg-red-500" },
 ]
 
-const initialData: Influencer[] = [
-  { id: "1", name: "Marisha Nicole", handle: "@luxe_liftin", followers: "56.6k", status: "prospects" },
-  { id: "2", name: "Emma Murray", handle: "@emmabrah", followers: "35.1k", status: "prospects" },
-  { id: "3", name: "Shaquille", handle: "@shaquille", followers: "13k", status: "reached" },
-  { id: "4", name: "Audrey", handle: "@bestie_audrey", followers: "44.8k", status: "conversation" },
-  { id: "5", name: "Flo", handle: "@theblended", followers: "14k", status: "onboarded" },
-  { id: "6", name: "John Merola", handle: "@johnmerola", followers: "47.2k", status: "rejected" },
-]
+interface KanbanBoardProps {
+  brandId: string
+}
 
-export default function PipelinePage() {
-
+export default function KanbanBoard({ brandId }: KanbanBoardProps) {
   const [view, setView] = useState<"kanban" | "list">("kanban")
-  const [data] = useState(initialData)
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newCampaignName, setNewCampaignName] = useState("")
+  const [creating, setCreating] = useState(false)
 
-  const filtered = data.filter(
+  // Fetch campaigns from API
+  useEffect(() => {
+    async function fetchCampaigns() {
+      try {
+        setLoading(true)
+        setError(null)
+        const res = await fetch(`/api/brand/${brandId}/campaigns`)
+        const data = await res.json()
+
+        if (!res.ok) {
+          setError(data.error || "Failed to fetch campaigns")
+          return
+        }
+
+        setCampaigns(data.campaigns || [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (brandId) {
+      fetchCampaigns()
+    }
+  }, [brandId])
+
+  // Create new campaign
+  const handleCreateCampaign = async () => {
+    if (!newCampaignName.trim()) return
+
+    try {
+      setCreating(true)
+      setError(null)
+      const res = await fetch(`/api/brand/${brandId}/campaigns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newCampaignName.trim(),
+          status: "active"
+        })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (res.status === 403) {
+          // Limit exceeded
+          setError(`${data.error} (${data.current}/${data.max} campaigns in use)`)
+        } else {
+          setError(data.error || "Failed to create campaign")
+        }
+        return
+      }
+
+      // Add new campaign to list
+      setCampaigns([...campaigns, data.campaign])
+      setNewCampaignName("")
+      setShowCreateModal(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="text-center">
+          <div className="h-8 w-8 rounded-full border-2 border-[#1FAE5B] border-t-transparent animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Loading campaigns...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Mock data mapped to campaigns (for display purposes)
+  const mockInfluencers: Influencer[] = [
+    { id: "1", name: "Marisha Nicole", handle: "@luxe_liftin", followers: "56.6k", status: "prospects" },
+    { id: "2", name: "Emma Murray", handle: "@emmabrah", followers: "35.1k", status: "prospects" },
+    { id: "3", name: "Shaquille", handle: "@shaquille", followers: "13k", status: "reached" },
+    { id: "4", name: "Audrey", handle: "@bestie_audrey", followers: "44.8k", status: "conversation" },
+    { id: "5", name: "Flo", handle: "@theblended", followers: "14k", status: "onboarded" },
+    { id: "6", name: "John Merola", handle: "@johnmerola", followers: "47.2k", status: "rejected" },
+  ]
+
+  const filtered = mockInfluencers.filter(
     (d) =>
       d.name.toLowerCase().includes(search.toLowerCase()) ||
       d.handle.toLowerCase().includes(search.toLowerCase())
@@ -47,6 +141,22 @@ export default function PipelinePage() {
 
   return (
     <div className="flex flex-col gap-4 p-6">
+
+      {/* ERROR MESSAGE */}
+      {error && (
+        <div className="flex gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <IconAlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-700">{error}</p>
+            <button 
+              onClick={() => setError(null)}
+              className="text-xs text-red-600 hover:underline mt-1"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* HEADER */}
       <div className="flex items-center justify-between">
@@ -68,36 +178,85 @@ export default function PipelinePage() {
 
         </div>
 
-        {/* VIEW SWITCH */}
+        {/* ACTIONS */}
         <div className="flex gap-2">
 
           <button
-            onClick={() => setView("kanban")}
-            className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${
-              view === "kanban"
-                ? "bg-[#1FAE5B] text-white"
-                : "border border-[#0F6B3E]/20"
-            }`}
+            onClick={() => setShowCreateModal(true)}
+            className="px-3 py-2 rounded-lg text-sm flex items-center gap-2 bg-[#1FAE5B] text-white hover:bg-[#0F6B3E] transition"
           >
-            <IconLayoutKanban size={16}/>
-            Kanban
+            <IconPlus size={16} />
+            New Campaign
           </button>
 
-          <button
-            onClick={() => setView("list")}
-            className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${
-              view === "list"
-                ? "bg-[#1FAE5B] text-white"
-                : "border border-[#0F6B3E]/20"
-            }`}
-          >
-            <IconList size={16}/>
-            List
-          </button>
+          {/* VIEW SWITCH */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setView("kanban")}
+              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${
+                view === "kanban"
+                  ? "bg-[#1FAE5B] text-white"
+                  : "border border-[#0F6B3E]/20"
+              }`}
+            >
+              <IconLayoutKanban size={16}/>
+              Kanban
+            </button>
+
+            <button
+              onClick={() => setView("list")}
+              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${
+                view === "list"
+                  ? "bg-[#1FAE5B] text-white"
+                  : "border border-[#0F6B3E]/20"
+              }`}
+            >
+              <IconList size={16}/>
+              List
+            </button>
+          </div>
 
         </div>
 
       </div>
+
+      {/* CREATE CAMPAIGN MODAL */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-lg font-semibold mb-4">Create New Campaign</h2>
+            <input
+              type="text"
+              value={newCampaignName}
+              onChange={(e) => setNewCampaignName(e.target.value)}
+              placeholder="Campaign name..."
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg mb-4 outline-none focus:ring-2 focus:ring-[#1FAE5B]"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateCampaign()
+              }}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false)
+                  setNewCampaignName("")
+                  setError(null)
+                }}
+                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateCampaign}
+                disabled={creating || !newCampaignName.trim()}
+                className="flex-1 px-4 py-2 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#0F6B3E] disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                {creating ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KANBAN */}
       {view === "kanban" && (

@@ -104,28 +104,35 @@ export default function OnboardingPage() {
   const handleNext = () => {
     // Validation for each step
     if (step === 1) {
-      // Require a goal to be selected
       if (!formData.goal) {
         setError('Please select your primary goal to continue.')
         return
       }
     }
     if (step === 2) {
-      // Require team size and revenue to be selected
-      if (!formData.teamSize || !formData.revenue) {
-        setError('Please select your team size and monthly revenue to continue.')
+      // Website is optional - no validation needed
+      setError(null)
+    }
+    if (step === 3) {
+      if (!formData.teamSize) {
+        setError('Please select your team size to continue.')
         return
       }
     }
-    if (step === 3) {
-      // Require source to be selected
+    if (step === 4) {
+      if (!formData.revenue) {
+        setError('Please select your monthly revenue to continue.')
+        return
+      }
+    }
+    if (step === 5) {
       if (!formData.source) {
         setError('Please select how you heard about us to continue.')
         return
       }
     }
     setError(null)
-    if (step < 3) {
+    if (step < 5) {
       setStep(step + 1)
     } else {
       setShowWelcome(true)
@@ -184,12 +191,12 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="relative min-h-svh overflow-hidden bg-[#0b0f0d] text-white">
-      <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl animate-pulse" />
-      <div className="pointer-events-none absolute -right-24 bottom-10 h-72 w-72 rounded-full bg-lime-400/20 blur-3xl animate-pulse" />
-      <div className="pointer-events-none absolute top-1/2 left-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-600/10 blur-3xl" />
+    <div className="relative min-h-svh overflow-hidden bg-[#F7F9F8] text-[#1E1E1E]">
+      <div className="pointer-events-none absolute top-0 left-0 w-96 h-96 rounded-full bg-[#1FAE5B]/8 blur-3xl -translate-x-1/2 -translate-y-1/2" />
+      <div className="pointer-events-none absolute bottom-0 right-0 w-80 h-80 rounded-full bg-[#0F6B3E]/6 blur-3xl translate-x-1/3 translate-y-1/3" />
+      <div className="pointer-events-none absolute top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
 
-      <div className="relative mx-auto flex min-h-svh w-full max-w-2xl items-center justify-center px-6 py-10">
+      <div className="relative mx-auto flex min-h-svh w-full max-w-5xl items-center justify-center px-4 py-10">
         {error && (
           <div className="fixed right-8 bottom-8 z-50 rounded-lg border border-red-500/50 bg-red-500/90 p-4 text-sm text-white shadow-lg animate-fade-in">
             {error}

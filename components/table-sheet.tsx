@@ -46,6 +46,7 @@ import {
   IconAddressBook,
   IconChecklist,
   IconClock,
+  IconAlertCircle,
 } from "@tabler/icons-react"
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -1504,15 +1505,17 @@ const MOCK_ROWS: InfluencerRow[] = [
    PROPS & MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════════════════════ */
 interface TableSheetProps {
-  initialRows?: InfluencerRow[]; initialCustomColumns?: CustomColumn[]; onRowsChange?: (rows: InfluencerRow[]) => void; onCustomColumnsChange?: (cols: CustomColumn[]) => void; readOnly?: boolean; showEmptyDetailState?: boolean; emptyDetailStateMessage?: string; showDetailPanelByDefault?: boolean
+  initialRows?: InfluencerRow[]; initialCustomColumns?: CustomColumn[]; onRowsChange?: (rows: InfluencerRow[]) => void; onCustomColumnsChange?: (cols: CustomColumn[]) => void; readOnly?: boolean; showEmptyDetailState?: boolean; emptyDetailStateMessage?: string; showDetailPanelByDefault?: boolean; brandId?: string
 }
 
 export default function TableSheet({
   initialRows = MOCK_ROWS, initialCustomColumns = [], onRowsChange, onCustomColumnsChange,
-  readOnly = false, showEmptyDetailState = true, emptyDetailStateMessage = "Select a row to view details", showDetailPanelByDefault = false,
+  readOnly = false, showEmptyDetailState = true, emptyDetailStateMessage = "Select a row to view details", showDetailPanelByDefault = false, brandId = "",
 }: TableSheetProps) {
   const [rows, setRows] = useState<InfluencerRow[]>(initialRows)
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
+  const [loading, setLoading] = useState(!!brandId)
+  const [error, setError] = useState<string | null>(null)
   const [activeCell, setActiveCell] = useState<CellAddress|null>(null)
   const [editCell, setEditCell] = useState<CellAddress|null>(null)
   const [editValue, setEditValue] = useState("")
@@ -1533,6 +1536,52 @@ export default function TableSheet({
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [selectedRowId, setSelectedRowId] = useState<string|null>(null)
   const [showDetailPanel, setShowDetailPanel] = useState(showDetailPanelByDefault)
+
+  // Fetch influencers from API if brandId is provided
+  useEffect(() => {
+    if (!brandId) return
+
+    async function fetchInfluencers() {
+      try {
+        setLoading(true)
+        setError(null)
+        const res = await fetch(`/api/brand/${brandId}/influencers`)
+        const data = await res.json()
+
+        if (!res.ok) {
+          setError(data.error || "Failed to fetch influencers")
+          return
+        }
+
+        // Convert API response to InfluencerRow format
+        // This is a simplified conversion; adjust based on actual API response structure
+        const convertedRows: InfluencerRow[] = (data.influencers || []).map((inf: any) => ({
+          id: inf.id,
+          handle: `@${inf.influencer?.handle || ''}`,
+          platform: inf.influencer?.platform || 'instagram',
+          full_name: inf.influencer?.full_name || '',
+          email: inf.influencer?.email || '',
+          follower_count: String(inf.influencer?.follower_count || 0),
+          engagement_rate: String(inf.influencer?.engagement_rate || 0),
+          niche: inf.influencer?.niche || '',
+          contact_status: inf.contact_status || 'not_contacted',
+          stage: String(inf.stage || 1),
+          outreach_method: inf.outreach_method || '',
+          agreed_rate: String(inf.agreed_rate || 0),
+          notes: inf.notes || '',
+          custom: {},
+        }))
+
+        setRows(convertedRows)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchInfluencers()
+  }, [brandId])
 
   const editInputRef = useRef<HTMLInputElement|HTMLSelectElement|null>(null)
   const newColInputRef = useRef<HTMLInputElement>(null)
@@ -1773,7 +1822,35 @@ export default function TableSheet({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header */}
+      {/* LOADING STATE */}
+      {loading && (
+        <div className="flex items-center justify-center p-12 bg-white border border-gray-200 rounded-lg">
+          <div className="text-center">
+            <div className="h-8 w-8 rounded-full border-2 border-blue-500 border-t-transparent animate-spin mx-auto mb-4" />
+            <p className="text-gray-600 text-sm">Loading influencers...</p>
+          </div>
+        </div>
+      )}
+
+      {/* ERROR STATE */}
+      {error && !loading && (
+        <div className="flex gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <IconAlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-700">{error}</p>
+            <button 
+              onClick={() => setError(null)}
+              className="text-xs text-red-600 hover:underline mt-1"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!loading && (
+        <>
+          {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
@@ -1867,6 +1944,8 @@ export default function TableSheet({
             <div className="flex gap-2 pt-1"><button onClick={()=>setAddingCol(false)} className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm text-red-500 hover:bg-gray-50 transition">Cancel</button><button onClick={confirmAddCol} disabled={!newColName.trim()} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-40 transition">Add</button></div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   )
