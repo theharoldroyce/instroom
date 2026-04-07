@@ -41,6 +41,7 @@ export default function KanbanBoard({ brandId }: KanbanBoardProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [limitError, setLimitError] = useState<{ message: string; current: number; max: number } | null>(null)
   const [search, setSearch] = useState("")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newCampaignName, setNewCampaignName] = useState("")
@@ -80,6 +81,7 @@ export default function KanbanBoard({ brandId }: KanbanBoardProps) {
     try {
       setCreating(true)
       setError(null)
+      setLimitError(null)
       const res = await fetch(`/api/brand/${brandId}/campaigns`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -93,8 +95,14 @@ export default function KanbanBoard({ brandId }: KanbanBoardProps) {
 
       if (!res.ok) {
         if (res.status === 403) {
-          // Limit exceeded
-          setError(`${data.error} (${data.current}/${data.max} campaigns in use)`)
+          // Limit exceeded - show upgrade prompt
+          setLimitError({
+            message: data.error,
+            current: data.current,
+            max: data.max
+          })
+          // Close the create modal
+          setShowCreateModal(false)
         } else {
           setError(data.error || "Failed to create campaign")
         }
@@ -141,6 +149,41 @@ export default function KanbanBoard({ brandId }: KanbanBoardProps) {
 
   return (
     <div className="flex flex-col gap-4 p-6">
+
+      {/* LIMIT EXCEEDED UPGRADE PROMPT */}
+      {limitError && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-yellow-50 mx-auto mb-4">
+              <IconAlertCircle size={24} className="text-yellow-600" />
+            </div>
+            <h2 className="text-xl font-bold text-center mb-2">Campaign Limit Reached</h2>
+            <p className="text-center text-gray-600 text-sm mb-4">
+              You've reached your campaign limit ({limitError.current}/{limitError.max}).
+            </p>
+            <p className="text-center text-gray-700 text-sm font-medium mb-6">
+              {limitError.message}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setLimitError(null)
+                  setShowCreateModal(false)
+                }}
+                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <a
+                href="/pricing"
+                className="flex-1 px-4 py-2 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#0F6B3E] transition text-center"
+              >
+                Upgrade Plan
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ERROR MESSAGE */}
       {error && (

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { OnboardingForm } from '@/components/onboarding-form'
+import Image from 'next/image'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -192,13 +193,25 @@ export default function OnboardingPage() {
 
   return (
     <div className="relative min-h-svh overflow-hidden bg-[#F7F9F8] text-[#1E1E1E]">
-      <div className="pointer-events-none absolute top-0 left-0 w-96 h-96 rounded-full bg-[#1FAE5B]/8 blur-3xl -translate-x-1/2 -translate-y-1/2" />
-      <div className="pointer-events-none absolute bottom-0 right-0 w-80 h-80 rounded-full bg-[#0F6B3E]/6 blur-3xl translate-x-1/3 translate-y-1/3" />
-      <div className="pointer-events-none absolute top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
+      <div className="fixed top-6 left-12 z-50">
+        <Image
+          src="/images/Instroom Logo 1.png"
+          alt="Instroom Logo"
+          width={180}
+          height={180}
+          priority
+          quality={95}
+          className="drop-shadow-sm"
+        />
+      </div>
 
-      <div className="relative mx-auto flex min-h-svh w-full max-w-5xl items-center justify-center px-4 py-10">
+      <div className="pointer-events-none fixed top-0 left-0 w-96 h-96 rounded-full bg-[#1FAE5B]/8 blur-3xl -translate-x-1/2 -translate-y-1/2" />
+      <div className="pointer-events-none fixed bottom-0 right-0 w-80 h-80 rounded-full bg-[#0F6B3E]/6 blur-3xl translate-x-1/3 translate-y-1/3" />
+      <div className="pointer-events-none fixed top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
+
+      <div className="relative mx-auto flex min-h-svh w-full max-w-5xl items-center justify-center px-4 py-10 z-20">
         {error && (
-          <div className="fixed right-8 bottom-8 z-50 rounded-lg border border-red-500/50 bg-red-500/90 p-4 text-sm text-white shadow-lg animate-fade-in">
+          <div className="fixed right-8 bottom-8 z-50 rounded-lg border border-red-500/50 bg-red-50 p-4 text-sm text-red-600 shadow-lg animate-fade-in">
             {error}
           </div>
         )}

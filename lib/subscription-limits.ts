@@ -6,7 +6,7 @@ import { prisma } from "./prisma"
 export async function canAddBrand(userId: string): Promise<{
   allowed: boolean
   current: number
-  max: number
+  max: number | null
   message?: string
 }> {
   try {
@@ -31,10 +31,17 @@ export async function canAddBrand(userId: string): Promise<{
       where: { owner_id: userId },
     })
 
+    // Unlimited if max_brands is null (Agency plan)
+    if (subscription.plan.max_brands === null) {
+      return {
+        allowed: true,
+        current: brandCount,
+        max: null,
+      }
+    }
+
     // Calculate max brands
-    const maxBrands =
-      (subscription.plan.max_brands || subscription.plan.included_brands) +
-      subscription.extra_brands
+    const maxBrands = subscription.plan.max_brands + subscription.extra_brands
 
     return {
       allowed: brandCount < maxBrands,
@@ -66,7 +73,7 @@ export async function canAddCollaborator(
 ): Promise<{
   allowed: boolean
   current: number
-  max: number
+  max: number | null
   message?: string
 }> {
   try {
@@ -103,13 +110,19 @@ export async function canAddCollaborator(
       where: { brand_id: brandId },
     })
 
+    // Unlimited if max_seats is null (Agency plan)
+    if (subscription.plan.max_seats === null) {
+      return {
+        allowed: true,
+        current: memberCount,
+        max: null,
+      }
+    }
+
     // Calculate max seats
-    // For Solo: included=0, max=5 → maxSeats = (5 || 0) + extra = 5 + extra
-    // For Team: included=10, max=25 → maxSeats = (25 || 10) + extra = 25 + extra
-    // For Agency: included=30, max=NULL → maxSeats = (NULL || 30) + extra = 30 + extra (unlimited)
-    const maxSeats =
-      (subscription.plan.max_seats || subscription.plan.included_seats) +
-      subscription.extra_seats
+    // For Solo: included=0, max=5 → maxSeats = 5 + extra
+    // For Team: included=10, max=25 → maxSeats = 25 + extra
+    const maxSeats = subscription.plan.max_seats + subscription.extra_seats
 
     return {
       allowed: memberCount < maxSeats,
@@ -258,10 +271,12 @@ export async function canCreateCampaign(
       }
     }
 
-    // Count active campaigns for this brand
+    // Count TOTAL active campaigns across ALL brands for this user
     const activeCampaignCount = await prisma.campaign.count({
-      where: { 
-        brand_id: brandId,
+      where: {
+        brand: {
+          owner_id: userId,
+        },
         status: "active"
       },
     })
@@ -315,6 +330,40 @@ export async function hasAPIAccess(userId: string): Promise<{
     return {
       allowed: false,
       message: "Error checking API access",
+    }
+  }
+}
+
+/**
+ * Check if user has custom branding access
+ */
+export async function hasCustomBranding(userId: string): Promise<{
+  allowed: boolean
+  message?: string
+}> {
+  try {
+    const subscription = await prisma.userSubscription.findUnique({
+      where: { user_id: userId },
+      include: { plan: true },
+    })
+
+    if (!subscription || subscription.status !== "active") {
+      return {
+        allowed: false,
+        message: "No active subscription found",
+      }
+    }
+
+    return {
+      allowed: subscription.plan.custom_branding === true,
+      message: subscription.plan.custom_branding 
+        ? undefined 
+        : "Custom branding is not included in your plan. Upgrade to Agency plan to use custom branding.",
+    }
+  } catch (error) {
+    return {
+      allowed: false,
+      message: "Error checking custom branding access",
     }
   }
 }

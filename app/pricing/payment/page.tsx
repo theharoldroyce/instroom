@@ -3,6 +3,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import Script from "next/script";
+import Image from "next/image";
 import { useEffect, useRef } from "react";
 
 const planSummaries: Record<string, string> = {
@@ -147,19 +148,36 @@ function PaymentPageInner() {
   }, [planKey, cycle, userId, paypalLoaded]);
 
   return (
-    <div className="min-h-screen bg-[#0b0f0d] text-white flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-4xl bg-white/5 border border-emerald-400/30 rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden">
+    <div className="relative min-h-screen bg-[#F7F9F8] text-[#1E1E1E] overflow-hidden">
+      <div className="pointer-events-none fixed top-0 left-0 w-96 h-96 rounded-full bg-[#1FAE5B]/8 blur-3xl -translate-x-1/2 -translate-y-1/2" />
+      <div className="pointer-events-none fixed bottom-0 right-0 w-80 h-80 rounded-full bg-[#0F6B3E]/6 blur-3xl translate-x-1/3 translate-y-1/3" />
+      <div className="pointer-events-none fixed top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
+      
+      <div className="fixed top-6 left-12 z-50">
+        <Image
+          src="/images/Instroom Logo 1.png"
+          alt="Instroom Logo"
+          width={180}
+          height={180}
+          priority
+          quality={95}
+          className="drop-shadow-sm"
+        />
+      </div>
+      
+      <div className="relative min-h-screen flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-4xl bg-white border border-[#0F6B3E]/15 rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden">
         {/* Plan Summary */}
-        <div className="md:w-1/2 p-8 flex flex-col justify-center bg-gradient-to-br from-emerald-500/10 to-lime-400/10 border-b md:border-b-0 md:border-r-0">
-          <h2 className="text-2xl font-bold mb-2 text-center md:text-left">Your Plan</h2>
-          <h3 className="text-lg font-semibold mb-1">{plan.display_name}</h3>
-          <div className="text-3xl font-bold mb-2">
+        <div className="md:w-1/2 p-8 flex flex-col justify-center bg-gradient-to-br from-[#1FAE5B]/5 to-[#0F6B3E]/5 border-b md:border-b-0 md:border-r-0">
+          <h2 className="text-2xl font-bold mb-2 text-center md:text-left text-[#1E1E1E]">Your Plan</h2>
+          <h3 className="text-lg font-semibold mb-1 text-[#1E1E1E]">{plan.display_name}</h3>
+          <div className="text-3xl font-bold mb-2 text-[#1E1E1E]">
             {cycle === "yearly"
               ? `$${plan.price_yearly}/yr`
               : `$${plan.price_monthly}/mo`}
           </div>
-          <p className="mb-2 text-xs text-emerald-300 font-semibold">{planSummaries[planKey]}</p>
-          <ul className="space-y-2 text-sm text-zinc-200 mb-6">
+          <p className="mb-2 text-xs text-[#0F6B3E] font-semibold">{planSummaries[planKey]}</p>
+          <ul className="space-y-2 text-sm text-[#1E1E1E] mb-6">
             <li>
               <b>Seats:</b> {plan.included_seats}
               {plan.max_seats ? ` (up to ${plan.max_seats})` : ""}
@@ -189,7 +207,7 @@ function PaymentPageInner() {
             </li>
           </ul>
           <button
-            className="w-full text-sm text-emerald-400 hover:underline mt-auto"
+            className="w-full text-sm text-[#0F6B3E] hover:underline mt-auto"
             type="button"
             onClick={() => router.back()}
           >
@@ -198,12 +216,12 @@ function PaymentPageInner() {
         </div>
         {/* Divider */}
         <div className="hidden md:flex items-center">
-          <div className="h-96 w-1 bg-gradient-to-b from-emerald-400/40 via-white/10 to-lime-400/40 rounded-full mx-6" />
+          <div className="h-96 w-1 bg-gradient-to-b from-[#1FAE5B]/40 via-[#1E1E1E]/10 to-[#0F6B3E]/40 rounded-full mx-6" />
         </div>
         {/* Payment Info */}
         <div className="md:w-1/2 p-8 flex flex-col justify-center">
-          <h2 className="text-2xl font-bold mb-2 text-center md:text-left">Payment Information</h2>
-          <p className="text-zinc-400 text-center md:text-left mb-8">
+          <h2 className="text-2xl font-bold mb-2 text-center md:text-left text-[#1E1E1E]">Payment Information</h2>
+          <p className="text-[#666666] text-center md:text-left mb-8">
             Click the PayPal button below to complete your subscription.
           </p>
           <Script
@@ -214,13 +232,14 @@ function PaymentPageInner() {
           <div ref={paypalRef}></div>
         </div>
       </div>
+      </div>
     </div>
   );
 }
 
 export default function PaymentPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0b0f0d] flex items-center justify-center text-white">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#F7F9F8] flex items-center justify-center text-[#1E1E1E]">Loading...</div>}>
       <PaymentPageInner />
     </Suspense>
   );
