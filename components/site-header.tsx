@@ -12,6 +12,7 @@ const titles: Record<string, string> = {
   "/dashboard/manage-influencers": "Manage Influencers",
   "/dashboard/inbox": "Inbox",
   "/dashboard/pipeline": "Pipeline",
+  "/dashboard/brand-partners": "Brand Partners",
   "/dashboard/closed": "Closed Collaborations",
   "/dashboard/analytics": "Analytics",
   "/dashboard/influencer-discovery": "Influencer Discovery",
