@@ -13,6 +13,7 @@ import {
   IconGitBranch,
   IconCircleCheck,
   IconMail,
+  IconBuildingStore,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -27,21 +28,24 @@ import {
 } from "@/components/ui/sidebar"
 
 import Image from "next/image"
+import { title } from "process"
 
 const navData = {
   navMain: [
     { title: "Dashboard", url: "/dashboard", icon: IconDashboard },
+    { title: "Influencer Discovery", url: "/dashboard/influencer-discovery", icon: IconSearch },
     { title: "Inbox", url: "/dashboard/inbox", icon: IconMail },
     { title: "Influencers List", url: "/dashboard/manage-influencers", icon: IconUsers },
     { title: "Pipeline", url: "/dashboard/pipeline", icon: IconGitBranch },
-    { title: "Closed", url: "/dashboard/closed", icon: IconCircleCheck },
+    { title: "Brand Partners", url: "/dashboard/brand-partners", icon: IconBuildingStore },
+    // { title: "Closed", url: "/dashboard/closed", icon: IconCircleCheck },
     { title: "Analytics", url: "/dashboard/analytics", icon: IconChartBar },
   ],
 
   navSecondary: [
     { title: "Team & Collaborators", url: "/dashboard/settings/collaborators", icon: IconSettings },
     { title: "Get Help", url: "#", icon: IconHelp },
-    { title: "Search", url: "#", icon: IconSearch },
+    
   ],
 }
 
