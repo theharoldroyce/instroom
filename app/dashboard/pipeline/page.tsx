@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import KanbanBoard from "@/components/kanban/kanban-board"
 
-export default function PipelinePage() {
+function PipelineContent() {
   const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -39,5 +39,13 @@ export default function PipelinePage() {
         <KanbanBoard brandId={brandId} />
       </div>
     </div>
+  )
+}
+
+export default function PipelinePage() {
+  return (
+    <Suspense>
+      <PipelineContent />
+    </Suspense>
   )
 }
