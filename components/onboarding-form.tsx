@@ -90,9 +90,9 @@ export function OnboardingForm({
 
   if (showWelcome) {
     return (
-      <div className="flex w-full max-w-5xl rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
+      <div className="flex w-full max-w-2xl rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
-        <div className="flex-1 px-10 py-12 flex flex-col items-center justify-center text-center">
+        <div className="w-full px-10 py-12 flex flex-col items-center justify-center text-center">
           <div className="text-6xl mb-4">🎉</div>
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             You're all set!
@@ -108,25 +108,15 @@ export function OnboardingForm({
             {isLoading ? 'Getting Started...' : 'Get Started →'}
           </Button>
         </div>
-        <div className="w-64 bg-gradient-to-b from-[#d4edcf] to-[#aed9b0] flex flex-col items-center justify-center p-6 relative overflow-hidden">
-          <div className="absolute w-40 h-40 bg-white/20 rounded-full -top-20 -right-20" />
-          <div className="absolute w-24 h-24 bg-white/15 rounded-full -bottom-10 -left-10" />
-          <div className="relative z-10 w-32 h-32 bg-white rounded-full flex items-center justify-center shadow-lg">
-            <span className="text-6xl">🚀</span>
-          </div>
-          <p className="relative z-10 text-center text-sm font-semibold text-green-700 mt-4">
-            Welcome aboard!<br/>Your dashboard awaits.
-          </p>
-        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex w-full max-w-5xl rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
+    <div className="flex w-full max-w-5xl h-[520px] rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
       {/* Left Content Area */}
-      <div className="flex-1 px-12 py-8 flex flex-col">
+      <div className="flex-1 px-12 py-8 flex flex-col overflow-y-auto">
         {/* Logo */}
         <div className="flex items-center gap-2 mb-8">
           <Image 
@@ -161,12 +151,12 @@ export function OnboardingForm({
         <div className="flex-1 mb-8">
           {step === 1 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 {['Brand Awareness', 'Conversion (Sales)', 'Get UGC', 'Increase Traffic', 'Analytics', 'Global Reach'].map((option) => (
                   <button
                     key={option}
                     onClick={() => onFormChange('goal', option)}
-                    className={`p-4 rounded-xl border-2 transition-all text-center ${
+                    className={`p-4 rounded-xl border-2 transition-all text-center min-h-[100px] flex flex-col items-center justify-center ${
                       formData.goal === option
                         ? 'border-[#4caf50] bg-green-50'
                         : 'border-gray-200 bg-white hover:border-[#4caf50]'
@@ -211,7 +201,7 @@ export function OnboardingForm({
                 <button
                   key={option}
                   onClick={() => onFormChange('teamSize', option)}
-                  className={`p-2 rounded-lg border-2 text-center transition-all relative ${
+                  className={`p-3 rounded-lg border-2 text-center transition-all relative ${
                     formData.teamSize === option
                       ? 'border-[#4caf50] bg-green-50'
                       : 'border-gray-200 bg-white hover:border-[#4caf50]'
@@ -243,13 +233,13 @@ export function OnboardingForm({
                 <button
                   key={option}
                   onClick={() => onFormChange('revenue', option)}
-                  className={`p-3 rounded-lg border-2 text-center transition-all relative ${
+                  className={`p-4 rounded-xl border-2 text-center transition-all relative min-h-[100px] flex flex-col items-center justify-center ${
                     formData.revenue === option
                       ? 'border-[#4caf50] bg-green-50'
                       : 'border-gray-200 bg-white hover:border-[#4caf50]'
                   }`}
                 >
-                  <span className="text-lg block mb-1">
+                  <span className="text-xl block mb-2">
                     {option === '$10K–$20K' && '💵'}
                     {option === '$20K–$30K' && '💴'}
                     {option === '$30K–$40K' && '💶'}
@@ -258,7 +248,7 @@ export function OnboardingForm({
                   </span>
                   <p className="text-xs font-semibold text-gray-900">{option}</p>
                   {formData.revenue === option && (
-                    <div className="absolute top-1 right-1 w-4 h-4 bg-[#4caf50] rounded-full flex items-center justify-center">
+                    <div className="absolute top-2 right-2 w-5 h-5 bg-[#4caf50] rounded-full flex items-center justify-center">
                       <span className="text-white text-xs">✓</span>
                     </div>
                   )}
@@ -268,18 +258,18 @@ export function OnboardingForm({
           )}
 
           {step === 5 && (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className="grid grid-cols-4 gap-2">
               {['Facebook', 'Instagram', 'TikTok', 'LinkedIn', 'YouTube', 'X', 'Google', 'Upwork', 'Referral', 'Ads'].map((option) => (
                 <button
                   key={option}
                   onClick={() => onFormChange('source', option)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
+                  className={`p-3 rounded-lg border-2 text-center transition-all relative ${
                     formData.source === option
                       ? 'border-[#4caf50] bg-green-50'
                       : 'border-gray-200 bg-white hover:border-[#4caf50]'
                   }`}
                 >
-                  <span className="text-lg">
+                  <span className="text-lg block mb-1">
                     {option === 'Facebook' && '👍'}
                     {option === 'Instagram' && '📷'}
                     {option === 'TikTok' && '🎵'}
@@ -291,9 +281,9 @@ export function OnboardingForm({
                     {option === 'Referral' && '🤝'}
                     {option === 'Ads' && '📢'}
                   </span>
-                  <span className="flex-1 text-left text-sm font-semibold text-gray-900">{option}</span>
+                  <p className="text-xs font-semibold text-gray-900">{option}</p>
                   {formData.source === option && (
-                    <div className="w-5 h-5 bg-[#4caf50] rounded-full flex items-center justify-center">
+                    <div className="absolute top-1 right-1 w-4 h-4 bg-[#4caf50] rounded-full flex items-center justify-center">
                       <span className="text-white text-xs">✓</span>
                     </div>
                   )}
@@ -345,30 +335,59 @@ export function OnboardingForm({
       </div>
 
       {/* Right Sidebar */}
-      <div className="w-64 bg-gradient-to-b from-[#d4edcf] to-[#aed9b0] flex flex-col relative overflow-hidden">
+      <div className="w-64 bg-gradient-to-b from-[#d4edcf] to-[#aed9b0] relative overflow-hidden">
         <div className="absolute w-40 h-40 bg-white/20 rounded-full -top-20 -right-20" />
         <div className="absolute w-24 h-24 bg-white/15 rounded-full -bottom-10 -left-10" />
         
-        {/* Image container - customizable size */}
+        {/* Image container - fills entire sidebar */}
         <div 
-          className="flex items-center justify-center relative z-0 bg-white/10 rounded-lg"
-          style={{ width: imageWidth, height: imageHeight, margin: '0 auto' }}
+          className="w-full h-full relative"
         >
-          <div className="text-center">
-            <div className="text-5xl mb-2">
-              {step === 1 && '🎯'}
-              {step === 2 && '🔗'}
-              {step === 3 && '👥'}
-              {step === 4 && '💰'}
-              {step === 5 && '🔍'}
-            </div>
-            <p className="text-xs text-green-600 font-semibold">Image placeholder</p>
-          </div>
+          {step === 1 && (
+            <Image
+              src="/images/yourGoal.png"
+              alt="Your Goal"
+              fill
+              className="object-cover"
+            />
+          )}
+          {step === 2 && (
+            <Image
+              src="/images/websiteLink.png"
+              alt="Website Link"
+              fill
+              className="object-cover"
+            />
+          )}
+          {step === 3 && (
+            <Image
+              src="/images/teamSize.png"
+              alt="Team Size"
+              fill
+              className="object-cover"
+            />
+          )}
+          {step === 4 && (
+            <Image
+              src="/images/revenue.png"
+              alt="Revenue"
+              fill
+              className="object-cover"
+            />
+          )}
+          {step === 5 && (
+            <Image
+              src="/images/how'dHear.png"
+              alt="How You Heard About Us"
+              fill
+              className="object-cover"
+            />
+          )}
         </div>
         
-        {/* Text container - proportional spacing */}
-        <div className="relative z-10 px-4 py-5 bg-gradient-to-t from-black/20 to-transparent">
-          <p className="text-center text-xs font-semibold text-green-700 leading-relaxed whitespace-pre-line">
+        {/* Text container - positioned below image */}
+        <div className="absolute bottom-0 left-0 right-0 px-4 py-5 bg-gradient-to-t from-black/40 via-black/20 to-transparent z-10">
+          <p className="text-center text-xs font-semibold text-white leading-relaxed whitespace-pre-line drop-shadow-lg">
             {currentStep.tip}
           </p>
         </div>

@@ -13,7 +13,7 @@ import {
   IconGitBranch,
   IconCircleCheck,
   IconMail,
-  IconBuildingStore,
+  IconPalette,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -44,6 +44,7 @@ const navData = {
 
   navSecondary: [
     { title: "Team & Collaborators", url: "/dashboard/settings/collaborators", icon: IconSettings },
+    { title: "Branding", url: "/dashboard/settings/branding", icon: IconPalette },
     { title: "Get Help", url: "#", icon: IconHelp },
     
   ],

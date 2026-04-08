@@ -1,19 +1,22 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import KanbanBoard from "@/components/kanban/kanban-board"
 
 export default function PipelinePage() {
+  const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
-    // Read brandId from URL search params
-    const params = new URLSearchParams(window.location.search)
-    const id = params.get("brandId")
-    setBrandId(id)
   }, [])
+
+  useEffect(() => {
+    const id = searchParams.get("brandId")
+    setBrandId(id)
+  }, [searchParams])
 
   if (!mounted) {
     return null

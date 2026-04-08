@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,7 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { AlertCircle, Trash2, Mail } from "lucide-react"
+import { AlertCircle, Trash2, Mail, Zap } from "lucide-react"
+import Script from "next/script"
 
 interface Collaborator {
   id: string
@@ -30,7 +32,22 @@ interface Collaborator {
   joinedAt?: string
 }
 
+interface BuySeatsModalState {
+  isOpen: boolean
+  maxSeatsAvailable: number
+  pricePerSeat: number
+  currentExtraSeats: number
+  maxTotalSeats: number
+}
+
+declare global {
+  interface Window {
+    paypal?: any
+  }
+}
+
 export default function CollaboratorsPage() {
+  const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
@@ -43,13 +60,124 @@ export default function CollaboratorsPage() {
   const [inviting, setInviting] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
 
-  // Handle hydration and set brandId from search params
+  // Extra seats modal state
+  const [buySeatsModal, setBuySeatsModal] = useState<BuySeatsModalState>({
+    isOpen: false,
+    maxSeatsAvailable: 0,
+    pricePerSeat: 0,
+    currentExtraSeats: 0,
+    maxTotalSeats: 0,
+  })
+  const [seatsToAdd, setSeatsToAdd] = useState(1)
+  const [buyingSeats, setBuyingSeats] = useState(false)
+  const [paypalLoaded, setPaypalLoaded] = useState(false)
+  const paypalRef = useRef<HTMLDivElement>(null)
+
+  // Handle hydration
   useEffect(() => {
     setMounted(true)
-    const params = new URLSearchParams(window.location.search)
-    const id = params.get("brandId")
-    setBrandId(id)
   }, [])
+
+  // Watch for brand changes from URL
+  useEffect(() => {
+    const id = searchParams.get("brandId")
+    setBrandId(id)
+  }, [searchParams])
+
+  // Setup PayPal button when modal opens
+  useEffect(() => {
+    if (!buySeatsModal.isOpen || !paypalLoaded || !paypalRef.current) {
+      return
+    }
+
+    // Only render once - don't clear and recreate on every state change
+    if (paypalRef.current.innerHTML !== "") {
+      return
+    }
+
+    if (window.paypal) {
+      const button = window.paypal.Buttons({
+        style: {
+          shape: "pill",
+          color: "blue",
+          layout: "vertical",
+          label: "pay",
+        },
+        createOrder: async (data: any, actions: any) => {
+          try {
+            // Calculate amount dynamically at time of order creation
+            const totalAmount = (buySeatsModal.pricePerSeat * seatsToAdd).toFixed(2)
+            
+            const response = await fetch("/api/paypal/create-order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                amount: totalAmount,
+                description: `${seatsToAdd} extra seat(s) for collaborators`,
+              }),
+            })
+            
+            if (!response.ok) {
+              const errorData = await response.json()
+              throw new Error(errorData.error || "Failed to create payment order")
+            }
+            
+            const orderData = await response.json()
+            if (!orderData.id) {
+              throw new Error("No order ID returned from server")
+            }
+            return orderData.id
+          } catch (error) {
+            setError(error instanceof Error ? error.message : "Failed to create payment order")
+            throw error
+          }
+        },
+        onApprove: async (data: any, actions: any) => {
+          try {
+            setBuyingSeats(true)
+            // Call our API with the PayPal order ID
+            const response = await fetch("/api/subscription/buy-extra-seats", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                quantity: seatsToAdd,
+                paypalOrderId: data.orderID,
+              }),
+            })
+
+            const result = await response.json()
+
+            if (!response.ok) {
+              const errorMsg = result.details ? `${result.error}: ${result.details}` : result.error
+              setError(errorMsg || "Failed to complete purchase")
+              setBuyingSeats(false)
+              return
+            }
+
+            // Close modal and reset
+            setBuySeatsModal({ ...buySeatsModal, isOpen: false })
+            setSeatsToAdd(1)
+            setError("")
+
+            // Automatically retry the invitation
+            if (inviteEmail) {
+              const form = new Event("submit")
+              handleInvite(form as any)
+            }
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "An error occurred")
+            setBuyingSeats(false)
+          }
+        },
+        onError: (err: any) => {
+          setError("Payment failed. Please try again.")
+          setBuyingSeats(false)
+        },
+      })
+
+      button.render(paypalRef.current)
+    }
+  }, [buySeatsModal.isOpen, buySeatsModal.pricePerSeat, paypalLoaded])
 
   // Fetch collaborators
   useEffect(() => {
@@ -93,6 +221,38 @@ export default function CollaboratorsPage() {
     try {
       setInviting(true)
       setError("")
+
+      // First check if they can add a collaborator
+      const limitCheckRes = await fetch(
+        `/api/brand/${brandId}/collaborators/check-limit`
+      )
+      const limitData = await limitCheckRes.json()
+
+      if (!limitCheckRes.ok) {
+        setError(limitData.error || "Failed to check collaborator limit")
+        return
+      }
+
+      // If they can buy more seats (either hit limit or exceeded included seats)
+      if (limitData.canBuyMore) {
+        setBuySeatsModal({
+          isOpen: true,
+          maxSeatsAvailable: limitData.maxSeatsAvailable,
+          pricePerSeat: limitData.pricePerSeat,
+          currentExtraSeats: limitData.currentExtraSeats,
+          maxTotalSeats: limitData.maxTotalSeats,
+        })
+        setInviting(false)
+        return
+      }
+
+      if (!limitData.allowed) {
+        setError("You've reached your collaborator limit. Unable to purchase more seats for your plan. Upgrade your plan to add more collaborators.")
+        setInviting(false)
+        return
+      }
+
+      // Proceed with invitation
       const res = await fetch(`/api/brand/${brandId}/collaborators/invite`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -319,6 +479,117 @@ export default function CollaboratorsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Buy Extra Seats Modal */}
+      {buySeatsModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-[#1FAE5B]" />
+                Buy Extra Seats
+              </CardTitle>
+              <CardDescription>
+                You've reached your collaborator limit. Purchase extra seats to continue.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Current Usage */}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Current Subscription</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-3 rounded">
+                    <p className="text-xs text-muted-foreground">Extra Seats Purchased</p>
+                    <p className="text-2xl font-bold text-gray-900">{buySeatsModal.currentExtraSeats}</p>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded">
+                    <p className="text-xs text-muted-foreground">Max Available</p>
+                    <p className="text-2xl font-bold text-gray-900">{buySeatsModal.maxTotalSeats}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quantity Selector */}
+              <div className="space-y-3">
+                <Label htmlFor="seats">Number of Seats</Label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSeatsToAdd(Math.max(1, seatsToAdd - 1))}
+                    disabled={seatsToAdd <= 1 || buyingSeats}
+                  >
+                    −
+                  </Button>
+                  <Input
+                    id="seats"
+                    type="number"
+                    min="1"
+                    max={buySeatsModal.maxSeatsAvailable}
+                    value={seatsToAdd}
+                    onChange={(e) => setSeatsToAdd(Math.min(buySeatsModal.maxSeatsAvailable, Math.max(1, parseInt(e.target.value) || 1)))}
+                    className="text-center"
+                    disabled={buyingSeats}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSeatsToAdd(Math.min(buySeatsModal.maxSeatsAvailable, seatsToAdd + 1))}
+                    disabled={seatsToAdd + 1 > buySeatsModal.maxSeatsAvailable || buyingSeats}
+                  >
+                    +
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  You can purchase up to {buySeatsModal.maxSeatsAvailable} more seat(s)
+                </p>
+              </div>
+
+              {/* Price Summary */}
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Price per seat:</span>
+                  <span className="font-medium">${buySeatsModal.pricePerSeat.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Quantity:</span>
+                  <span className="font-medium">{seatsToAdd}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">Total:</span>
+                  <span className="text-lg font-bold text-[#1FAE5B]">
+                    ${(buySeatsModal.pricePerSeat * seatsToAdd).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                <Script
+                  src={`https://www.paypal.com/sdk/js?client-id=${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}&intent=capture`}
+                  strategy="afterInteractive"
+                  onLoad={() => setPaypalLoaded(true)}
+                />
+                <div ref={paypalRef} className="paypal-button-container" />
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setBuySeatsModal({ ...buySeatsModal, isOpen: false })
+                    // Clean up PayPal button for next time
+                    if (paypalRef.current) {
+                      paypalRef.current.innerHTML = ""
+                    }
+                  }}
+                  disabled={buyingSeats}
+                  className="w-full"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
