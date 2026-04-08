@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronDown } from "lucide-react"
 
@@ -11,7 +11,7 @@ const recommendedSearches = [
   "#HandmadeWithLove",
 ]
 
-export default function InfluencerDiscoveryPage() {
+function InfluencerDiscoveryContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
@@ -310,5 +310,13 @@ export default function InfluencerDiscoveryPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function InfluencerDiscoveryPage() {
+  return (
+    <Suspense>
+      <InfluencerDiscoveryContent />
+    </Suspense>
   )
 }
