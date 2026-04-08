@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import TableSheet from "@/components/table-sheet"
 // import InfluencerList from "./influencer-list"
 
-export default function InfluencersPage() {
+function InfluencersContent() {
   const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -41,5 +41,13 @@ export default function InfluencersPage() {
          {/* <InfluencerList /> */}
       </div>
     </div>
+  )
+}
+
+export default function InfluencersPage() {
+  return (
+    <Suspense>
+      <InfluencersContent />
+    </Suspense>
   )
 }
