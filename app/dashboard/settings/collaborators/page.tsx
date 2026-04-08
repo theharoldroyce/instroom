@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useRef, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,7 +46,7 @@ declare global {
   }
 }
 
-export default function CollaboratorsPage() {
+function CollaboratorsContent() {
   const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -591,5 +591,13 @@ export default function CollaboratorsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function CollaboratorsPage() {
+  return (
+    <Suspense>
+      <CollaboratorsContent />
+    </Suspense>
   )
 }
