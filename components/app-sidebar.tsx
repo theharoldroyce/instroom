@@ -14,6 +14,7 @@ import {
   IconCircleCheck,
   IconMail,
   IconPalette,
+  IconBuildingStore,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
