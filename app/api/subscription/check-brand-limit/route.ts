@@ -39,16 +39,50 @@ export async function GET(req: Request) {
     // Handle unlimited (Agency plan) vs limited plans
     const isUnlimited = subscription.plan.max_brands === null
     const includedBrands = subscription.plan.included_brands
-    const maxBrands = isUnlimited ? null : (subscription.plan.max_brands ?? includedBrands)
-    const totalAvailable = isUnlimited ? null : (includedBrands + subscription.extra_brands)
+    const extraBrands = subscription.extra_brands
+    const pricePerBrandNum = subscription.plan.price_per_extra_brand ? parseFloat(subscription.plan.price_per_extra_brand.toString()) : 0
+    
+    if (isUnlimited) {
+      // Agency plan: unlimited, but check if exceeding included brands for upsell
+      const exceededIncluded = brandCount >= includedBrands
+      const canBuyMore = exceededIncluded && pricePerBrandNum > 0
+      
+      return NextResponse.json({
+        allowed: true,
+        canBuyMore,
+        current: brandCount,
+        max: null,
+        maxTotalBrands: null,
+        maxBrandsAvailable: 999999,
+        currentExtraBrands: extraBrands,
+        pricePerBrand: pricePerBrandNum,
+        message: canBuyMore
+          ? `You've exceeded your ${includedBrands} included brands. Would you like to purchase extra brands?`
+          : undefined,
+      })
+    }
 
-    const allowed = isUnlimited || (brandCount < totalAvailable!)
+    // Limited plans
+    const maxBrands = subscription.plan.max_brands!
+    const totalAvailable = includedBrands + extraBrands
+    const maxBrandsAvailable = maxBrands - totalAvailable
+    const allowed = brandCount < totalAvailable
+    const canBuyMore = !allowed && maxBrandsAvailable > 0 && pricePerBrandNum > 0
 
     return NextResponse.json({
       allowed,
+      canBuyMore,
       current: brandCount,
       max: totalAvailable,
-      message: allowed ? undefined : "You've reached your brand limit",
+      maxTotalBrands: maxBrands,
+      maxBrandsAvailable,
+      currentExtraBrands: extraBrands,
+      pricePerBrand: pricePerBrandNum,
+      message: allowed
+        ? undefined
+        : canBuyMore
+          ? "You've reached your brand limit. Would you like to purchase extra brands?"
+          : "You've reached your brand limit. Unable to purchase more brands for your plan.",
     })
   } catch (error) {
     return NextResponse.json(

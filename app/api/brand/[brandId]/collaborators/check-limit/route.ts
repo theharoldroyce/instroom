@@ -46,13 +46,38 @@ export async function GET(
       where: { brand_id: brandId },
     })
 
-    // Calculate seat limits
+    // Handle unlimited (Agency plan) vs limited plans
+    if (subscription.plan.max_seats === null) {
+      // Agency plan: unlimited, but check if exceeding included seats for upsell
+      const includedSeats = subscription.plan.included_seats
+      const extraSeats = subscription.extra_seats
+      const pricePerSeatNum = subscription.plan.price_per_extra_seat ? parseFloat(subscription.plan.price_per_extra_seat.toString()) : 0
+      
+      const exceededIncluded = memberCount >= includedSeats
+      const canBuyMore = exceededIncluded && pricePerSeatNum > 0
+      
+      return NextResponse.json({
+        allowed: true,
+        canBuyMore,
+        current: memberCount,
+        max: null,
+        maxTotalSeats: null,
+        maxSeatsAvailable: 999999,
+        currentExtraSeats: extraSeats,
+        pricePerSeat: pricePerSeatNum,
+        message: canBuyMore
+          ? `You've exceeded your ${includedSeats} included seats. Would you like to purchase extra seats?`
+          : undefined,
+      })
+    }
+
+    // Calculate seat limits for limited plans
     const includedSeats = subscription.plan.included_seats
-    const maxSeats = subscription.plan.max_seats || subscription.plan.included_seats
+    const maxSeats = subscription.plan.max_seats
     const extraSeats = subscription.extra_seats
     const totalAvailable = includedSeats + extraSeats
     const pricePerSeatNum = subscription.plan.price_per_extra_seat ? parseFloat(subscription.plan.price_per_extra_seat.toString()) : 0
-    const maxSeatsAvailable = maxSeats - totalAvailable
+    const maxSeatsAvailable = maxSeats - (includedSeats + extraSeats)
 
     const allowed = memberCount < totalAvailable
     const canBuyMore = 

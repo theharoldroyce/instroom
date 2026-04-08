@@ -40,7 +40,8 @@ export async function canAddBrand(userId: string): Promise<{
       }
     }
 
-    // Calculate max brands
+    // Calculate max brands for limited plans
+    const includedBrands = subscription.plan.included_brands
     const maxBrands = subscription.plan.max_brands + subscription.extra_brands
 
     return {
@@ -120,9 +121,9 @@ export async function canAddCollaborator(
     }
 
     // Calculate max seats
-    // For Solo: included=0, max=5 → maxSeats = 5 + extra
-    // For Team: included=10, max=25 → maxSeats = 25 + extra
-    const maxSeats = subscription.plan.max_seats + subscription.extra_seats
+    // For Solo: included=0, max=5 → maxSeats = 0 + extra (up to max)
+    // For Team: included=10, max=25 → maxSeats = 10 + extra (up to max)
+    const maxSeats = subscription.plan.included_seats + subscription.extra_seats
 
     return {
       allowed: memberCount < maxSeats,

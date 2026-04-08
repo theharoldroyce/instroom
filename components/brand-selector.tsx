@@ -111,10 +111,7 @@ export function BrandSelector() {
         return
       }
 
-      if (data.allowed) {
-        // Can create a new brand
-        router.push("/dashboard/brand/create")
-      } else if (data.canBuyMore) {
+      if (data.canBuyMore) {
         // Open buy brands modal
         setBuyBrandsModal({
           isOpen: true,
@@ -124,6 +121,9 @@ export function BrandSelector() {
           maxTotalBrands: data.maxTotalBrands,
         })
         setBrandsToAdd(1)
+      } else if (data.allowed) {
+        // Can create a new brand
+        router.push("/dashboard/brand/create")
       } else {
         setError(data.message || "You've reached your brand limit and cannot purchase more.")
       }

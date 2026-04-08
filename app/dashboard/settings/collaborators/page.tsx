@@ -233,8 +233,8 @@ export default function CollaboratorsPage() {
         return
       }
 
-      // If they've reached the limit and can buy more seats
-      if (!limitData.allowed && limitData.canBuyMore) {
+      // If they can buy more seats (either hit limit or exceeded included seats)
+      if (limitData.canBuyMore) {
         setBuySeatsModal({
           isOpen: true,
           maxSeatsAvailable: limitData.maxSeatsAvailable,

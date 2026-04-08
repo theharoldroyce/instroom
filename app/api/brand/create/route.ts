@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       brand,
-      remaining: canAdd.max - canAdd.current - 1,
+      remaining: canAdd.max !== null ? canAdd.max - canAdd.current - 1 : null,
     })
   } catch (error) {
     console.error("Error creating brand:", error)
