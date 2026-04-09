@@ -95,55 +95,57 @@ function PaymentPageInner() {
   const paypalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!paypalLoaded) return;
-    if (typeof window === "undefined") return;
-    if (!paypalRef.current) return;
+    // Check if PayPal is available either from loaded state or from previous load
+    const isPaypalReady = paypalLoaded || (typeof window !== "undefined" && !!window.paypal);
+    
+    if (!isPaypalReady || !paypalRef.current) return;
 
+    const planId = paypalPlanIds[planKey]?.[cycle];
+    if (!planId) return;
+
+    // Clear previous button
     paypalRef.current.innerHTML = "";
 
-    const planId = paypalPlanIds[planKey][cycle];
-    let button: any;
+    // Delay rendering to ensure DOM is fully cleared
+    const timeoutId = setTimeout(() => {
+      if (!paypalRef.current || !window.paypal) return;
 
-    if (window.paypal && planId) {
-      button = window.paypal.Buttons({
-        style: {
-          shape: 'pill',
-          color: 'silver',
-          layout: 'vertical',
-          label: 'subscribe'
-        },
-        createSubscription: function(data: any, actions: any) {
-          return actions.subscription.create({
-            plan_id: planId
-          });
-        },
-        onApprove: function(data: any, actions: any) {
-          fetch('/api/subscription/activate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              subscriptionID: data.subscriptionID,
-              userId,
-              plan: planKey,
-              cycle,
-            }),
-          }).then(() => {
-            window.location.href = '/onboarding';
-          });
-        }
-      });
-      button.render(paypalRef.current);
-    }
+      try {
+        const button = window.paypal.Buttons({
+          style: {
+            shape: 'pill',
+            color: 'silver',
+            layout: 'vertical',
+            label: 'subscribe'
+          },
+          createSubscription: function(data: any, actions: any) {
+            return actions.subscription.create({
+              plan_id: planId
+            });
+          },
+          onApprove: function(data: any, actions: any) {
+            fetch('/api/subscription/activate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                subscriptionID: data.subscriptionID,
+                userId,
+                plan: planKey,
+                cycle,
+              }),
+            }).then(() => {
+              window.location.href = '/onboarding';
+            });
+          }
+        });
+        button.render(paypalRef.current);
+      } catch (error) {
+        console.error("Error rendering PayPal button:", error);
+      }
+    }, 50);
 
-    // Always return a cleanup function
     return () => {
-      if (paypalRef.current) {
-        paypalRef.current.innerHTML = "";
-      }
-      // Optionally, destroy the PayPal button instance if available
-      if (button && button.close) {
-        button.close();
-      }
+      clearTimeout(timeoutId);
     };
   }, [planKey, cycle, userId, paypalLoaded]);
 

@@ -296,12 +296,17 @@ model Influencer {
   platform        String  @db.VarChar(50) // 'instagram', 'tiktok', 'youtube', etc.
   full_name       String?
   email           String? @db.VarChar(191)
-  avatar_url      String?
+  gender          String? @db.VarChar(20)
+  niche           String? @db.VarChar(100)
+  location        String? @db.VarChar(255)
   bio             String? @db.Text
+  profile_image_url String?
+  social_link     String?
   follower_count  Int     @default(0)
   engagement_rate Decimal @default(0)
-  niche           String? @db.VarChar(100)
-  is_verified     Boolean @default(false)
+  avg_likes       Int     @default(0)
+  avg_comments    Int     @default(0)
+  avg_views       Int     @default(0)
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
@@ -377,6 +382,11 @@ model BrandInfluencer {
   // Notes
   notes             String? @db.Text
   internal_rating   Decimal?
+
+  // Approval & Transfer
+  approval_status   String? @db.VarChar(20)  // 'Pending', 'Approved', 'Rejected'
+  approval_notes    String? @db.Text
+  transferred_date  DateTime?
 
   // Metadata
   created_at        DateTime @default(now())

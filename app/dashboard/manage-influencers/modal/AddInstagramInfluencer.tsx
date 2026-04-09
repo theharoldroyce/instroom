@@ -3,9 +3,39 @@
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
 
-export default function AddInstagramInfluencer({ close }: any) {
+const getProfileUrl = (platform: string, handle: string): string => {
+  if (!handle || handle === "@") return ""
+  const urlMap: Record<string, (h: string) => string> = {
+    instagram: (h) => `https://instagram.com/${h.replace(/^@/, "")}`,
+    tiktok: (h) => `https://tiktok.com/@${h.replace(/^@/, "")}`,
+    youtube: (h) => `https://youtube.com/@${h.replace(/^@/, "")}`,
+    twitter: (h) => `https://x.com/${h.replace(/^@/, "")}`,
+    other: () => ""
+  }
+  return urlMap[platform]?.(handle) ?? ""
+}
 
-  const [form, setForm] = useState({
+type FormData = {
+  username: string
+  email: string
+  name: string
+  followers: string
+  engagement: string
+  location: string
+  niche: string
+  gender: string
+  social_link: string
+}
+
+export default function AddInstagramInfluencer({ 
+  onSave, 
+  onBack 
+}: { 
+  onSave: (data: FormData) => void
+  onBack: () => void
+}) {
+
+  const [form, setForm] = useState<FormData>({
     username: "",
     email: "",
     name: "",
@@ -13,56 +43,49 @@ export default function AddInstagramInfluencer({ close }: any) {
     engagement: "",
     location: "",
     niche: "",
+    gender: "",
+    social_link: getProfileUrl("instagram", ""),
   })
 
-  const handleChange = (e: any) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const updated = { ...form, [e.target.name]: e.target.value }
+    if (e.target.name === "username") {
+      updated.social_link = getProfileUrl("instagram", updated.username)
+    }
+    setForm(updated)
   }
 
   const handleSubmit = () => {
-    console.log(form)
-    close()
+    if (!form.username || !form.followers || !form.engagement || !form.location || !form.niche || !form.gender) {
+      alert("Please fill in all required fields")
+      return
+    }
+    onSave(form)
   }
 
   const handleCancel = () => {
     const hasInput = Object.values(form).some((v) => v !== "")
-
     if (hasInput) {
       const confirmClose = window.confirm("Discard entered information?")
       if (!confirmClose) return
     }
-
-    close()
+    onBack()
   }
 
   return (
+    <div className="w-full">
 
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-
-      <div className="w-full max-w-xl lg:max-w-2xl bg-white rounded-xl shadow-lg px-6 py-6">
-
-        {/* HEADER */}
-        <div className="flex items-center justify-between mb-4">
-
-          <h2 className="text-lg md:text-xl font-semibold text-[#1E1E1E]">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <h2 className="text-lg sm:text-xl font-semibold text-[#1E1E1E]">
             Add Instagram Influencer
           </h2>
-
-          <button
-            onClick={handleCancel}
-            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 text-gray-500 text-lg"
-          >
-            ×
-          </button>
-
         </div>
 
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">
           Enter the influencer’s Instagram username. We’ll automatically pull their profile details and key metrics for you.
         </p>
 
-        {/* FORM */}
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
 
           <div className="flex flex-col gap-1">
             <label className="text-sm">
@@ -103,7 +126,7 @@ export default function AddInstagramInfluencer({ close }: any) {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
 
             <div className="flex flex-col gap-1">
               <label className="text-sm">
@@ -133,7 +156,7 @@ export default function AddInstagramInfluencer({ close }: any) {
 
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
 
             <div className="flex flex-col gap-1">
               <label className="text-sm">
@@ -165,15 +188,44 @@ export default function AddInstagramInfluencer({ close }: any) {
 
         </div>
 
-        {/* ACTIONS */}
-        <div className="flex justify-end gap-4 pt-6">
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+
+          <div className="flex flex-col gap-1">
+            <label className="text-sm">
+              Gender <span className="text-red-500">*</span>
+            </label>
+            <select
+              name="gender"
+              value={form.gender}
+              onChange={(e) => setForm({...form, gender: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Non-binary">Non-binary</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-sm">Social Link</label>
+            <div className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 text-gray-600 truncate">
+              {form.social_link || "Auto-generated"}
+            </div>
+          </div>
+
+        </div>
+
+
+        <div className="flex justify-end gap-3 sm:gap-4 pt-4 sm:pt-6 border-t">
           <button
             onClick={handleCancel}
             className="h-10 px-5 text-sm font-medium rounded-lg border border-gray-300 
                        text-gray-600 hover:bg-gray-100"
           >
-            Cancel
+            Back
           </button>
 
           <button
@@ -183,10 +235,7 @@ export default function AddInstagramInfluencer({ close }: any) {
           >
             Save
           </button>
-
         </div>
-
-      </div>
 
     </div>
   )
