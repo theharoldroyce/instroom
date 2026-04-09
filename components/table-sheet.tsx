@@ -46,6 +46,9 @@ import {
   IconAddressBook,
   IconChecklist,
   IconClock,
+  IconCopy,
+  IconAlertCircle,
+  IconAlertTriangle,
 } from "@tabler/icons-react"
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -62,7 +65,6 @@ export type InfluencerRow = {
   niche: string
   contact_status: string
   stage: string
-  outreach_method: string
   agreed_rate: string
   notes: string
   custom: Record<string, string>
@@ -74,6 +76,7 @@ export type InfluencerRow = {
   approval_status?: "Approved" | "Declined" | "Pending"
   transferred_date?: string
   approval_notes?: string
+  decline_reason?: string
 }
 
 export type CustomColumn = {
@@ -89,7 +92,8 @@ export type CustomColumn = {
     | "boolean"
     | "url"
   field_options?: string[]
-  assignedGroup?: "Influencer Details" | "Approval Details" | "Outreach Details"
+  assignedGroup: "Influencer Details" | "Approval Details" | "Outreach Details"
+  description?: string
 }
 
 type CellAddress = { rowIdx: number; colIdx: number }
@@ -114,7 +118,7 @@ type CustomColDef = {
   isCustom: true
   customId: string
   fieldKey: string
-  assignedGroup?: "Influencer Details" | "Approval Details" | "Outreach Details"
+  assignedGroup: "Influencer Details" | "Approval Details" | "Outreach Details"
 }
 
 type AnyColDef = ColDef | CustomColDef
@@ -137,10 +141,12 @@ const STATIC_COLS: ColDef[] = [
   { key: "transferred_date", label: "Transferred Date", group: "Approval Details", minWidth: 140, type: "date" },
   { key: "approval_notes", label: "Notes", group: "Approval Details", minWidth: 200, type: "text" },
   { key: "contact_status", label: "Status", group: "Outreach Details", minWidth: 120, type: "select", options: ["not_contacted", "contacted", "interested", "agreed"] },
-  { key: "outreach_method", label: "Outreach", group: "Outreach Details", minWidth: 110, type: "select", options: ["", "email", "dm", "phone", "whatsapp"] },
   { key: "agreed_rate", label: "Rate ($)", group: "Outreach Details", minWidth: 100, type: "number" },
   { key: "notes", label: "Notes", group: "Outreach Details", minWidth: 200, type: "text" },
 ]
+
+// Outreach-related field keys (removed outreach_method)
+const OUTREACH_FIELDS = new Set(["contact_status", "stage", "agreed_rate", "notes"])
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    PLATFORM ICONS & URL MAP
@@ -182,9 +188,9 @@ function newEmptyRow(customCols: CustomColumn[]): InfluencerRow {
   return {
     id: crypto.randomUUID(), handle: "@", platform: "instagram", full_name: "", email: "",
     follower_count: "", engagement_rate: "", niche: "", contact_status: "not_contacted",
-    stage: "1", outreach_method: "", agreed_rate: "", notes: "", custom,
+    stage: "1", agreed_rate: "", notes: "", custom,
     gender: "", location: "", social_link: "", first_name: "", contact_info: "",
-    approval_status: "Pending", transferred_date: "", approval_notes: "",
+    approval_status: "Pending", transferred_date: "", approval_notes: "", decline_reason: "",
   }
 }
 
@@ -214,14 +220,124 @@ function normalizeUrl(str: string): string {
   if (!str) return ""; return str.startsWith("http") ? str : `https://${str}`
 }
 
-const handleApprovalChange = (row: InfluencerRow, newStatus: string): InfluencerRow => {
+const handleApprovalChange = (row: InfluencerRow, newStatus: string, declineReason?: string): InfluencerRow => {
   const r = { ...row }
   if (newStatus === "Approved" && row.approval_status !== "Approved") {
     const t = new Date()
     r.transferred_date = [t.getFullYear(), String(t.getMonth() + 1).padStart(2, "0"), String(t.getDate()).padStart(2, "0")].join("-")
-  } else if (newStatus !== "Approved") { r.transferred_date = "" }
+  } else if (newStatus !== "Approved") { 
+    r.transferred_date = "" 
+  }
+  
+  // If changing to Declined, clear outreach fields and set decline reason
+  if (newStatus === "Declined" && row.approval_status !== "Declined") {
+    r.contact_status = "not_contacted"
+    r.stage = "1"
+    r.agreed_rate = ""
+    r.notes = ""
+    if (declineReason) {
+      r.approval_notes = declineReason
+      r.decline_reason = declineReason
+    }
+  }
+  
   r.approval_status = newStatus as "Approved" | "Declined" | "Pending"
   return r
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   CONFIRMATION DIALOG COMPONENT
+   ═══════════════════════════════════════════════════════════════════════════════ */
+interface ConfirmationDialogProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+  title: string
+  message: ReactNode
+  confirmText?: string
+  cancelText?: string
+  variant?: "danger" | "warning" | "info"
+}
+
+function ConfirmationDialog({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  title, 
+  message, 
+  confirmText = "Confirm", 
+  cancelText = "Cancel",
+  variant = "danger"
+}: ConfirmationDialogProps) {
+  const variantStyles = {
+    danger: {
+      icon: IconAlertTriangle,
+      iconBg: "bg-red-100",
+      iconColor: "text-red-600",
+      buttonBg: "bg-red-600 hover:bg-red-700",
+      ringColor: "focus:ring-red-400"
+    },
+    warning: {
+      icon: IconAlertCircle,
+      iconBg: "bg-amber-100",
+      iconColor: "text-amber-600",
+      buttonBg: "bg-amber-600 hover:bg-amber-700",
+      ringColor: "focus:ring-amber-400"
+    },
+    info: {
+      icon: IconAlertCircle,
+      iconBg: "bg-blue-100",
+      iconColor: "text-blue-600",
+      buttonBg: "bg-blue-600 hover:bg-blue-700",
+      ringColor: "focus:ring-blue-400"
+    }
+  }
+  
+  const styles = variantStyles[variant]
+  const IconComponent = styles.icon
+  
+  useEffect(() => {
+    if (isOpen) {
+      const handleEscape = (e: globalThis.KeyboardEvent) => {
+        if (e.key === "Escape") onClose()
+      }
+      document.addEventListener("keydown", handleEscape)
+      return () => document.removeEventListener("keydown", handleEscape)
+    }
+  }, [isOpen, onClose])
+  
+  if (!isOpen) return null
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-xl w-[420px] p-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className={`p-2 ${styles.iconBg} rounded-full flex-shrink-0`}>
+            <IconComponent size={24} className={styles.iconColor} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            <div className="text-sm text-gray-500 mt-1">{message}</div>
+          </div>
+        </div>
+        
+        <div className="flex gap-3 mt-6">
+          <button 
+            onClick={onClose} 
+            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
+          >
+            {cancelText}
+          </button>
+          <button 
+            onClick={() => { onConfirm(); onClose() }}
+            className={`flex-1 px-4 py-2 rounded-lg text-white text-sm transition flex items-center justify-center gap-1.5 ${styles.buttonBg}`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -361,6 +477,226 @@ function PlatformEditor({ value, onChange, onClose }: { value: string; onChange:
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
+   ADD ROWS MODAL
+   ═══════════════════════════════════════════════════════════════════════════════ */
+function AddRowsModal({ isOpen, onClose, onAdd, selectedCount }: { isOpen: boolean; onClose: () => void; onAdd: (count: number) => void; selectedCount: number }) {
+  const [count, setCount] = useState(5)
+  const [insertPosition, setInsertPosition] = useState<"end" | "after-selection">(selectedCount > 0 ? "after-selection" : "end")
+  
+  if (!isOpen) return null
+  
+  const handleAdd = () => {
+    onAdd(count)
+    onClose()
+  }
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="bg-white rounded-2xl shadow-xl w-[400px] p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Add Multiple Rows</h3>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600"><IconX size={20}/></button>
+        </div>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Number of rows to add</label>
+            <div className="flex items-center gap-2">
+              <input 
+                type="number" 
+                min="1" 
+                max="100" 
+                value={count} 
+                onChange={e => setCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none text-center"
+              />
+              <span className="text-sm text-gray-500">rows</span>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Insert position</label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="position" 
+                  value="end" 
+                  checked={insertPosition === "end"} 
+                  onChange={() => setInsertPosition("end")}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm text-gray-700">At the end of the table</span>
+              </label>
+              <label className={`flex items-center gap-2 ${selectedCount === 0 ? 'opacity-50' : 'cursor-pointer'}`}>
+                <input 
+                  type="radio" 
+                  name="position" 
+                  value="after-selection" 
+                  checked={insertPosition === "after-selection"} 
+                  onChange={() => setInsertPosition("after-selection")}
+                  disabled={selectedCount === 0}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm text-gray-700">
+                  After selected rows 
+                  {selectedCount > 0 && <span className="ml-1 text-xs text-blue-600">({selectedCount} selected)</span>}
+                  {selectedCount === 0 && <span className="ml-1 text-xs text-gray-400">(no rows selected)</span>}
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex gap-3 mt-6">
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">
+            Cancel
+          </button>
+          <button onClick={handleAdd} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition flex items-center justify-center gap-1.5">
+            <IconPlus size={16} />
+            Add {count} {count === 1 ? 'Row' : 'Rows'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   DECLINE CONFIRMATION MODAL
+   ═══════════════════════════════════════════════════════════════════════════════ */
+function DeclineConfirmationModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  influencerName 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onConfirm: (reason: string) => void; 
+  influencerName: string;
+}) {
+  const [declineReason, setDeclineReason] = useState("")
+  const [error, setError] = useState("")
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  
+  useEffect(() => {
+    if (isOpen) {
+      setDeclineReason("")
+      setError("")
+      setTimeout(() => inputRef.current?.focus(), 100)
+    }
+  }, [isOpen])
+  
+  if (!isOpen) return null
+  
+  const handleConfirm = () => {
+    if (!declineReason.trim()) {
+      setError("Please provide a reason for declining")
+      return
+    }
+    onConfirm(declineReason.trim())
+    onClose()
+  }
+  
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && e.ctrlKey) {
+      e.preventDefault()
+      handleConfirm()
+    }
+    if (e.key === "Escape") {
+      onClose()
+    }
+  }
+
+    const handleSkip = () => {
+    onConfirm("")
+    onClose()
+  }
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="bg-white rounded-2xl shadow-xl w-[450px] p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-red-100 rounded-full">
+            <IconAlertTriangle size={24} className="text-red-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Decline Influencer</h3>
+            <p className="text-sm text-gray-500">You are about to decline <span className="font-medium text-gray-700">{influencerName || "this influencer"}</span></p>
+          </div>
+        </div>
+        
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Reason for declining <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              ref={inputRef}
+              value={declineReason}
+              onChange={(e) => {
+                setDeclineReason(e.target.value)
+                setError("")
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="e.g., Budget constraints, Not a good fit, Already partnered with competitor..."
+              rows={4}
+              className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-red-400 outline-none resize-none ${
+                error ? "border-red-300 bg-red-50" : "border-gray-200"
+              }`}
+            />
+            {error && (
+              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                <IconAlertCircle size={12} />
+                {error}
+              </p>
+            )}
+            <p className="text-xs text-gray-400 mt-1">
+              This reason will be saved in the approval notes for future reference.
+            </p>
+          </div>
+          
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <p className="text-xs text-amber-800">
+              <span className="font-medium">Note:</span> Declining this influencer will disable all outreach fields and clear any existing outreach data.
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex gap-3 mt-6">
+          
+                    <button 
+            onClick={handleSkip}
+            className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition"
+            title="Skip adding a reason (not recommended)"
+          >
+            Skip
+          </button>s
+          <button 
+            onClick={onClose} 
+            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleConfirm}
+            className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700 transition flex items-center justify-center gap-1.5"
+          >
+            <IconX size={16} />
+            Confirm Decline
+          </button>
+        </div>
+        
+        <p className="text-xs text-gray-400 text-center mt-3">
+          Press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-200 text-[10px] font-mono">Ctrl + Enter</kbd> to confirm
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
    DETAIL SECTION
    ═══════════════════════════════════════════════════════════════════════════════ */
 interface DetailSectionProps {
@@ -370,21 +706,36 @@ interface DetailSectionProps {
 function DetailSection({ row, customCols, onUpdate, onClose, readOnly=false, showEmptyState=true, emptyStateMessage="Select a row to view details" }: DetailSectionProps) {
   const [editMode, setEditMode] = useState(false)
   const [editedRow, setEditedRow] = useState<InfluencerRow|null>(row?{...row}:null)
-  useEffect(() => { if(row){setEditedRow({...row});setEditMode(false)} }, [row])
+  const [showDeclineWarning, setShowDeclineWarning] = useState(false)
+  const [showDeclineModal, setShowDeclineModal] = useState(false)
+  const [pendingDecline, setPendingDecline] = useState(false)
+  
+  useEffect(() => { if(row){setEditedRow({...row});setEditMode(false);setShowDeclineWarning(false);setPendingDecline(false)} }, [row])
 
   if (!row || !editedRow) {
     if (!showEmptyState) return null
     return <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 text-center"><div className="flex flex-col items-center gap-3"><IconUserCircle size={48} className="text-gray-300"/><p className="text-gray-400">{emptyStateMessage}</p><p className="text-xs text-gray-300 mt-1">Click on any row to see influencer details</p></div></div>
   }
 
+  const isDeclined = editedRow.approval_status === "Declined"
+  const outreachDisabled = isDeclined && !editMode
+
   const handleFieldChange = (field: string, value: string) => {
     if (!editedRow) return
-    if (field.startsWith("custom.")) {
+    
+    if (field === "approval_status") {
+      if (value === "Declined") {
+        // Show decline modal instead of immediately changing
+        setPendingDecline(true)
+        setShowDeclineModal(true)
+        return
+      } else {
+        setShowDeclineWarning(false)
+        setEditedRow(handleApprovalChange(editedRow, value))
+      }
+    } else if (field.startsWith("custom.")) {
       setEditedRow({...editedRow,custom:{...editedRow.custom,[field.slice(7)]:value}})
-    } else if (field === "approval_status") {
-      setEditedRow(handleApprovalChange(editedRow, value))
     } else if (field === "handle" || field === "platform") {
-      // Auto-update social_link when handle/platform changes in detail panel
       const newHandle = field === "handle" ? value : editedRow.handle
       const newPlatform = field === "platform" ? value : editedRow.platform
       const oldUrl = getProfileUrl(editedRow.platform, editedRow.handle)
@@ -400,84 +751,209 @@ function DetailSection({ row, customCols, onUpdate, onClose, readOnly=false, sho
     }
   }
 
-  const handleSave = () => { onUpdate(editedRow); setEditMode(false) }
-  const handleCancel = () => { if(row) setEditedRow({...row}); setEditMode(false) }
+  const handleDeclineConfirm = (reason: string) => {
+    if (!editedRow) return
+    setEditedRow(handleApprovalChange(editedRow, "Declined", reason))
+    setShowDeclineWarning(false)
+    setPendingDecline(false)
+  }
+
+  const handleDeclineCancel = () => {
+    setShowDeclineModal(false)
+    setPendingDecline(false)
+  }
+
+  const handleSave = () => {
+    if (editedRow.approval_status === "Declined" && !editedRow.decline_reason?.trim()) {
+      alert("Please provide a reason for declining this influencer in the approval notes.")
+      return
+    }
+    onUpdate(editedRow)
+    setEditMode(false)
+    setShowDeclineWarning(false)
+  }
+  
+  const handleCancel = () => { if(row) setEditedRow({...row}); setEditMode(false); setShowDeclineWarning(false) }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-        <div className="flex items-center gap-3">
-          <div className="p-1.5 bg-blue-100 rounded-lg"><IconUserCircle size={20} className="text-blue-600"/></div>
-          <h3 className="font-semibold text-gray-800">{editedRow.full_name||editedRow.handle||"Influencer Details"}</h3>
+    <>
+      <DeclineConfirmationModal 
+        isOpen={showDeclineModal}
+        onClose={handleDeclineCancel}
+        onConfirm={handleDeclineConfirm}
+        influencerName={editedRow.full_name || editedRow.handle || "this influencer"}
+      />
+      
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 bg-blue-100 rounded-lg"><IconUserCircle size={20} className="text-blue-600"/></div>
+            <h3 className="font-semibold text-gray-800">{editedRow.full_name||editedRow.handle||"Influencer Details"}</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {!readOnly && (<>{editMode ? (<>
+              <button onClick={handleCancel} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancel</button>
+              <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><IconDeviceFloppy size={14}/> Save</button>
+            </>) : (
+              <button onClick={()=>setEditMode(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"><IconEdit size={14}/> Edit</button>
+            )}</>)}
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"><IconX size={18}/></button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {!readOnly && (<>{editMode ? (<>
-            <button onClick={handleCancel} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition">Cancel</button>
-            <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"><IconDeviceFloppy size={14}/> Save</button>
-          </>) : (
-            <button onClick={()=>setEditMode(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"><IconEdit size={14}/> Edit</button>
-          )}</>)}
-          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"><IconX size={18}/></button>
-        </div>
-      </div>
-      <div className="p-4 max-h-[60vh] overflow-y-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Influencer Details */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-100"><IconUsers size={14} className="text-blue-500"/><h4 className="font-medium text-sm text-gray-700">Influencer Details</h4></div>
-            <div><label className="text-xs text-gray-400 block mb-1">Handle</label>{editMode?<input type="text" value={editedRow.handle} onChange={e=>handleFieldChange("handle",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><PlatformIcon platform={editedRow.platform} size={16} className="text-gray-500"/><span className="text-sm text-gray-800">{editedRow.handle}</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Platform</label>{editMode?<select value={editedRow.platform} onChange={e=>handleFieldChange("platform",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="twitter">Twitter/X</option><option value="other">Other</option></select>:<div className="flex items-center gap-2"><PlatformIcon platform={editedRow.platform} size={16} className="text-gray-500"/><span className="text-sm text-gray-800 capitalize">{editedRow.platform}</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Niche</label>{editMode?<input type="text" value={editedRow.niche} onChange={e=>handleFieldChange("niche",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconTags size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.niche||"—"}</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Gender</label>{editMode?<select value={editedRow.gender||""} onChange={e=>handleFieldChange("gender",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="">Select gender</option><option value="Male">Male</option><option value="Female">Female</option><option value="Non-binary">Non-binary</option><option value="Other">Other</option></select>:<div className="flex items-center gap-2"><IconUser size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.gender||"—"}</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Location</label>{editMode?<input type="text" value={editedRow.location||""} onChange={e=>handleFieldChange("location",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconMapPin size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.location||"—"}</span></div>}</div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs text-gray-400 block mb-1">Follower Count</label>{editMode?<input type="number" value={editedRow.follower_count} onChange={e=>handleFieldChange("follower_count",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<p className="text-sm text-gray-800">{Number(editedRow.follower_count).toLocaleString()||"—"}</p>}</div>
-              <div><label className="text-xs text-gray-400 block mb-1">Engagement Rate</label>{editMode?<input type="number" step="0.1" value={editedRow.engagement_rate} onChange={e=>handleFieldChange("engagement_rate",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<p className="text-sm text-gray-800">{editedRow.engagement_rate?`${editedRow.engagement_rate}%`:"—"}</p>}</div>
+        
+        {showDeclineWarning && (
+          <div className="mx-4 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+            <IconAlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800">Please provide a reason for declining this influencer in the approval notes below.</p>
+          </div>
+        )}
+        
+        <div className="p-4 max-h-[60vh] overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Influencer Details */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b border-gray-100"><IconUsers size={14} className="text-blue-500"/><h4 className="font-medium text-sm text-gray-700">Influencer Details</h4></div>
+              <div><label className="text-xs text-gray-400 block mb-1">Handle</label>{editMode?<input type="text" value={editedRow.handle} onChange={e=>handleFieldChange("handle",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><PlatformIcon platform={editedRow.platform} size={16} className="text-gray-500"/><span className="text-sm text-gray-800">{editedRow.handle}</span></div>}</div>
+              <div><label className="text-xs text-gray-400 block mb-1">Platform</label>{editMode?<select value={editedRow.platform} onChange={e=>handleFieldChange("platform",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="twitter">Twitter/X</option><option value="other">Other</option></select>:<div className="flex items-center gap-2"><PlatformIcon platform={editedRow.platform} size={16} className="text-gray-500"/><span className="text-sm text-gray-800 capitalize">{editedRow.platform}</span></div>}</div>
+              <div><label className="text-xs text-gray-400 block mb-1">Niche</label>{editMode?<input type="text" value={editedRow.niche} onChange={e=>handleFieldChange("niche",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconTags size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.niche||"—"}</span></div>}</div>
+              <div><label className="text-xs text-gray-400 block mb-1">Gender</label>{editMode?<select value={editedRow.gender||""} onChange={e=>handleFieldChange("gender",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="">Select gender</option><option value="Male">Male</option><option value="Female">Female</option><option value="Non-binary">Non-binary</option><option value="Other">Other</option></select>:<div className="flex items-center gap-2"><IconUser size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.gender||"—"}</span></div>}</div>
+              <div><label className="text-xs text-gray-400 block mb-1">Location</label>{editMode?<input type="text" value={editedRow.location||""} onChange={e=>handleFieldChange("location",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconMapPin size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.location||"—"}</span></div>}</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-xs text-gray-400 block mb-1">Follower Count</label>{editMode?<input type="number" value={editedRow.follower_count} onChange={e=>handleFieldChange("follower_count",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<p className="text-sm text-gray-800">{Number(editedRow.follower_count).toLocaleString()||"—"}</p>}</div>
+                <div><label className="text-xs text-gray-400 block mb-1">Engagement Rate</label>{editMode?<input type="number" step="0.1" value={editedRow.engagement_rate} onChange={e=>handleFieldChange("engagement_rate",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<p className="text-sm text-gray-800">{editedRow.engagement_rate?`${editedRow.engagement_rate}%`:"—"}</p>}</div>
+              </div>
+              <div><label className="text-xs text-gray-400 block mb-1">Social Link</label>{editMode?<input type="url" value={editedRow.social_link||""} onChange={e=>handleFieldChange("social_link",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none" placeholder="https://..."/>:(editedRow.social_link?<a href={normalizeUrl(editedRow.social_link)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline group">
+                <IconLink size={14} className="flex-shrink-0"/>
+                <span className="truncate max-w-[200px]">{editedRow.social_link}</span>
+                <IconExternalLink size={12} className="flex-shrink-0 opacity-60 group-hover:opacity-100 transition" />
+              </a>:<span className="text-sm text-gray-400">—</span>)}</div>
+              <div><label className="text-xs text-gray-400 block mb-1">First Name</label>{editMode?<input type="text" value={editedRow.first_name||""} onChange={e=>handleFieldChange("first_name",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconUser size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.first_name||"—"}</span></div>}</div>
+              <div><label className="text-xs text-gray-400 block mb-1">Contact Info</label>{editMode?<input type="text" value={editedRow.contact_info||""} onChange={e=>handleFieldChange("contact_info",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconAddressBook size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.contact_info||"—"}</span></div>}</div>
             </div>
-            <div><label className="text-xs text-gray-400 block mb-1">Social Link</label>{editMode?<input type="url" value={editedRow.social_link||""} onChange={e=>handleFieldChange("social_link",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none" placeholder="https://..."/>:(editedRow.social_link?<a href={normalizeUrl(editedRow.social_link)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-blue-600 hover:underline"><IconLink size={14}/>{editedRow.social_link}</a>:<span className="text-sm text-gray-400">—</span>)}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">First Name</label>{editMode?<input type="text" value={editedRow.first_name||""} onChange={e=>handleFieldChange("first_name",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconUser size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.first_name||"—"}</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Contact Info</label>{editMode?<input type="text" value={editedRow.contact_info||""} onChange={e=>handleFieldChange("contact_info",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconAddressBook size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.contact_info||"—"}</span></div>}</div>
-          </div>
-          <div className="space-y-3">
-            {/* Approval Details */}
-            <div className="flex items-center gap-2 pb-2 border-b border-gray-100"><IconChecklist size={14} className="text-purple-500"/><h4 className="font-medium text-sm text-gray-700">Approval Details</h4></div>
-            <div><label className="text-xs text-gray-400 block mb-1">Approve/Decline</label>{editMode?<select value={editedRow.approval_status||"Pending"} onChange={e=>handleFieldChange("approval_status",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Declined">Declined</option></select>:<ApprovalBadge value={editedRow.approval_status||"Pending"}/>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Transferred Date</label>{editMode?<input type="date" value={editedRow.transferred_date||""} onChange={e=>handleFieldChange("transferred_date",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconClock size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.transferred_date?new Date(editedRow.transferred_date).toLocaleDateString():"—"}</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Notes</label>{editMode?<textarea value={editedRow.approval_notes||""} onChange={e=>handleFieldChange("approval_notes",e.target.value)} rows={2} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none resize-none" placeholder="Add approval notes..."/>:<p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg min-h-[60px]">{editedRow.approval_notes||"No notes added"}</p>}</div>
-            {/* Outreach Details */}
-            <div className="flex items-center gap-2 pt-2 pb-1 border-b border-gray-100"><IconChartBar size={14} className="text-emerald-500"/><h4 className="font-medium text-sm text-gray-700">Outreach Details</h4></div>
-            <div><label className="text-xs text-gray-400 block mb-1">Status</label>{editMode?<select value={editedRow.contact_status} onChange={e=>handleFieldChange("contact_status",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="not_contacted">Not Contacted</option><option value="contacted">Contacted</option><option value="interested">Interested</option><option value="agreed">Agreed</option></select>:<StatusBadge value={editedRow.contact_status}/>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Stage</label>{editMode?<input type="number" min="1" max="5" value={editedRow.stage} onChange={e=>handleFieldChange("stage",e.target.value)} className="w-24 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{width:`${(parseInt(editedRow.stage)||1)*20}%`}}/></div><span className="text-sm text-gray-600">Stage {editedRow.stage}/5</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Outreach Method</label>{editMode?<select value={editedRow.outreach_method} onChange={e=>handleFieldChange("outreach_method",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="">Select method</option><option value="email">Email</option><option value="dm">Direct Message</option><option value="phone">Phone</option><option value="whatsapp">WhatsApp</option></select>:<div className="flex items-center gap-2"><IconPhone size={14} className="text-gray-400"/><span className="text-sm text-gray-800 capitalize">{editedRow.outreach_method||"—"}</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Agreed Rate</label>{editMode?<input type="number" value={editedRow.agreed_rate} onChange={e=>handleFieldChange("agreed_rate",e.target.value)} className="w-32 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconCurrencyDollar size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.agreed_rate?`$${Number(editedRow.agreed_rate).toLocaleString()}`:"—"}</span></div>}</div>
-            <div><label className="text-xs text-gray-400 block mb-1">Notes</label>{editMode?<textarea value={editedRow.notes} onChange={e=>handleFieldChange("notes",e.target.value)} rows={3} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none resize-none" placeholder="Add notes..."/>:<p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg min-h-[60px]">{editedRow.notes||"No notes added"}</p>}</div>
-            {/* Custom Fields */}
-            {customCols.length > 0 && (<>
-              <div className="flex items-center gap-2 pt-2 pb-1 border-b border-gray-100"><IconFileText size={14} className="text-gray-500"/><h4 className="font-medium text-sm text-gray-700">Custom Fields</h4></div>
-              {customCols.map((col) => {
-                const val = editedRow.custom[col.field_key]||""
-                return <div key={col.id}><label className="text-xs text-gray-400 block mb-1">{col.field_name}</label>
-                  {editMode ? (
-                    col.field_type==="boolean"?<select value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="No">No</option><option value="Yes">Yes</option></select>
-                    :col.field_type==="dropdown"?<select value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="">— Select —</option>{col.field_options?.map(o=><option key={o} value={o}>{o}</option>)}</select>
-                    :col.field_type==="multi-select"?<input type="text" value={val} placeholder="Comma-separated values" onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>
-                    :col.field_type==="date"?<input type="date" value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>
-                    :<input type={col.field_type==="number"?"number":"text"} value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      {col.field_type==="boolean"?<span className={`px-2 py-0.5 rounded-full text-xs font-medium ${val==="Yes"?"bg-green-100 text-green-700":"bg-red-100 text-red-600"}`}>{val||"No"}</span>
-                      :col.field_type==="multi-select"?<MultiSelectDisplay value={val}/>
-                      :col.field_type==="url"&&val?<a href={normalizeUrl(val)} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate">{val}</a>
-                      :<p className="text-sm text-gray-800">{val||"—"}</p>}
+            <div className="space-y-3">
+              {/* Approval Details */}
+              <div className="flex items-center gap-2 pb-2 border-b border-gray-100"><IconChecklist size={14} className="text-purple-500"/><h4 className="font-medium text-sm text-gray-700">Approval Details</h4></div>
+              <div><label className="text-xs text-gray-400 block mb-1">Approve/Decline</label>{editMode?<select value={editedRow.approval_status||"Pending"} onChange={e=>handleFieldChange("approval_status",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Declined">Declined</option></select>:<ApprovalBadge value={editedRow.approval_status||"Pending"}/>}</div>
+              <div><label className="text-xs text-gray-400 block mb-1">Transferred Date</label>{editMode?<input type="date" value={editedRow.transferred_date||""} onChange={e=>handleFieldChange("transferred_date",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none"/>:<div className="flex items-center gap-2"><IconClock size={14} className="text-gray-400"/><span className="text-sm text-gray-800">{editedRow.transferred_date?new Date(editedRow.transferred_date).toLocaleDateString():"—"}</span></div>}</div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">
+                  Notes {editedRow.approval_status === "Declined" && <span className="text-red-500">*</span>}
+                </label>
+                {editMode ? (
+                  <textarea 
+                    value={editedRow.approval_notes||""} 
+                    onChange={e => {
+                      handleFieldChange("approval_notes", e.target.value)
+                      handleFieldChange("decline_reason", e.target.value)
+                    }} 
+                    rows={2} 
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-400 outline-none resize-none ${
+                      editedRow.approval_status === "Declined" && !editedRow.approval_notes?.trim() 
+                        ? "border-red-300 bg-red-50" 
+                        : "border-gray-200"
+                    }`} 
+                    placeholder={editedRow.approval_status === "Declined" ? "Required: Provide reason for declining..." : "Add approval notes..."}
+                  />
+                ) : (
+                  <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg min-h-[60px]">{editedRow.approval_notes||"No notes added"}</p>
+                )}
+              </div>
+              
+              {/* Outreach Details */}
+              <div className="flex items-center gap-2 pt-2 pb-1 border-b border-gray-100">
+                <IconChartBar size={14} className={`${outreachDisabled ? 'text-gray-400' : 'text-emerald-500'}`}/>
+                <h4 className={`font-medium text-sm ${outreachDisabled ? 'text-gray-400' : 'text-gray-700'}`}>Outreach Details</h4>
+                {outreachDisabled && <span className="text-xs text-gray-400 ml-auto">(Disabled - Influencer Declined)</span>}
+              </div>
+              
+              <div className={`${outreachDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
+                <label className="text-xs text-gray-400 block mb-1">Status</label>
+                {editMode ? (
+                  <select value={editedRow.contact_status} onChange={e=>handleFieldChange("contact_status",e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none bg-white">
+                    <option value="not_contacted">Not Contacted</option>
+                    <option value="contacted">Contacted</option>
+                    <option value="interested">Interested</option>
+                    <option value="agreed">Agreed</option>
+                  </select>
+                ) : (
+                  <StatusBadge value={editedRow.contact_status}/>
+                )}
+              </div>
+              
+              <div className={`${outreachDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
+                <label className="text-xs text-gray-400 block mb-1">Stage</label>
+                {editMode ? (
+                  <input type="number" min="1" max="5" value={editedRow.stage} onChange={e=>handleFieldChange("stage",e.target.value)} className="w-24 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none bg-white"/>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{width:`${(parseInt(editedRow.stage)||1)*20}%`}}/>
                     </div>
-                  )}
-                </div>
-              })}
-            </>)}
+                    <span className="text-sm text-gray-600">Stage {editedRow.stage}/5</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className={`${outreachDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
+                <label className="text-xs text-gray-400 block mb-1">Agreed Rate</label>
+                {editMode ? (
+                  <input type="number" value={editedRow.agreed_rate} onChange={e=>handleFieldChange("agreed_rate",e.target.value)} className="w-32 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none bg-white"/>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <IconCurrencyDollar size={14} className="text-gray-400"/>
+                    <span className="text-sm text-gray-800">{editedRow.agreed_rate?`$${Number(editedRow.agreed_rate).toLocaleString()}`:"—"}</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className={`${outreachDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
+                <label className="text-xs text-gray-400 block mb-1">Notes</label>
+                {editMode ? (
+                  <textarea value={editedRow.notes} onChange={e=>handleFieldChange("notes",e.target.value)} rows={3} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none resize-none bg-white" placeholder="Add notes..."/>
+                ) : (
+                  <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg min-h-[60px]">{editedRow.notes||"No notes added"}</p>
+                )}
+              </div>
+              
+              {/* Custom Fields */}
+              {customCols.length > 0 && (<>
+                <div className="flex items-center gap-2 pt-2 pb-1 border-b border-gray-100"><IconFileText size={14} className="text-gray-500"/><h4 className="font-medium text-sm text-gray-700">Custom Fields</h4></div>
+                {customCols.map((col) => {
+                  const val = editedRow.custom[col.field_key]||""
+                  const isOutreachCustom = col.assignedGroup === "Outreach Details"
+                  const disabled = outreachDisabled && isOutreachCustom
+                  
+                  return <div key={col.id} className={`${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
+                    <label className="text-xs text-gray-400 block mb-1">
+                      {col.field_name}
+                      {col.description && <span className="ml-1 text-gray-400" title={col.description}>ⓘ</span>}
+                    </label>
+                    {editMode ? (
+                      col.field_type==="boolean"?<select value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none bg-white"><option value="No">No</option><option value="Yes">Yes</option></select>
+                      :col.field_type==="dropdown"?<select value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none bg-white"><option value="">— Select —</option>{col.field_options?.map(o=><option key={o} value={o}>{o}</option>)}</select>
+                      :col.field_type==="multi-select"?<input type="text" value={val} placeholder="Comma-separated values" onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none bg-white"/>
+                      :col.field_type==="date"?<input type="date" value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none bg-white"/>
+                      :<input type={col.field_type==="number"?"number":"text"} value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none bg-white"/>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {col.field_type==="boolean"?<span className={`px-2 py-0.5 rounded-full text-xs font-medium ${val==="Yes"?"bg-green-100 text-green-700":"bg-red-100 text-red-600"}`}>{val||"No"}</span>
+                        :col.field_type==="multi-select"?<MultiSelectDisplay value={val}/>
+                        :col.field_type==="url"&&val?<a href={normalizeUrl(val)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline group">
+                            <IconLink size={14} className="flex-shrink-0"/>
+                            <span className="truncate max-w-[150px]">{val}</span>
+                            <IconExternalLink size={12} className="flex-shrink-0 opacity-60 group-hover:opacity-100 transition"/>
+                          </a>
+                        :<p className="text-sm text-gray-800">{val||"—"}</p>}
+                      </div>
+                    )}
+                  </div>
+                })}
+              </>)}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -510,994 +986,9 @@ function FilterModal({ isOpen, onClose, onApplyFilter, onClearFilter, currentFil
    MOCK DATA
    ═══════════════════════════════════════════════════════════════════════════════ */
 const MOCK_ROWS: InfluencerRow[] = [
-  { id:"mock-1", handle:"@prettyliv", platform:"instagram", full_name:"Liv Santos", email:"liv@example.com", follower_count:"245000", engagement_rate:"3.2", niche:"Beauty", contact_status:"contacted", stage:"2", outreach_method:"dm", agreed_rate:"500", notes:"Very responsive. Sent product for review.", custom:{}, gender:"Female", location:"Los Angeles, CA", social_link:"https://instagram.com/prettyliv", first_name:"Olivia", contact_info:"liv@example.com | +1 555-123-4567", approval_status:"Pending", transferred_date:"", approval_notes:"Awaiting contract signing" },
-  { id:"mock-2", handle:"@fitwithjay", platform:"tiktok", full_name:"Jay Kim", email:"jay@example.com", follower_count:"890000", engagement_rate:"5.8", niche:"Fitness", contact_status:"interested", stage:"3", outreach_method:"email", agreed_rate:"1200", notes:"Discussing deliverables for Q1 campaign", custom:{}, gender:"Male", location:"New York, NY", social_link:"https://tiktok.com/@fitwithjay", first_name:"Jay", contact_info:"jay@example.com | +1 555-987-6543", approval_status:"Approved", transferred_date:"2024-03-15", approval_notes:"Approved for Q1 campaign - contract signed" },
-  { id:"mock-3", handle:"@travelwithmar", platform:"youtube", full_name:"Marco Reyes", email:"marco@example.com", follower_count:"1200000", engagement_rate:"2.1", niche:"Travel", contact_status:"agreed", stage:"4", outreach_method:"email", agreed_rate:"2500", notes:"Contract signed for summer campaign", custom:{}, gender:"Male", location:"Miami, FL", social_link:"https://youtube.com/@travelwithmar", first_name:"Marco", contact_info:"marco@example.com | +1 555-456-7890", approval_status:"Declined", transferred_date:"", approval_notes:"Budget constraints for Q1 - reconsider for Q2" },
-  { id:"mock-4", handle:"@techsavvy", platform:"twitter", full_name:"Alex Chen", email:"alex@example.com", follower_count:"45000", engagement_rate:"4.5", niche:"Technology", contact_status:"not_contacted", stage:"1", outreach_method:"", agreed_rate:"", notes:"Potential for product review", custom:{}, gender:"Non-binary", location:"San Francisco, CA", social_link:"https://twitter.com/techsavvy", first_name:"Alex", contact_info:"alex@example.com", approval_status:"Pending", transferred_date:"", approval_notes:"" },
-  {
-    id: "mock-5",
-    handle: "@chefmaria",
-    platform: "instagram",
-    full_name: "Maria Garcia",
-    email: "maria@chefmaria.com",
-    follower_count: "125000",
-    engagement_rate: "4.2",
-    niche: "Food",
-    contact_status: "contacted",
-    stage: "2",
-    outreach_method: "email",
-    agreed_rate: "800",
-    notes: "Interested in recipe collaboration",
-    custom: {},
-    gender: "Female",
-    location: "Mexico City, MX",
-    social_link: "https://instagram.com/chefmaria",
-    first_name: "Maria",
-    contact_info: "maria@chefmaria.com | +52 55 1234 5678",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Waiting for contract",
-  },
-  {
-    id: "mock-6",
-    handle: "@gamermike",
-    platform: "youtube",
-    full_name: "Mike Johnson",
-    email: "mike@gamermike.com",
-    follower_count: "520000",
-    engagement_rate: "6.7",
-    niche: "Gaming",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "dm",
-    agreed_rate: "1500",
-    notes: "Great fit for gaming peripherals",
-    custom: {},
-    gender: "Male",
-    location: "Austin, TX",
-    social_link: "https://youtube.com/@gamermike",
-    first_name: "Michael",
-    contact_info: "mike@gamermike.com | +1 512-555-1234",
-    approval_status: "Approved",
-    transferred_date: "2024-03-20",
-    approval_notes: "Approved for Q2 campaign",
-  },
-  {
-    id: "mock-7",
-    handle: "@fashionnova",
-    platform: "instagram",
-    full_name: "Nova Williams",
-    email: "nova@fashionnova.com",
-    follower_count: "890000",
-    engagement_rate: "3.9",
-    niche: "Fashion",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "2200",
-    notes: "Signed for spring collection",
-    custom: {},
-    gender: "Female",
-    location: "New York, NY",
-    social_link: "https://instagram.com/fashionnova",
-    first_name: "Nova",
-    contact_info: "nova@fashionnova.com | +1 212-555-9876",
-    approval_status: "Approved",
-    transferred_date: "2024-03-10",
-    approval_notes: "Spring campaign confirmed",
-  },
-  {
-    id: "mock-8",
-    handle: "@dadlife",
-    platform: "tiktok",
-    full_name: "David Chen",
-    email: "david@dadlife.com",
-    follower_count: "345000",
-    engagement_rate: "8.2",
-    niche: "Parenting",
-    contact_status: "contacted",
-    stage: "2",
-    outreach_method: "dm",
-    agreed_rate: "600",
-    notes: "Family-friendly content creator",
-    custom: {},
-    gender: "Male",
-    location: "Seattle, WA",
-    social_link: "https://tiktok.com/@dadlife",
-    first_name: "David",
-    contact_info: "david@dadlife.com | +1 206-555-4567",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Negotiating rates",
-  },
-  {
-    id: "mock-9",
-    handle: "@greenliving",
-    platform: "youtube",
-    full_name: "Emma Green",
-    email: "emma@greenliving.com",
-    follower_count: "210000",
-    engagement_rate: "5.4",
-    niche: "Sustainability",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "email",
-    agreed_rate: "950",
-    notes: "Passionate about eco-friendly products",
-    custom: {},
-    gender: "Female",
-    location: "Portland, OR",
-    social_link: "https://youtube.com/@greenliving",
-    first_name: "Emma",
-    contact_info: "emma@greenliving.com | +1 503-555-7890",
-    approval_status: "Approved",
-    transferred_date: "2024-03-18",
-    approval_notes: "Earth Day campaign",
-  },
-  {
-    id: "mock-10",
-    handle: "@petlover",
-    platform: "instagram",
-    full_name: "Sarah Martinez",
-    email: "sarah@petlover.com",
-    follower_count: "567000",
-    engagement_rate: "7.1",
-    niche: "Pets",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "1100",
-    notes: "Multiple pets, great engagement",
-    custom: {},
-    gender: "Female",
-    location: "Denver, CO",
-    social_link: "https://instagram.com/petlover",
-    first_name: "Sarah",
-    contact_info: "sarah@petlover.com | +1 303-555-2345",
-    approval_status: "Approved",
-    transferred_date: "2024-03-05",
-    approval_notes: "Pet food campaign",
-  },
-  {
-    id: "mock-11",
-    handle: "@fitnessguru",
-    platform: "youtube",
-    full_name: "Chris Evans",
-    email: "chris@fitnessguru.com",
-    follower_count: "1250000",
-    engagement_rate: "4.8",
-    niche: "Fitness",
-    contact_status: "contacted",
-    stage: "1",
-    outreach_method: "email",
-    agreed_rate: "3000",
-    notes: "Top fitness influencer",
-    custom: {},
-    gender: "Male",
-    location: "Los Angeles, CA",
-    social_link: "https://youtube.com/@fitnessguru",
-    first_name: "Christopher",
-    contact_info: "chris@fitnessguru.com | +1 310-555-8765",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "High budget campaign",
-  },
-  {
-    id: "mock-12",
-    handle: "@bookworm",
-    platform: "tiktok",
-    full_name: "Rachel Kim",
-    email: "rachel@bookworm.com",
-    follower_count: "89000",
-    engagement_rate: "9.3",
-    niche: "Books",
-    contact_status: "interested",
-    stage: "2",
-    outreach_method: "dm",
-    agreed_rate: "300",
-    notes: "Book reviewer, high engagement",
-    custom: {},
-    gender: "Female",
-    location: "Chicago, IL",
-    social_link: "https://tiktok.com/@bookworm",
-    first_name: "Rachel",
-    contact_info: "rachel@bookworm.com | +1 312-555-3456",
-    approval_status: "Approved",
-    transferred_date: "2024-03-22",
-    approval_notes: "Book launch campaign",
-  },
-  {
-    id: "mock-13",
-    handle: "@travelbug",
-    platform: "instagram",
-    full_name: "James Wilson",
-    email: "james@travelbug.com",
-    follower_count: "432000",
-    engagement_rate: "3.5",
-    niche: "Travel",
-    contact_status: "contacted",
-    stage: "2",
-    outreach_method: "email",
-    agreed_rate: "1800",
-    notes: "Luxury travel content",
-    custom: {},
-    gender: "Male",
-    location: "London, UK",
-    social_link: "https://instagram.com/travelbug",
-    first_name: "James",
-    contact_info: "james@travelbug.com | +44 20 1234 5678",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Discussing collaboration",
-  },
-  {
-    id: "mock-14",
-    handle: "@makeupqueen",
-    platform: "youtube",
-    full_name: "Isabella Rose",
-    email: "isa@makeupqueen.com",
-    follower_count: "678000",
-    engagement_rate: "6.2",
-    niche: "Beauty",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "2000",
-    notes: "Makeup tutorials and reviews",
-    custom: {},
-    gender: "Female",
-    location: "Miami, FL",
-    social_link: "https://youtube.com/@makeupqueen",
-    first_name: "Isabella",
-    contact_info: "isa@makeupqueen.com | +1 305-555-9876",
-    approval_status: "Approved",
-    transferred_date: "2024-03-12",
-    approval_notes: "Cosmetics line campaign",
-  },
-  {
-    id: "mock-15",
-    handle: "@techreviews",
-    platform: "twitter",
-    full_name: "Alex Turner",
-    email: "alex@techreviews.com",
-    follower_count: "234000",
-    engagement_rate: "4.1",
-    niche: "Technology",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "email",
-    agreed_rate: "750",
-    notes: "Gadget reviewer",
-    custom: {},
-    gender: "Male",
-    location: "San Jose, CA",
-    social_link: "https://twitter.com/techreviews",
-    first_name: "Alexander",
-    contact_info: "alex@techreviews.com | +1 408-555-6543",
-    approval_status: "Approved",
-    transferred_date: "2024-03-19",
-    approval_notes: "New product launch",
-  },
-  {
-    id: "mock-16",
-    handle: "@mindfulness",
-    platform: "instagram",
-    full_name: "Priya Patel",
-    email: "priya@mindfulness.com",
-    follower_count: "156000",
-    engagement_rate: "5.9",
-    niche: "Wellness",
-    contact_status: "contacted",
-    stage: "1",
-    outreach_method: "dm",
-    agreed_rate: "500",
-    notes: "Meditation and wellness content",
-    custom: {},
-    gender: "Female",
-    location: "Toronto, ON",
-    social_link: "https://instagram.com/mindfulness",
-    first_name: "Priya",
-    contact_info: "priya@mindfulness.com | +1 416-555-7890",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Wellness campaign",
-  },
-  {
-    id: "mock-17",
-    handle: "@homechef",
-    platform: "tiktok",
-    full_name: "Lucas Rodriguez",
-    email: "lucas@homechef.com",
-    follower_count: "345000",
-    engagement_rate: "7.8",
-    niche: "Cooking",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "900",
-    notes: "Quick recipe videos",
-    custom: {},
-    gender: "Male",
-    location: "Barcelona, Spain",
-    social_link: "https://tiktok.com/@homechef",
-    first_name: "Lucas",
-    contact_info: "lucas@homechef.com | +34 93 1234 5678",
-    approval_status: "Approved",
-    transferred_date: "2024-03-08",
-    approval_notes: "Kitchen appliance campaign",
-  },
-  {
-    id: "mock-18",
-    handle: "@momlife",
-    platform: "instagram",
-    full_name: "Jessica Taylor",
-    email: "jessica@momlife.com",
-    follower_count: "287000",
-    engagement_rate: "6.5",
-    niche: "Parenting",
-    contact_status: "interested",
-    stage: "2",
-    outreach_method: "dm",
-    agreed_rate: "650",
-    notes: "Mom blogger with loyal following",
-    custom: {},
-    gender: "Female",
-    location: "Dallas, TX",
-    social_link: "https://instagram.com/momlife",
-    first_name: "Jessica",
-    contact_info: "jessica@momlife.com | +1 214-555-2345",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Baby products campaign",
-  },
-  {
-    id: "mock-19",
-    handle: "@artbymia",
-    platform: "youtube",
-    full_name: "Mia Wong",
-    email: "mia@artbymia.com",
-    follower_count: "98000",
-    engagement_rate: "8.9",
-    niche: "Art",
-    contact_status: "contacted",
-    stage: "1",
-    outreach_method: "email",
-    agreed_rate: "400",
-    notes: "Digital art tutorials",
-    custom: {},
-    gender: "Female",
-    location: "Vancouver, BC",
-    social_link: "https://youtube.com/@artbymia",
-    first_name: "Mia",
-    contact_info: "mia@artbymia.com | +1 604-555-4567",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Art supply partnership",
-  },
-  {
-    id: "mock-20",
-    handle: "@outdooradventures",
-    platform: "instagram",
-    full_name: "Ryan Murphy",
-    email: "ryan@outdooradventures.com",
-    follower_count: "423000",
-    engagement_rate: "4.7",
-    niche: "Outdoor",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "1400",
-    notes: "Hiking and camping content",
-    custom: {},
-    gender: "Male",
-    location: "Boulder, CO",
-    social_link: "https://instagram.com/outdooradventures",
-    first_name: "Ryan",
-    contact_info: "ryan@outdooradventures.com | +1 720-555-6789",
-    approval_status: "Approved",
-    transferred_date: "2024-03-14",
-    approval_notes: "Outdoor gear campaign",
-  },
-  {
-    id: "mock-21",
-    handle: "@streetstyle",
-    platform: "tiktok",
-    full_name: "Jordan Lee",
-    email: "jordan@streetstyle.com",
-    follower_count: "512000",
-    engagement_rate: "5.2",
-    niche: "Fashion",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "dm",
-    agreed_rate: "1100",
-    notes: "Streetwear influencer",
-    custom: {},
-    gender: "Non-binary",
-    location: "Brooklyn, NY",
-    social_link: "https://tiktok.com/@streetstyle",
-    first_name: "Jordan",
-    contact_info: "jordan@streetstyle.com | +1 718-555-3456",
-    approval_status: "Approved",
-    transferred_date: "2024-03-21",
-    approval_notes: "Streetwear collection",
-  },
-  {
-    id: "mock-22",
-    handle: "@plantmom",
-    platform: "instagram",
-    full_name: "Emma Watson",
-    email: "emma@plantmom.com",
-    follower_count: "187000",
-    engagement_rate: "7.3",
-    niche: "Gardening",
-    contact_status: "contacted",
-    stage: "2",
-    outreach_method: "email",
-    agreed_rate: "550",
-    notes: "Plant care and home decor",
-    custom: {},
-    gender: "Female",
-    location: "Austin, TX",
-    social_link: "https://instagram.com/plantmom",
-    first_name: "Emma",
-    contact_info: "emma@plantmom.com | +1 512-555-9876",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Home decor campaign",
-  },
-  {
-    id: "mock-23",
-    handle: "@fitnessfoodie",
-    platform: "youtube",
-    full_name: "Natalie Brooks",
-    email: "natalie@fitnessfoodie.com",
-    follower_count: "298000",
-    engagement_rate: "6.1",
-    niche: "Health",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "850",
-    notes: "Healthy recipes and workouts",
-    custom: {},
-    gender: "Female",
-    location: "San Diego, CA",
-    social_link: "https://youtube.com/@fitnessfoodie",
-    first_name: "Natalie",
-    contact_info: "natalie@fitnessfoodie.com | +1 619-555-2345",
-    approval_status: "Approved",
-    transferred_date: "2024-03-11",
-    approval_notes: "Health food campaign",
-  },
-  {
-    id: "mock-24",
-    handle: "@musicproducer",
-    platform: "twitter",
-    full_name: "DJ K-Swift",
-    email: "dj@musicproducer.com",
-    follower_count: "345000",
-    engagement_rate: "3.8",
-    niche: "Music",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "dm",
-    agreed_rate: "950",
-    notes: "Electronic music producer",
-    custom: {},
-    gender: "Male",
-    location: "Atlanta, GA",
-    social_link: "https://twitter.com/musicproducer",
-    first_name: "Kevin",
-    contact_info: "dj@musicproducer.com | +1 404-555-7890",
-    approval_status: "Approved",
-    transferred_date: "2024-03-17",
-    approval_notes: "Music equipment campaign",
-  },
-  {
-    id: "mock-25",
-    handle: "@diycrafts",
-    platform: "instagram",
-    full_name: "Laura Martinez",
-    email: "laura@diycrafts.com",
-    follower_count: "234000",
-    engagement_rate: "8.1",
-    niche: "DIY",
-    contact_status: "contacted",
-    stage: "2",
-    outreach_method: "email",
-    agreed_rate: "600",
-    notes: "Craft tutorials and projects",
-    custom: {},
-    gender: "Female",
-    location: "Phoenix, AZ",
-    social_link: "https://instagram.com/diycrafts",
-    first_name: "Laura",
-    contact_info: "laura@diycrafts.com | +1 602-555-4567",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Craft supplies campaign",
-  },
-  {
-    id: "mock-26",
-    handle: "@fitnessmotivation",
-    platform: "tiktok",
-    full_name: "Marcus Johnson",
-    email: "marcus@fitnessmotivation.com",
-    follower_count: "678000",
-    engagement_rate: "4.9",
-    niche: "Fitness",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "dm",
-    agreed_rate: "1300",
-    notes: "Workout motivation and tips",
-    custom: {},
-    gender: "Male",
-    location: "Chicago, IL",
-    social_link: "https://tiktok.com/@fitnessmotivation",
-    first_name: "Marcus",
-    contact_info: "marcus@fitnessmotivation.com | +1 312-555-1234",
-    approval_status: "Approved",
-    transferred_date: "2024-03-09",
-    approval_notes: "Fitness apparel campaign",
-  },
-  {
-    id: "mock-27",
-    handle: "@luxurytraveler",
-    platform: "instagram",
-    full_name: "Sophia Anderson",
-    email: "sophia@luxurytraveler.com",
-    follower_count: "456000",
-    engagement_rate: "3.2",
-    niche: "Travel",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "email",
-    agreed_rate: "2100",
-    notes: "Luxury hotels and resorts",
-    custom: {},
-    gender: "Female",
-    location: "Dubai, UAE",
-    social_link: "https://instagram.com/luxurytraveler",
-    first_name: "Sophia",
-    contact_info: "sophia@luxurytraveler.com | +971 50 123 4567",
-    approval_status: "Approved",
-    transferred_date: "2024-03-16",
-    approval_notes: "Luxury travel campaign",
-  },
-  {
-    id: "mock-28",
-    handle: "@codinglife",
-    platform: "youtube",
-    full_name: "CodeMaster",
-    email: "code@codinglife.com",
-    follower_count: "167000",
-    engagement_rate: "4.5",
-    niche: "Education",
-    contact_status: "contacted",
-    stage: "1",
-    outreach_method: "email",
-    agreed_rate: "700",
-    notes: "Programming tutorials",
-    custom: {},
-    gender: "Male",
-    location: "Berlin, Germany",
-    social_link: "https://youtube.com/@codinglife",
-    first_name: "Thomas",
-    contact_info: "code@codinglife.com | +49 30 12345678",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Tech education campaign",
-  },
-  {
-    id: "mock-29",
-    handle: "@beautysecrets",
-    platform: "instagram",
-    full_name: "Linda Zhang",
-    email: "linda@beautysecrets.com",
-    follower_count: "789000",
-    engagement_rate: "5.6",
-    niche: "Beauty",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "1800",
-    notes: "Skincare routine videos",
-    custom: {},
-    gender: "Female",
-    location: "Seoul, South Korea",
-    social_link: "https://instagram.com/beautysecrets",
-    first_name: "Linda",
-    contact_info: "linda@beautysecrets.com | +82 10 1234 5678",
-    approval_status: "Approved",
-    transferred_date: "2024-03-07",
-    approval_notes: "Skincare campaign",
-  },
-  {
-    id: "mock-30",
-    handle: "@sportsfan",
-    platform: "twitter",
-    full_name: "Anthony Davis",
-    email: "anthony@sportsfan.com",
-    follower_count: "234000",
-    engagement_rate: "3.4",
-    niche: "Sports",
-    contact_status: "interested",
-    stage: "2",
-    outreach_method: "dm",
-    agreed_rate: "500",
-    notes: "Sports commentary and analysis",
-    custom: {},
-    gender: "Male",
-    location: "Boston, MA",
-    social_link: "https://twitter.com/sportsfan",
-    first_name: "Anthony",
-    contact_info: "anthony@sportsfan.com | +1 617-555-9876",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Sports merchandise campaign",
-  },
-  {
-    id: "mock-31",
-    handle: "@veganeats",
-    platform: "tiktok",
-    full_name: "Grace Park",
-    email: "grace@veganeats.com",
-    follower_count: "345000",
-    engagement_rate: "7.2",
-    niche: "Food",
-    contact_status: "contacted",
-    stage: "2",
-    outreach_method: "email",
-    agreed_rate: "750",
-    notes: "Vegan recipes and lifestyle",
-    custom: {},
-    gender: "Female",
-    location: "Los Angeles, CA",
-    social_link: "https://tiktok.com/@veganeats",
-    first_name: "Grace",
-    contact_info: "grace@veganeats.com | +1 323-555-4567",
-    approval_status: "Approved",
-    transferred_date: "2024-03-23",
-    approval_notes: "Plant-based campaign",
-  },
-  {
-    id: "mock-32",
-    handle: "@yogawithme",
-    platform: "youtube",
-    full_name: "Anita Sharma",
-    email: "anita@yogawithme.com",
-    follower_count: "456000",
-    engagement_rate: "5.3",
-    niche: "Wellness",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "1100",
-    notes: "Yoga instructor and wellness coach",
-    custom: {},
-    gender: "Female",
-    location: "Mumbai, India",
-    social_link: "https://youtube.com/@yogawithme",
-    first_name: "Anita",
-    contact_info: "anita@yogawithme.com | +91 22 1234 5678",
-    approval_status: "Approved",
-    transferred_date: "2024-03-13",
-    approval_notes: "Wellness retreat campaign",
-  },
-  {
-    id: "mock-33",
-    handle: "@cryptoknight",
-    platform: "twitter",
-    full_name: "Crypto King",
-    email: "crypto@cryptoknight.com",
-    follower_count: "567000",
-    engagement_rate: "4.2",
-    niche: "Finance",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "dm",
-    agreed_rate: "950",
-    notes: "Cryptocurrency insights",
-    custom: {},
-    gender: "Male",
-    location: "Singapore",
-    social_link: "https://twitter.com/cryptoknight",
-    first_name: "David",
-    contact_info: "crypto@cryptoknight.com | +65 9123 4567",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Crypto platform campaign",
-  },
-  {
-    id: "mock-34",
-    handle: "@homeimprovement",
-    platform: "instagram",
-    full_name: "Mike Thompson",
-    email: "mike@homeimprovement.com",
-    follower_count: "178000",
-    engagement_rate: "5.8",
-    niche: "Home",
-    contact_status: "contacted",
-    stage: "1",
-    outreach_method: "email",
-    agreed_rate: "600",
-    notes: "DIY home renovation",
-    custom: {},
-    gender: "Male",
-    location: "Nashville, TN",
-    social_link: "https://instagram.com/homeimprovement",
-    first_name: "Michael",
-    contact_info: "mike@homeimprovement.com | +1 615-555-2345",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Home improvement tools",
-  },
-  {
-    id: "mock-35",
-    handle: "@fashionstylist",
-    platform: "tiktok",
-    full_name: "Elena Rodriguez",
-    email: "elena@fashionstylist.com",
-    follower_count: "389000",
-    engagement_rate: "6.9",
-    niche: "Fashion",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "dm",
-    agreed_rate: "1200",
-    notes: "Fashion styling tips",
-    custom: {},
-    gender: "Female",
-    location: "Milan, Italy",
-    social_link: "https://tiktok.com/@fashionstylist",
-    first_name: "Elena",
-    contact_info: "elena@fashionstylist.com | +39 02 1234 5678",
-    approval_status: "Approved",
-    transferred_date: "2024-03-06",
-    approval_notes: "Fashion week campaign",
-  },
-  {
-    id: "mock-36",
-    handle: "@foodcritic",
-    platform: "youtube",
-    full_name: "James Thompson",
-    email: "james@foodcritic.com",
-    follower_count: "267000",
-    engagement_rate: "4.6",
-    niche: "Food",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "email",
-    agreed_rate: "800",
-    notes: "Restaurant reviews",
-    custom: {},
-    gender: "Male",
-    location: "Paris, France",
-    social_link: "https://youtube.com/@foodcritic",
-    first_name: "James",
-    contact_info: "james@foodcritic.com | +33 1 2345 6789",
-    approval_status: "Approved",
-    transferred_date: "2024-03-24",
-    approval_notes: "Food delivery campaign",
-  },
-  {
-    id: "mock-37",
-    handle: "@photographypro",
-    platform: "instagram",
-    full_name: "Nina Chen",
-    email: "nina@photographypro.com",
-    follower_count: "456000",
-    engagement_rate: "5.1",
-    niche: "Photography",
-    contact_status: "contacted",
-    stage: "2",
-    outreach_method: "email",
-    agreed_rate: "950",
-    notes: "Landscape photography",
-    custom: {},
-    gender: "Female",
-    location: "Sydney, Australia",
-    social_link: "https://instagram.com/photographypro",
-    first_name: "Nina",
-    contact_info: "nina@photographypro.com | +61 2 1234 5678",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Camera equipment campaign",
-  },
-  {
-    id: "mock-38",
-    handle: "@mentalhealthmatters",
-    platform: "tiktok",
-    full_name: "Dr. Sarah Lee",
-    email: "sarah@mentalhealthmatters.com",
-    follower_count: "567000",
-    engagement_rate: "8.4",
-    niche: "Health",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "dm",
-    agreed_rate: "850",
-    notes: "Mental health awareness",
-    custom: {},
-    gender: "Female",
-    location: "Melbourne, Australia",
-    social_link: "https://tiktok.com/@mentalhealthmatters",
-    first_name: "Sarah",
-    contact_info: "sarah@mentalhealthmatters.com | +61 3 1234 5678",
-    approval_status: "Approved",
-    transferred_date: "2024-03-19",
-    approval_notes: "Wellness app campaign",
-  },
-  {
-    id: "mock-39",
-    handle: "@comedyclub",
-    platform: "youtube",
-    full_name: "Kevin Hartman",
-    email: "kevin@comedyclub.com",
-    follower_count: "890000",
-    engagement_rate: "7.8",
-    niche: "Comedy",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "email",
-    agreed_rate: "2000",
-    notes: "Stand-up comedy clips",
-    custom: {},
-    gender: "Male",
-    location: "Las Vegas, NV",
-    social_link: "https://youtube.com/@comedyclub",
-    first_name: "Kevin",
-    contact_info: "kevin@comedyclub.com | +1 702-555-1234",
-    approval_status: "Approved",
-    transferred_date: "2024-03-20",
-    approval_notes: "Entertainment campaign",
-  },
-  {
-    id: "mock-40",
-    handle: "@weddingplanner",
-    platform: "instagram",
-    full_name: "Bridget Jones",
-    email: "bridget@weddingplanner.com",
-    follower_count: "234000",
-    engagement_rate: "6.3",
-    niche: "Events",
-    contact_status: "contacted",
-    stage: "1",
-    outreach_method: "dm",
-    agreed_rate: "700",
-    notes: "Wedding planning tips",
-    custom: {},
-    gender: "Female",
-    location: "Charleston, SC",
-    social_link: "https://instagram.com/weddingplanner",
-    first_name: "Bridget",
-    contact_info: "bridget@weddingplanner.com | +1 843-555-4567",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Wedding services campaign",
-  },
-  {
-    id: "mock-41",
-    handle: "@esportspro",
-    platform: "twitch",
-    full_name: "GamerX",
-    email: "pro@esportspro.com",
-    follower_count: "678000",
-    engagement_rate: "5.9",
-    niche: "Gaming",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "2500",
-    notes: "Professional esports player",
-    custom: {},
-    gender: "Male",
-    location: "Seoul, South Korea",
-    social_link: "https://twitch.tv/esportspro",
-    first_name: "Minho",
-    contact_info: "pro@esportspro.com | +82 10 9876 5432",
-    approval_status: "Approved",
-    transferred_date: "2024-03-04",
-    approval_notes: "Gaming peripherals campaign",
-  },
-  {
-    id: "mock-42",
-    handle: "@sustainablefashion",
-    platform: "instagram",
-    full_name: "Emma Greenfield",
-    email: "emma@sustainablefashion.com",
-    follower_count: "156000",
-    engagement_rate: "7.1",
-    niche: "Fashion",
-    contact_status: "interested",
-    stage: "2",
-    outreach_method: "email",
-    agreed_rate: "650",
-    notes: "Eco-friendly clothing",
-    custom: {},
-    gender: "Female",
-    location: "Copenhagen, Denmark",
-    social_link: "https://instagram.com/sustainablefashion",
-    first_name: "Emma",
-    contact_info: "emma@sustainablefashion.com | +45 12 34 56 78",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Sustainable brand campaign",
-  },
-  {
-    id: "mock-43",
-    handle: "@fitnessdad",
-    platform: "tiktok",
-    full_name: "Tom Wilson",
-    email: "tom@fitnessdad.com",
-    follower_count: "289000",
-    engagement_rate: "6.7",
-    niche: "Fitness",
-    contact_status: "contacted",
-    stage: "1",
-    outreach_method: "dm",
-    agreed_rate: "550",
-    notes: "Dad fitness journey",
-    custom: {},
-    gender: "Male",
-    location: "Manchester, UK",
-    social_link: "https://tiktok.com/@fitnessdad",
-    first_name: "Thomas",
-    contact_info: "tom@fitnessdad.com | +44 161 123 4567",
-    approval_status: "Pending",
-    transferred_date: "",
-    approval_notes: "Family fitness campaign",
-  },
-  {
-    id: "mock-44",
-    handle: "@digitalmarketer",
-    platform: "youtube",
-    full_name: "Marketing Guru",
-    email: "guru@digitalmarketer.com",
-    follower_count: "345000",
-    engagement_rate: "4.3",
-    niche: "Business",
-    contact_status: "agreed",
-    stage: "4",
-    outreach_method: "email",
-    agreed_rate: "1500",
-    notes: "Marketing strategies",
-    custom: {},
-    gender: "Male",
-    location: "New York, NY",
-    social_link: "https://youtube.com/@digitalmarketer",
-    first_name: "Brian",
-    contact_info: "guru@digitalmarketer.com | +1 212-555-7890",
-    approval_status: "Approved",
-    transferred_date: "2024-03-18",
-    approval_notes: "Marketing software campaign",
-  },
-  {
-    id: "mock-45",
-    handle: "@doglovers",
-    platform: "instagram",
-    full_name: "Rachel Adams",
-    email: "rachel@doglovers.com",
-    follower_count: "567000",
-    engagement_rate: "8.2",
-    niche: "Pets",
-    contact_status: "interested",
-    stage: "3",
-    outreach_method: "email",
-    agreed_rate: "900",
-    notes: "Dog training and care",
-    custom: {},
-    gender: "Female",
-    location: "Portland, OR",
-    social_link: "https://instagram.com/doglovers",
-    first_name: "Rachel",
-    contact_info: "rachel@doglovers.com | +1 503-555-8901",
-    approval_status: "Approved",
-    transferred_date: "2024-03-21",
-    approval_notes: "Pet products campaign",
-  },
+  { id:"mock-1", handle:"@prettyliv", platform:"instagram", full_name:"Liv Santos", email:"liv@example.com", follower_count:"245000", engagement_rate:"3.2", niche:"Beauty", contact_status:"contacted", stage:"2", agreed_rate:"500", notes:"Very responsive. Sent product for review.", custom:{}, gender:"Female", location:"Los Angeles, CA", social_link:"https://instagram.com/prettyliv", first_name:"Olivia", contact_info:"liv@example.com | +1 555-123-4567", approval_status:"Pending", transferred_date:"", approval_notes:"Awaiting contract signing", decline_reason:"" },
+  { id:"mock-2", handle:"@fitwithjay", platform:"tiktok", full_name:"Jay Kim", email:"jay@example.com", follower_count:"890000", engagement_rate:"5.8", niche:"Fitness", contact_status:"interested", stage:"3", agreed_rate:"1200", notes:"Discussing deliverables for Q1 campaign", custom:{}, gender:"Male", location:"New York, NY", social_link:"https://tiktok.com/@fitwithjay", first_name:"Jay", contact_info:"jay@example.com | +1 555-987-6543", approval_status:"Approved", transferred_date:"2024-03-15", approval_notes:"Approved for Q1 campaign - contract signed", decline_reason:"" },
+  { id:"mock-3", handle:"@travelwithmar", platform:"youtube", full_name:"Marco Reyes", email:"marco@example.com", follower_count:"1200000", engagement_rate:"2.1", niche:"Travel", contact_status:"agreed", stage:"4", agreed_rate:"2500", notes:"Contract signed for summer campaign", custom:{}, gender:"Male", location:"Miami, FL", social_link:"https://youtube.com/@travelwithmar", first_name:"Marco", contact_info:"marco@example.com | +1 555-456-7890", approval_status:"Declined", transferred_date:"", approval_notes:"Budget constraints for Q1 - reconsider for Q2", decline_reason:"Budget constraints for Q1" },
 ]
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -1521,7 +1012,9 @@ export default function TableSheet({
   const [currentPage, setCurrentPage] = useState(1)
   const [addingCol, setAddingCol] = useState(false)
   const [newColName, setNewColName] = useState("")
+  const [newColDescription, setNewColDescription] = useState("")
   const [newColType, setNewColType] = useState<CustomColumn["field_type"]>("text")
+  const [newColGroup, setNewColGroup] = useState<"Influencer Details" | "Approval Details" | "Outreach Details">("Influencer Details")
   const [newColOpts, setNewColOpts] = useState("")
   const [colOrder, setColOrder] = useState<number[]|null>(null)
   const [dragIdx, setDragIdx] = useState<number|null>(null)
@@ -1531,8 +1024,27 @@ export default function TableSheet({
   const [filterColumn, setFilterColumn] = useState("")
   const [filterValue, setFilterValue] = useState("")
   const [showFilterModal, setShowFilterModal] = useState(false)
+  const [showAddRowsModal, setShowAddRowsModal] = useState(false)
+  const [showDeclineModal, setShowDeclineModal] = useState(false)
+  const [pendingDeclineRowIdx, setPendingDeclineRowIdx] = useState<number | null>(null)
   const [selectedRowId, setSelectedRowId] = useState<string|null>(null)
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [showDetailPanel, setShowDetailPanel] = useState(showDetailPanelByDefault)
+  
+  // Confirmation dialog states
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: ReactNode
+    onConfirm: () => void
+    variant: "danger" | "warning" | "info"
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    variant: "danger"
+  })
 
   const editInputRef = useRef<HTMLInputElement|HTMLSelectElement|null>(null)
   const newColInputRef = useRef<HTMLInputElement>(null)
@@ -1540,10 +1052,7 @@ export default function TableSheet({
   const tabPendingRef = useRef(false)
 
   const getEffectiveGroup = useCallback((cc: CustomColumn): "Influencer Details"|"Approval Details"|"Outreach Details"|"Custom Fields" => {
-    if (cc.assignedGroup==="Influencer Details") return "Influencer Details"
-    if (cc.assignedGroup==="Approval Details") return "Approval Details"
-    if (cc.assignedGroup==="Outreach Details") return "Outreach Details"
-    return "Custom Fields"
+    return cc.assignedGroup
   }, [])
 
   const rawCols: AnyColDef[] = [
@@ -1585,12 +1094,140 @@ export default function TableSheet({
 
   const selectedRow = rows.find(r=>r.id===selectedRowId)||null
 
-  const handleRowSelect = (id: string) => setSelectedRowId(prev=>prev===id?null:id)
-  const handleUpdateRow = (r: InfluencerRow) => { setRows(prev=>{const next=prev.map(x=>x.id===r.id?r:x);onRowsChange?.(next);return next}) }
+  const handleRowSelect = (id: string, e?: React.MouseEvent) => {
+    if (e?.ctrlKey || e?.metaKey) {
+      setSelectedRowIds(prev => {
+        const next = new Set(prev)
+        if (next.has(id)) {
+          next.delete(id)
+        } else {
+          next.add(id)
+        }
+        return next
+      })
+      setSelectedRowId(id)
+    } else if (e?.shiftKey && selectedRowId) {
+      const currentIdx = filteredRows.findIndex(r => r.id === selectedRowId)
+      const targetIdx = filteredRows.findIndex(r => r.id === id)
+      if (currentIdx !== -1 && targetIdx !== -1) {
+        const start = Math.min(currentIdx, targetIdx)
+        const end = Math.max(currentIdx, targetIdx)
+        const rangeIds = filteredRows.slice(start, end + 1).map(r => r.id)
+        setSelectedRowIds(new Set(rangeIds))
+      }
+      setSelectedRowId(id)
+    } else {
+      setSelectedRowId(id)
+      setSelectedRowIds(new Set([id]))
+    }
+  }
+
+  const handleUpdateRow = (r: InfluencerRow) => { 
+    setRows(prev=>{
+      const next=prev.map(x=>x.id===r.id?r:x)
+      onRowsChange?.(next)
+      return next
+    })
+  }
+  
   const handleApplyFilter = (c: string,v: string) => { setFilterColumn(c);setFilterValue(v);setCurrentPage(1) }
   const handleClearFilter = () => { setFilterColumn("");setFilterValue("");setCurrentPage(1) }
 
-  // Column drag
+  const handleAddMultipleRows = (count: number) => {
+    const newRows: InfluencerRow[] = []
+    for (let i = 0; i < count; i++) {
+      newRows.push(newEmptyRow(customCols))
+    }
+    
+    setRows(prev => {
+      let next: InfluencerRow[]
+      if (selectedRowIds.size > 0) {
+        const selectedIndices = filteredRows
+          .map((r, idx) => selectedRowIds.has(r.id) ? idx : -1)
+          .filter(idx => idx !== -1)
+        const lastSelectedIdx = Math.max(...selectedIndices)
+        const lastSelectedId = filteredRows[lastSelectedIdx].id
+        const insertIdx = prev.findIndex(r => r.id === lastSelectedId) + 1
+        
+        next = [
+          ...prev.slice(0, insertIdx),
+          ...newRows,
+          ...prev.slice(insertIdx)
+        ]
+      } else {
+        next = [...prev, ...newRows]
+      }
+      onRowsChange?.(next)
+      return next
+    })
+    
+    setCurrentPage(Math.ceil((rows.length + count) / rowsPerPage))
+    containerRef.current?.focus()
+  }
+
+  const addRow = () => { 
+    const r = newEmptyRow(customCols)
+    setRows(prev=>{
+      const next=[...prev, r]
+      onRowsChange?.(next)
+      return next
+    })
+    setCurrentPage(Math.ceil((rows.length+1)/rowsPerPage))
+    setActiveCell({rowIdx:rows.length, colIdx:0})
+    containerRef.current?.focus() 
+  }
+  
+  const deleteRow = (id: string) => {
+    const rowToDelete = rows.find(r => r.id === id)
+    setConfirmDialog({
+      isOpen: true,
+      title: "Delete Row",
+      message: (
+        <span>
+          Are you sure you want to delete <strong>{rowToDelete?.full_name || rowToDelete?.handle || "this row"}</strong>? This action cannot be undone.
+        </span>
+      ),
+      onConfirm: () => {
+        setRows(prev=>{
+          const next=prev.filter(r=>r.id!==id)
+          onRowsChange?.(next)
+          return next
+        })
+        if(selectedRowId===id) setSelectedRowId(null)
+        setSelectedRowIds(prev => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+      },
+      variant: "danger"
+    })
+  }
+  
+  const deleteSelectedRows = () => {
+    if (selectedRowIds.size === 0) return
+    
+    setConfirmDialog({
+      isOpen: true,
+      title: "Delete Selected Rows",
+      message: (
+        <span>
+          Are you sure you want to delete <strong>{selectedRowIds.size} {selectedRowIds.size === 1 ? 'row' : 'rows'}</strong>? This action cannot be undone.
+        </span>
+      ),
+      onConfirm: () => {
+        setRows(prev => {
+          const next = prev.filter(r => !selectedRowIds.has(r.id))
+          onRowsChange?.(next)
+          return next
+        })
+        setSelectedRowId(null)
+        setSelectedRowIds(new Set())
+      },
+      variant: "danger"
+    })
+  }
+
   const onColDragStart = (vi: number,e: DragEvent) => { setDragIdx(vi);e.dataTransfer.effectAllowed="move";e.dataTransfer.setDragImage(e.currentTarget as HTMLElement,40,18) }
   const onColDragOver = (vi: number,e: DragEvent) => { e.preventDefault();e.dataTransfer.dropEffect="move";setDragOverIdx(vi);const tc=allCols[vi];if(tc&&(tc.group==="Influencer Details"||tc.group==="Approval Details"||tc.group==="Outreach Details")){setDragOverGroup(tc.group)}else{setDragOverGroup(null)} }
   const onColDragEnd = () => {
@@ -1598,7 +1235,11 @@ export default function TableSheet({
       const dc=allCols[dragIdx]
       if(dc.isCustom&&dragOverGroup&&(dragOverGroup==="Influencer Details"||dragOverGroup==="Approval Details"||dragOverGroup==="Outreach Details")){
         const fk=(dc as CustomColDef).fieldKey
-        setCustomCols(prev=>{const next=prev.map(c=>c.field_key===fk?{...c,assignedGroup:dragOverGroup as "Influencer Details"|"Approval Details"|"Outreach Details"}:c);onCustomColumnsChange?.(next);return next})
+        setCustomCols(prev=>{
+          const next=prev.map(c=>c.field_key===fk?{...c,assignedGroup:dragOverGroup as "Influencer Details"|"Approval Details"|"Outreach Details"}:c)
+          onCustomColumnsChange?.(next)
+          return next
+        })
       }
       setColOrder(prev=>{const arr=[...(prev??rawCols.map((_,i)=>i))];const[moved]=arr.splice(dragIdx,1);arr.splice(dragOverIdx!,0,moved);return arr})
     }
@@ -1609,16 +1250,53 @@ export default function TableSheet({
     if(key.startsWith("custom."))return row.custom[key.slice(7)]??""; return String((row as Record<string,unknown>)[key]??"")
   }, [])
 
-  /* ═══════════════════════════════════════════════════════════════════════
-     KEY FIX: Auto-update social_link when handle or platform changes
-     ═══════════════════════════════════════════════════════════════════════ */
-  const applyCellValue = useCallback((rowIdx: number,colKey: string,value: string) => {
+  const isOutreachField = useCallback((colKey: string): boolean => {
+    if (colKey.startsWith("custom.")) {
+      const fk = colKey.slice(7)
+      const customCol = customCols.find(c => c.field_key === fk)
+      return customCol?.assignedGroup === "Outreach Details"
+    }
+    return OUTREACH_FIELDS.has(colKey)
+  }, [customCols])
+
+  const handleDeclineConfirm = (reason: string) => {
+    if (pendingDeclineRowIdx === null) return
+    
+    const actualRow = filteredRows[pendingDeclineRowIdx]
+    const actualRowIdx = rows.findIndex(r => r.id === actualRow.id)
+    if (actualRowIdx === -1) return
+    
+    setRows(prev => {
+      const next = [...prev]
+      next[actualRowIdx] = handleApprovalChange(prev[actualRowIdx], "Declined", reason)
+      onRowsChange?.(next)
+      return next
+    })
+    
+    setShowDeclineModal(false)
+    setPendingDeclineRowIdx(null)
+    containerRef.current?.focus()
+  }
+
+  const applyCellValue = useCallback((rowIdx: number, colKey: string, value: string) => {
     const actualRow = filteredRows[rowIdx]
     const actualRowIdx = rows.findIndex(r=>r.id===actualRow.id)
     if(actualRowIdx===-1)return
+    
+    if (actualRow.approval_status === "Declined" && isOutreachField(colKey)) {
+      return
+    }
+    
+    if (colKey === "approval_status" && value === "Declined") {
+      setPendingDeclineRowIdx(rowIdx)
+      setShowDeclineModal(true)
+      return
+    }
+    
     setRows(prev=>{
       const next=[...prev]
       let row={...next[actualRowIdx]}
+      
       if(colKey==="approval_status"){
         row=handleApprovalChange(row,value)
       } else if(colKey.startsWith("custom.")){
@@ -1626,7 +1304,7 @@ export default function TableSheet({
       } else {
         (row as Record<string,unknown>)[colKey]=value
       }
-      // ★ AUTO SOCIAL LINK: when handle or platform changes, update social_link automatically
+      
       if(colKey==="handle"||colKey==="platform"){
         const newHandle = colKey==="handle"?value:row.handle
         const newPlatform = colKey==="platform"?value:row.platform
@@ -1635,12 +1313,10 @@ export default function TableSheet({
           colKey==="handle"?prev[actualRowIdx].handle:row.handle
         )
         const freshUrl = getProfileUrl(newPlatform, newHandle)
-        // Auto-update built-in social_link if empty or matches the old auto-generated URL
         const curSocialLink = row.social_link ?? ""
         if(!curSocialLink || curSocialLink===oldUrl){
           row.social_link = freshUrl
         }
-        // Also update custom URL columns
         const urlFieldKeys = customCols.filter(c=>c.field_type==="url").map(c=>c.field_key)
         if(urlFieldKeys.length){
           row.custom={...row.custom}
@@ -1650,23 +1326,34 @@ export default function TableSheet({
           })
         }
       }
+      
       next[actualRowIdx]=row
       onRowsChange?.(next)
       return next
     })
-  }, [onRowsChange, customCols, filteredRows, rows])
+  }, [onRowsChange, customCols, filteredRows, rows, isOutreachField])
 
   const addOptionToCol = useCallback((fk: string,newOpt: string) => {
-    setCustomCols(prev=>{const next=prev.map(c=>c.field_key!==fk?c:{...c,field_options:[...(c.field_options??[]),newOpt]});onCustomColumnsChange?.(next);return next})
+    setCustomCols(prev=>{
+      const next=prev.map(c=>c.field_key!==fk?c:{...c,field_options:[...(c.field_options??[]),newOpt]})
+      onCustomColumnsChange?.(next)
+      return next
+    })
   }, [onCustomColumnsChange])
 
   const startEdit = useCallback((ri: number,ci: number) => {
     if(readOnly)return
-    const col=allCols[ci]; const row=filteredRows[ri]
+    const col=allCols[ci]
+    const row=filteredRows[ri]
+    
+    if (row.approval_status === "Declined" && isOutreachField(col.key)) {
+      return
+    }
+    
     if(col.type==="boolean"){applyCellValue(ri,col.key,getCellValue(row,col.key)==="Yes"?"No":"Yes");setActiveCell({rowIdx:ri,colIdx:ci});return}
     if(col.key==="platform"||col.type==="dropdown"||col.type==="multi-select"||col.type==="date"){setActiveCell({rowIdx:ri,colIdx:ci});setEditCell(null);setPopupCell({rowIdx:ri,colIdx:ci});return}
     setActiveCell({rowIdx:ri,colIdx:ci});setPopupCell(null);setEditCell({rowIdx:ri,colIdx:ci});setEditValue(getCellValue(row,col.key))
-  }, [allCols, getCellValue, readOnly, filteredRows, applyCellValue])
+  }, [allCols, getCellValue, readOnly, filteredRows, applyCellValue, isOutreachField])
 
   const commitEdit = useCallback(() => { if(!editCell)return; applyCellValue(editCell.rowIdx,allCols[editCell.colIdx].key,editValue); setEditCell(null) }, [editCell,editValue,allCols,applyCellValue])
   const cancelEdit = useCallback(() => { setEditCell(null);setPopupCell(null) }, [])
@@ -1699,22 +1386,64 @@ export default function TableSheet({
     }
   }
 
-  const addRow = () => { const r=newEmptyRow(customCols);setRows(prev=>{const next=[...prev,r];onRowsChange?.(next);return next});setCurrentPage(Math.ceil((rows.length+1)/rowsPerPage));setActiveCell({rowIdx:rows.length,colIdx:0});containerRef.current?.focus() }
-  const deleteRow = (id: string) => { setRows(prev=>{const next=prev.filter(r=>r.id!==id);onRowsChange?.(next);return next});if(selectedRowId===id)setSelectedRowId(null) }
-
   const confirmAddCol = () => {
-    const name=newColName.trim();if(!name)return
+    const name=newColName.trim()
+    if(!name)return
+    
     const fk=name.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"")
     const hasOpts=newColType==="dropdown"||newColType==="multi-select"
-    const col:CustomColumn={id:crypto.randomUUID(),field_key:fk,field_name:name,field_type:newColType,field_options:hasOpts?newColOpts.split(",").map(s=>s.trim()).filter(Boolean):undefined}
-    setCustomCols(prev=>{const next=[...prev,col];onCustomColumnsChange?.(next);return next})
-    setRows(prev=>prev.map(r=>{let dv="";if(newColType==="boolean")dv="No";else if(newColType==="url")dv=getProfileUrl(r.platform,r.handle);return{...r,custom:{...r.custom,[fk]:dv}}}))
-    setNewColName("");setNewColType("text");setNewColOpts("");setAddingCol(false);containerRef.current?.focus()
+    const col: CustomColumn = {
+      id: crypto.randomUUID(),
+      field_key: fk,
+      field_name: name,
+      field_type: newColType,
+      field_options: hasOpts ? newColOpts.split(",").map(s=>s.trim()).filter(Boolean) : undefined,
+      assignedGroup: newColGroup,
+      description: newColDescription.trim() || undefined
+    }
+    
+    setCustomCols(prev=>{
+      const next=[...prev,col]
+      onCustomColumnsChange?.(next)
+      return next
+    })
+    
+    setRows(prev=>prev.map(r=>{
+      let dv=""
+      if(newColType==="boolean") dv="No"
+      else if(newColType==="url") dv=getProfileUrl(r.platform,r.handle)
+      return {...r, custom: {...r.custom, [fk]: dv}}
+    }))
+    
+    setNewColName("")
+    setNewColDescription("")
+    setNewColType("text")
+    setNewColGroup("Influencer Details")
+    setNewColOpts("")
+    setAddingCol(false)
+    containerRef.current?.focus()
   }
+  
   const deleteCustomCol = (fk: string) => {
-    setCustomCols(prev=>{const next=prev.filter(c=>c.field_key!==fk);onCustomColumnsChange?.(next);return next})
-    setRows(prev=>prev.map(r=>{const custom={...r.custom};delete custom[fk];return{...r,custom}}))
-    setActiveCell(null);setEditCell(null);setPopupCell(null)
+    setConfirmDialog({
+      isOpen: true,
+      title: "Delete Custom Column",
+      message: "Are you sure you want to delete this custom column? All data stored in this column will be permanently lost.",
+      onConfirm: () => {
+        setCustomCols(prev=>{
+          const next=prev.filter(c=>c.field_key!==fk)
+          onCustomColumnsChange?.(next)
+          return next
+        })
+        setRows(prev=>prev.map(r=>{
+          const custom={...r.custom}
+          delete custom[fk]
+          return {...r,custom}
+        }))
+        setActiveCell(null);setEditCell(null);setPopupCell(null)
+      },
+      variant: "danger"
+    })
   }
 
   const getGroupBgClass = (g: string) => { switch(g){case"Influencer Details":return"bg-blue-50 text-blue-700";case"Approval Details":return"bg-purple-50 text-purple-700";case"Outreach Details":return"bg-emerald-50 text-emerald-700";case"Custom Fields":return"bg-gray-50 text-gray-500 border-dashed";default:return"bg-gray-50 text-gray-700"} }
@@ -1731,6 +1460,18 @@ export default function TableSheet({
     const isPopup=popupCell?.rowIdx===rowIdx&&popupCell?.colIdx===colIdx
     const value=getCellValue(row,col.key)
     const ringCls=isActive?"ring-2 ring-inset ring-blue-500 z-[1]":""
+    
+    const isOutreach = isOutreachField(col.key)
+    const isDeclined = row.approval_status === "Declined"
+    const disabled = isDeclined && isOutreach
+    
+    if (disabled) {
+      return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed`} style={{minWidth:col.minWidth}}>
+        {col.key==="contact_status" ? <StatusBadge value={value} /> : 
+         col.key==="approval_status" ? <ApprovalBadge value={value} /> :
+         <span className="block truncate text-gray-400">{value || "—"}</span>}
+      </td>
+    }
 
     if(isEditing){
       if(col.type==="select"&&col.options&&col.key!=="platform"){
@@ -1765,14 +1506,54 @@ export default function TableSheet({
     if(col.type==="boolean"){const y=value==="Yes";return <td key={col.key} className={`${tdCls} cursor-pointer`} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${y?"bg-green-100 text-green-700":"bg-red-100 text-red-600"}`}>{y?"Yes":"No"}</span></td>}
     if(col.type==="multi-select"){return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><MultiSelectDisplay value={value}/></td>}
     if(col.type==="date"){const disp=value?new Date(value+"T00:00:00").toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}):"";return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><div className="flex items-center gap-1.5"><IconCalendar size={14} className="text-gray-400 flex-shrink-0"/><span className="truncate">{disp||<span className="text-gray-300">—</span>}</span></div></td>}
-    if(col.type==="url"){const valid=isValidUrl(value);return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}>{value?(valid?<a href={normalizeUrl(value)} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline truncate max-w-full" title={value}><span className="truncate">{value}</span><IconExternalLink size={12} className="flex-shrink-0 opacity-60"/></a>:<span className="text-red-400 truncate block">{value}</span>):<span className="text-gray-300">—</span>}</td>}
+    if(col.type==="url"){
+      const valid=isValidUrl(value)
+      return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}>
+        {value ? (
+          valid ? (
+            <a
+              href={normalizeUrl(value)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 flex items-center justify-center"
+            >
+              <IconExternalLink size={16} />
+            </a>
+          ) : (
+            <span className="text-red-400 truncate block">{value}</span>
+          )
+        ) : (
+          <span className="text-gray-300">—</span>
+        )}
+      </td>
+    }
     if(col.type==="dropdown"){return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}>{value?<span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span>:<span className="text-gray-300">—</span>}</td>}
     if(col.key==="approval_status"){return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><ApprovalBadge value={value}/></td>}
     return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}>{col.key==="contact_status"?<StatusBadge value={value}/>:<span className="block truncate">{value}</span>}</td>
   }
 
+  const declineModalInfluencerName = pendingDeclineRowIdx !== null 
+    ? filteredRows[pendingDeclineRowIdx]?.full_name || filteredRows[pendingDeclineRowIdx]?.handle || "this influencer"
+    : "this influencer"
+
   return (
     <div className="flex flex-col gap-4">
+      <ConfirmationDialog 
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        variant={confirmDialog.variant}
+      />
+      
+      <DeclineConfirmationModal 
+        isOpen={showDeclineModal}
+        onClose={() => {setShowDeclineModal(false); setPendingDeclineRowIdx(null)}}
+        onConfirm={handleDeclineConfirm}
+        influencerName={declineModalInfluencerName}
+      />
+      
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -1780,6 +1561,12 @@ export default function TableSheet({
           <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search by handle, name, email, niche, location, notes..." className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"/>
         </div>
         <div className="flex items-center gap-2">
+          {selectedRowIds.size > 0 && !readOnly && (
+            <button onClick={deleteSelectedRows} className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition">
+              <IconTrash size={16}/>
+              Delete {selectedRowIds.size} {selectedRowIds.size === 1 ? 'row' : 'rows'}
+            </button>
+          )}
           <button onClick={()=>setShowFilterModal(true)} className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg transition ${filterColumn?"bg-blue-100 text-blue-700":"text-gray-600 hover:bg-gray-100"}`}><IconFilter size={16}/>Filter{filterColumn&&<span className="w-2 h-2 bg-blue-500 rounded-full"/>}</button>
           <button onClick={()=>setShowDetailPanel(!showDetailPanel)} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">{showDetailPanel?<IconEyeOff size={16}/>:<IconEye size={16}/>}{showDetailPanel?"Hide Details":"Show Details"}</button>
         </div>
@@ -1788,6 +1575,7 @@ export default function TableSheet({
       {getActiveFilterText()&&<div className="flex items-center gap-2"><span className="text-xs text-gray-500">Active filter:</span><div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><IconFilter size={12} className="text-blue-500"/><span className="text-blue-700">{getActiveFilterText()}</span><button onClick={handleClearFilter} className="ml-1 text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div></div>}
 
       <FilterModal isOpen={showFilterModal} onClose={()=>setShowFilterModal(false)} onApplyFilter={handleApplyFilter} onClearFilter={handleClearFilter} currentFilterColumn={filterColumn} currentFilterValue={filterValue} columns={allCols}/>
+      <AddRowsModal isOpen={showAddRowsModal} onClose={()=>setShowAddRowsModal(false)} onAdd={handleAddMultipleRows} selectedCount={selectedRowIds.size}/>
 
       <div className={`flex gap-4 ${showDetailPanel?"flex-col lg:flex-row":"flex-col"}`}>
         <div className={`${showDetailPanel?"lg:flex-1":"w-full"} min-w-0`}>
@@ -1799,7 +1587,16 @@ export default function TableSheet({
                 <tr>
                   <th rowSpan={2} className="border border-gray-200 bg-gray-50 w-10 min-w-[2.5rem] text-center text-xs text-gray-400 font-normal">#</th>
                   {groupSpans.map((g,i)=><th key={`${g.group}-${i}`} colSpan={g.span} className={`border border-gray-200 text-center text-xs font-semibold py-1.5 px-3 whitespace-nowrap ${getGroupBgClass(g.group)}`}>{g.group}</th>)}
-                  {!readOnly&&<th rowSpan={2} className="border border-gray-200 bg-gray-50 w-10 min-w-[2.5rem] text-center"><button onClick={()=>setAddingCol(true)} title="Add column" className="w-6 h-6 mx-auto flex items-center justify-center rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition"><IconPlus size={14}/></button></th>}
+                  {!readOnly&&<th rowSpan={2} className="border border-gray-200 bg-gray-50 text-center">
+                    <button 
+                      onClick={()=>setAddingCol(true)} 
+                      title="Add column" 
+                      className="px-2 py-1 mx-auto flex items-center justify-center gap-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition text-xs"
+                    >
+                      <IconPlus size={12}/>
+                      <span>Add column</span>
+                    </button>
+                  </th>}
                   <th rowSpan={2} className="border border-gray-200 bg-gray-50 w-10 min-w-[2.5rem]"/>
                 </tr>
                 <tr>
@@ -1809,31 +1606,60 @@ export default function TableSheet({
                       className={`border border-gray-200 px-2 py-1.5 text-left text-xs font-semibold text-gray-600 whitespace-nowrap group/col transition-all ${getColHeaderBgClass(col.group)} ${isDragging?"opacity-40":""} ${isOver?"border-l-2 !border-l-blue-500":""}`}
                       style={{minWidth:col.minWidth,cursor:readOnly?"default":"grab"}}>
                       <div className="flex items-center justify-between gap-1">
-                        <div className="flex items-center gap-1">{!readOnly&&<IconGripVertical size={12} className="text-gray-300 flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition"/>}<span>{col.label}</span></div>
+                        <div className="flex items-center gap-1">
+                          {!readOnly&&<IconGripVertical size={12} className="text-gray-300 flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition"/>}
+                          <span title={col.isCustom ? (col as CustomColDef).assignedGroup : undefined}>{col.label}</span>
+                        </div>
                         {!readOnly&&col.isCustom&&<button onClick={()=>deleteCustomCol((col as CustomColDef).fieldKey)} title="Remove column" className="opacity-0 group-hover/col:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition"><IconX size={12}/></button>}
                       </div></th>
                   })}
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map((row,li)=>{const ri=pageStart+li;const isSel=selectedRowId===row.id;return(
-                  <tr key={row.id} className={`group cursor-pointer transition-colors ${isSel?"bg-blue-50":"hover:bg-gray-50/60"}`} onClick={()=>handleRowSelect(row.id)}>
-                    <td className="border border-gray-200 text-center text-xs text-gray-400 bg-gray-50/40 select-none">{ri+1}</td>
+                {pageRows.map((row,li)=>{
+                  const ri=pageStart+li
+                  const isSel=selectedRowIds.has(row.id)
+                  const isDeclined = row.approval_status === "Declined"
+                  
+                  return(
+                  <tr key={row.id} className={`group cursor-pointer transition-colors ${isSel?"bg-blue-100":"hover:bg-gray-50/60"} ${isDeclined ? "bg-red-50/30" : ""}`} onClick={(e)=>handleRowSelect(row.id, e)}>
+                    <td className="border border-gray-200 text-center text-xs text-gray-400 bg-gray-50/40 select-none">
+                      <div className="flex items-center justify-center gap-1">
+                        {isSel && <IconCheck size={12} className="text-blue-600" />}
+                        {ri+1}
+                      </div>
+                    </td>
                     {allCols.map((col,ci)=>renderCell(row,ri,col,ci))}
                     {!readOnly&&<td className="border border-gray-200 bg-gray-50/40"/>}
                     <td className="border border-gray-200 text-center bg-gray-50/40">{!readOnly&&<button onClick={e=>{e.stopPropagation();deleteRow(row.id)}} title="Delete row" className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition"><IconTrash size={14}/></button>}</td>
                   </tr>
                 )})}
-                {totalRows===0&&<tr><td colSpan={totalCols+3} className="py-10 text-center text-sm text-gray-400">No influencers found. Try adjusting your search or filters, or click &quot;+ Add row&quot; to get started.</td></tr>}
+                {totalRows===0&&<tr><td colSpan={totalCols+3} className="py-10 text-center text-sm text-gray-400">No influencers found. Try adjusting your search or filters, or add rows to get started.</td></tr>}
               </tbody>
-              {!readOnly&&<tfoot><tr><td colSpan={totalCols+3} className="border-t border-gray-200"><button onClick={addRow} className="flex items-center gap-1.5 w-full px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition"><IconPlus size={14}/> Add row</button></td></tr></tfoot>}
+              {!readOnly&&<tfoot>
+                <tr>
+                  <td colSpan={totalCols+3} className="border-t border-gray-200">
+                    <div className="flex items-center">
+                      <button onClick={addRow} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:text-gray-700 hover:bg-gray-50 transition">
+                        <IconPlus size={14}/> Add row
+                      </button>
+                      <button onClick={()=>setShowAddRowsModal(true)} className="flex items-center gap-1.5 px-3 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition border-l border-gray-200">
+                        <IconCopy size={14}/> Add multiple rows
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>}
             </table>
           </div>
 
           {totalRows>0&&(
             <div className="flex items-center justify-between gap-4 text-sm text-gray-600 px-1 mt-3 flex-wrap">
-              <div className="flex items-center gap-2"><span className="text-gray-500">Rows per page:</span>
-                <select value={rowsPerPage} onChange={e=>{setRowsPerPage(Number(e.target.value));setCurrentPage(1)}} className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white outline-none focus:ring-2 ring-blue-400"><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">Rows per page:</span>
+                <select value={rowsPerPage} onChange={e=>{setRowsPerPage(Number(e.target.value));setCurrentPage(1)}} className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white outline-none focus:ring-2 ring-blue-400"><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select>
+                {selectedRowIds.size > 0 && <span className="ml-4 text-xs text-blue-600">{selectedRowIds.size} row{selectedRowIds.size !== 1 ? 's' : ''} selected</span>}
+              </div>
               <div className="flex items-center gap-2"><span className="text-gray-400 text-xs">{pageStart+1}–{pageEnd} of {totalRows}</span><div className="flex gap-1">
                 <button onClick={()=>setCurrentPage(1)} disabled={currentPage===1} className="px-2 py-1 border border-gray-200 rounded-lg text-xs disabled:opacity-40 hover:bg-gray-50 transition">«</button>
                 <button onClick={()=>setCurrentPage(p=>Math.max(p-1,1))} disabled={currentPage===1} className="px-3 py-1 border border-gray-200 rounded-lg text-xs disabled:opacity-40 hover:bg-gray-50 transition">Prev</button>
@@ -1845,26 +1671,101 @@ export default function TableSheet({
           )}
         </div>
 
-        {showDetailPanel&&<div className="lg:w-[420px] flex-shrink-0"><DetailSection row={selectedRow} customCols={customCols} onUpdate={handleUpdateRow} onClose={()=>setSelectedRowId(null)} readOnly={readOnly} showEmptyState={showEmptyDetailState} emptyStateMessage={emptyDetailStateMessage}/></div>}
+        {showDetailPanel&&<div className="lg:w-[420px] flex-shrink-0"><DetailSection row={selectedRow} customCols={customCols} onUpdate={handleUpdateRow} onClose={()=>{setSelectedRowId(null);setSelectedRowIds(new Set())}} readOnly={readOnly} showEmptyState={showEmptyDetailState} emptyStateMessage={emptyDetailStateMessage}/></div>}
       </div>
 
       {!readOnly&&(
         <div className="flex items-center gap-4 px-1 flex-wrap">
-          {[{keys:["↑","↓","←","→"],label:"Navigate"},{keys:["Enter"],label:"Edit"},{keys:["Tab"],label:"Next cell"},{keys:["Shift","Tab"],label:"Prev cell"},{keys:["←","→"],label:"Edit mode navigation"},{keys:["↑","↓"],label:"Edit mode row navigation"},{keys:["Esc"],label:"Cancel"},{keys:["Del"],label:"Clear"},{keys:["F2"],label:"Edit (alt)"}].map(({keys,label})=>(
+          {[{keys:["Ctrl","Click"],label:"Multi-select"},{keys:["Shift","Click"],label:"Range select"},{keys:["↑","↓","←","→"],label:"Navigate"},{keys:["Enter"],label:"Edit"},{keys:["Tab"],label:"Next cell"},{keys:["Esc"],label:"Cancel"},{keys:["Del"],label:"Clear"}].map(({keys,label})=>(
             <div key={label} className="flex items-center gap-1">{keys.map(k=><kbd key={k} className="inline-flex items-center justify-center px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50 text-[10px] font-mono text-gray-500 shadow-sm leading-none">{k}</kbd>)}<span className="text-[11px] text-gray-400 ml-0.5">{label}</span></div>
           ))}
-          <div className="flex items-center gap-1 ml-2 border-l border-gray-200 pl-3"><IconGripVertical size={12} className="text-gray-400"/><span className="text-[11px] text-gray-400">Drag custom columns into any group to absorb them</span></div>
+          <div className="flex items-center gap-1 ml-2 border-l border-gray-200 pl-3"><IconGripVertical size={12} className="text-gray-400"/><span className="text-[11px] text-gray-400">Drag custom columns to assign them to a group</span></div>
         </div>
       )}
 
       {!readOnly&&addingCol&&(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget)setAddingCol(false)}}>
-          <div className="bg-white rounded-2xl shadow-xl w-[360px] p-6 flex flex-col gap-4">
-            <div><h3 className="text-base font-semibold text-gray-900">Add custom column</h3><p className="text-xs text-gray-400 mt-0.5">Drag column into any group to absorb it</p></div>
-            <input ref={newColInputRef} type="text" value={newColName} onChange={e=>setNewColName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmAddCol();if(e.key==="Escape")setAddingCol(false)}} placeholder="Column name (e.g. Dog Breed)" className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"/>
-            <select value={newColType} onChange={e=>setNewColType(e.target.value as CustomColumn["field_type"])} className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full bg-white"><option value="text">Text</option><option value="number">Number</option><option value="dropdown">Dropdown</option><option value="multi-select">Multi-select</option><option value="date">Date</option><option value="boolean">Yes / No</option><option value="url">URL</option></select>
-            {(newColType==="dropdown"||newColType==="multi-select")&&<input type="text" value={newColOpts} onChange={e=>setNewColOpts(e.target.value)} placeholder="Options: Option A, Option B, Option C" className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"/>}
-            <div className="flex gap-2 pt-1"><button onClick={()=>setAddingCol(false)} className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm text-red-500 hover:bg-gray-50 transition">Cancel</button><button onClick={confirmAddCol} disabled={!newColName.trim()} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-40 transition">Add</button></div>
+          <div className="bg-white rounded-2xl shadow-xl w-[420px] p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+            <div><h3 className="text-base font-semibold text-gray-900">Add custom column</h3><p className="text-xs text-gray-400 mt-0.5">Create a new column to track additional information</p></div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Column Name <span className="text-red-500">*</span></label>
+              <input 
+                ref={newColInputRef} 
+                type="text" 
+                value={newColName} 
+                onChange={e=>setNewColName(e.target.value)} 
+                onKeyDown={e=>{if(e.key==="Enter")confirmAddCol();if(e.key==="Escape")setAddingCol(false)}} 
+                placeholder="e.g., Preferred Contact Time" 
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"
+              />
+              <p className="text-xs text-gray-400 mt-1">Choose a clear, descriptive name so users understand what data to enter</p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
+              <input 
+                type="text" 
+                value={newColDescription} 
+                onChange={e=>setNewColDescription(e.target.value)} 
+                placeholder="Additional context about this column" 
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Field Type</label>
+              <select 
+                value={newColType} 
+                onChange={e=>setNewColType(e.target.value as CustomColumn["field_type"])} 
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full bg-white"
+              >
+                <option value="text">Text - Free form text input</option>
+                <option value="number">Number - Numeric values only</option>
+                <option value="dropdown">Dropdown - Single selection from options</option>
+                <option value="multi-select">Multi-select - Multiple selections</option>
+                <option value="date">Date - Calendar date picker</option>
+                <option value="boolean">Yes/No - Boolean toggle</option>
+                <option value="url">URL - Website or social link</option>
+              </select>
+            </div>
+            
+            {(newColType==="dropdown"||newColType==="multi-select")&&(
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
+                <input 
+                  type="text" 
+                  value={newColOpts} 
+                  onChange={e=>setNewColOpts(e.target.value)} 
+                  placeholder="Option A, Option B, Option C" 
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"
+                />
+                <p className="text-xs text-gray-400 mt-1">Enter comma-separated options</p>
+              </div>
+            )}
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Section</label>
+              <select 
+                value={newColGroup} 
+                onChange={e=>setNewColGroup(e.target.value as "Influencer Details" | "Approval Details" | "Outreach Details")} 
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full bg-white"
+              >
+                <option value="Influencer Details">Influencer Details - Basic profile information</option>
+                <option value="Approval Details">Approval Details - Approval workflow fields</option>
+                <option value="Outreach Details">Outreach Details - Communication and rates</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                {newColGroup === "Outreach Details" && "Note: Fields in this section will be disabled for declined influencers"}
+                {newColGroup === "Approval Details" && "For tracking approval status and related notes"}
+                {newColGroup === "Influencer Details" && "For basic influencer profile information"}
+              </p>
+            </div>
+            
+            <div className="flex gap-2 pt-1">
+              <button onClick={()=>setAddingCol(false)} className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+              <button onClick={confirmAddCol} disabled={!newColName.trim()} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-40 transition">Add Column</button>
+            </div>
           </div>
         </div>
       )}
