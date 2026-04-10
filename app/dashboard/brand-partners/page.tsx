@@ -115,10 +115,26 @@ interface TierSettings {
 }
 
 const PLATFORMS = ["Instagram", "YouTube", "TikTok"]
-const PLATFORM_ICONS: Record<string, ReactNode> = {
-  Instagram: <IconBrandInstagram size={16} />,
-  YouTube: <IconBrandYoutube size={16} />,
-  TikTok: <IconBrandTiktok size={16} />,
+export const PLATFORM_ICONS: Record<string, ReactNode> = {
+  Instagram: (
+    <img
+      src="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
+      alt="Instagram"
+      className="w-4 h-4"
+    />
+  ),
+
+  TikTok: (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-2.89 2.89 2.896 2.896 0 0 1-2.889-2.89 2.896 2.896 0 0 1 2.89-2.889c.302 0 .595.05.872.137V9.257a6.339 6.339 0 0 0-5.053 2.212 6.339 6.339 0 0 0-1.33 5.52 6.34 6.34 0 0 0 5.766 4.731 6.34 6.34 0 0 0 6.34-6.34V8.898a7.756 7.756 0 0 0 4.422 1.393V6.825a4.8 4.8 0 0 1-2.443-.139z" />
+    </svg>
+  ),
+
+  YouTube: (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.376.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.376-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  ),
 }
 const NICHES = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech"]
 const LOCATIONS = ["Philippines", "Singapore", "United States", "Australia", "United Kingdom", "Malaysia"]
