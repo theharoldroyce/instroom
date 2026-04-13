@@ -402,7 +402,7 @@ const MOCK_ROWS: InfluencerRow[] = [
 export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColumns = [], onRowsChange, onCustomColumnsChange, readOnly = false }: { initialRows?: InfluencerRow[]; initialCustomColumns?: CustomColumn[]; onRowsChange?: (rows: InfluencerRow[]) => void; onCustomColumnsChange?: (cols: CustomColumn[]) => void; readOnly?: boolean }) {
   const [rows, setRows] = useState<InfluencerRow[]>(initialRows)
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
-  const [loading, setLoading] = useState(!!brandId)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeCell, setActiveCell] = useState<CellAddress|null>(null)
   const [editCell, setEditCell] = useState<CellAddress|null>(null)
