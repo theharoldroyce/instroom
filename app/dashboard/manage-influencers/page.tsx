@@ -112,7 +112,7 @@ function InfluencersContent() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <TableSheet brandId={brandId} onRowsChange={handleRowsChange} />
+      <TableSheet onRowsChange={handleRowsChange} />
     </div>
   )
 }
