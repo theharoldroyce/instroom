@@ -62,6 +62,7 @@ export type InfluencerRow = {
   handle: string
   platform: string
   full_name: string
+  first_name?: string
   email: string
   gender?: string
   location?: string
@@ -70,6 +71,7 @@ export type InfluencerRow = {
   follower_count: string
   engagement_rate: string
   contact_status: string
+  contact_info?: string
   stage: string
   outreach_method: string
   agreed_rate: string
