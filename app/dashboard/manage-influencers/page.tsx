@@ -9,7 +9,7 @@ function InfluencersContent() {
   const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
   const [createdInfluencers, setCreatedInfluencers] = useState<Set<string>>(new Set())
-  const saveTimeoutRef = useRef<NodeJS.Timeout>()
+  const saveTimeoutRef = useRef<NodeJS.Timeout>(undefined)
 
   useEffect(() => {
     const id = searchParams.get("brandId")
