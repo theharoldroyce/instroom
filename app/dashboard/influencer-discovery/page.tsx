@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useRef, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronDown, Search, Plus, Loader2, CheckCircle2, AlertCircle, X, Users } from "lucide-react"
 
 // ─── API Config ─────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ type QuickResult = {
   platform: string
 }
 
-export default function InfluencerDiscoveryPage() {
+function InfluencerDiscoveryContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
@@ -105,6 +105,11 @@ export default function InfluencerDiscoveryPage() {
   const handleRecentSearchClick = (search: string) => {
     setTopic(search)
     saveRecentSearch(search)
+
+    const params = new URLSearchParams()
+    params.set("topic", search)
+    params.set("platform", selectedPlatform)
+    if (brandId) params.set("brandId", brandId)
 
     router.push(
       `/dashboard/influencer-discovery/search?${params.toString()}`
