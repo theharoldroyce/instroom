@@ -1,8 +1,14 @@
 "use client"
 
-import { useState, useRef, useEffect, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { ChevronDown } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { ChevronDown, Search, Plus, Loader2, CheckCircle2, AlertCircle, X, Users } from "lucide-react"
+
+// ─── API Config ─────────────────────────────────────────────────────────────
+const API_ENDPOINTS = {
+  instagram: (u: string) => `https://api.instroom.io/v2/${u}/instagram`,
+  tiktok: (u: string) => `https://api.instroom.io/${u}/tiktok`,
+}
 
 const recommendedSearches = [
   "#EcoFriendlyLiving",
@@ -11,7 +17,15 @@ const recommendedSearches = [
   "#HandmadeWithLove",
 ]
 
-function InfluencerDiscoveryContent() {
+type QuickResult = {
+  username: string
+  name: string
+  avatar: string
+  followers: string
+  platform: string
+}
+
+export default function InfluencerDiscoveryPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
@@ -20,6 +34,13 @@ function InfluencerDiscoveryContent() {
   const [selectedPlatform, setSelectedPlatform] = useState("Instagram")
   const [openPlatform, setOpenPlatform] = useState(false)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
+
+  // Quick add states
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [quickUsername, setQuickUsername] = useState("")
+  const [quickLoading, setQuickLoading] = useState(false)
+  const [quickResult, setQuickResult] = useState<QuickResult | null>(null)
+  const [quickError, setQuickError] = useState<string | null>(null)
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -84,11 +105,6 @@ function InfluencerDiscoveryContent() {
   const handleRecentSearchClick = (search: string) => {
     setTopic(search)
     saveRecentSearch(search)
-    
-    const params = new URLSearchParams()
-    params.set("topic", search)
-    params.set("platform", selectedPlatform)
-    if (brandId) params.set("brandId", brandId)
 
     router.push(
       `/dashboard/influencer-discovery/search?${params.toString()}`
@@ -106,15 +122,87 @@ function InfluencerDiscoveryContent() {
     }
   }
 
+  // Quick lookup — hit the real API
+  const handleQuickLookup = async () => {
+    if (!quickUsername.trim()) return
+
+    setQuickLoading(true)
+    setQuickError(null)
+    setQuickResult(null)
+
+    const clean = quickUsername.trim().replace("@", "").toLowerCase()
+    const platformKey = selectedPlatform.toLowerCase() as "instagram" | "tiktok"
+
+    // Only Instagram & TikTok have endpoints
+    if (platformKey !== "instagram" && platformKey !== "tiktok") {
+      setQuickError(`${selectedPlatform} lookup is not supported yet. Only Instagram and TikTok are available.`)
+      setQuickLoading(false)
+      return
+    }
+
+    try {
+      const url = API_ENDPOINTS[platformKey](clean)
+      const res = await fetch(url)
+
+      if (!res.ok) {
+        if (res.status === 404) {
+          setQuickError(`@${clean} not found on ${selectedPlatform}. Check the username.`)
+        } else if (res.status === 429) {
+          setQuickError("Rate limit reached. Wait a moment and try again.")
+        } else {
+          setQuickError(`API error (${res.status}). Try again.`)
+        }
+        setQuickLoading(false)
+        return
+      }
+
+      const json = await res.json()
+      const d = json.data || json.user || json
+
+      const fol = Number(d.follower_count || d.followers || 0)
+      const fmt = (n: number) => {
+        if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M"
+        if (n >= 1_000) return (n / 1_000).toFixed(1) + "K"
+        return n.toString()
+      }
+
+      setQuickResult({
+        username: d.username || clean,
+        name: d.full_name || d.name || clean,
+        avatar:
+          d.profile_pic_url ||
+          d.avatar ||
+          `https://ui-avatars.com/api/?name=${clean}&background=0F6B3E&color=fff`,
+        followers: fmt(fol),
+        platform: selectedPlatform,
+      })
+    } catch (err) {
+      console.error(err)
+      setQuickError("Network error. Check your connection.")
+    } finally {
+      setQuickLoading(false)
+    }
+  }
+
+  // Navigate to search results with the looked-up username pre-loaded
+  const handleGoToProfile = () => {
+    if (!quickResult) return
+    router.push(
+      `/dashboard/influencer-discovery/search?topic=${encodeURIComponent(
+        quickResult.username
+      )}&platform=${encodeURIComponent(selectedPlatform)}&mode=username`
+    )
+  }
+
   const platforms = [
     {
       name: "Instagram",
       icon: (
-      <img
-        src="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
-        alt="Instagram"
-        className="w-6 h-6"
-      />
+        <img
+          src="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
+          alt="Instagram"
+          className="w-6 h-6"
+        />
       ),
     },
     {
@@ -135,9 +223,7 @@ function InfluencerDiscoveryContent() {
     },
   ]
 
-  const currentPlatform = platforms.find(
-    (p) => p.name === selectedPlatform
-  )
+  const currentPlatform = platforms.find((p) => p.name === selectedPlatform)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -148,12 +234,8 @@ function InfluencerDiscoveryContent() {
         setOpenPlatform(false)
       }
     }
-
     document.addEventListener("mousedown", handleClickOutside)
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-    }
+    return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
   return (
@@ -169,7 +251,6 @@ function InfluencerDiscoveryContent() {
               influence your customers
             </span>
           </h1>
-
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             Connect with authentic voices that resonate with your brand
           </p>
@@ -179,38 +260,40 @@ function InfluencerDiscoveryContent() {
         <div className="max-w-4xl mx-auto mb-12">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible">
             <div className="p-2">
-
               <div className="flex flex-col sm:flex-row gap-2">
 
                 {/* Platform Selector */}
                 <div ref={dropdownRef} className="relative z-10">
-
                   <button
                     type="button"
                     onClick={() => setOpenPlatform((prev) => !prev)}
                     className="bg-gray-50 hover:bg-gray-100 rounded-xl px-5 py-4 flex items-center justify-center gap-2 transition-colors"
                   >
-                    <div className={`${
-                      selectedPlatform === "Instagram" ? "text-[#E4405F]" : 
-                      selectedPlatform === "TikTok" ? "text-black" : 
-                      "text-[#FF0000]"
-                    }`}>
+                    <div
+                      className={`${
+                        selectedPlatform === "Instagram"
+                          ? "text-[#E4405F]"
+                          : selectedPlatform === "TikTok"
+                          ? "text-black"
+                          : "text-[#FF0000]"
+                      }`}
+                    >
                       {currentPlatform?.icon}
                     </div>
-                    <ChevronDown 
-                      size={18} 
-                      className={`transition-transform duration-200 ${openPlatform ? 'rotate-180' : ''}`} 
+                    <ChevronDown
+                      size={18}
+                      className={`transition-transform duration-200 ${
+                        openPlatform ? "rotate-180" : ""
+                      }`}
                     />
                   </button>
 
                   {openPlatform && (
                     <>
-                      {/* Backdrop */}
-                      <div 
+                      <div
                         className="fixed inset-0 z-40"
                         onClick={() => setOpenPlatform(false)}
                       />
-                      {/* Dropdown Menu */}
                       <div className="absolute left-0 mt-2 w-auto min-w-[60px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
                         {platforms.map((platform) => (
                           <button
@@ -221,15 +304,21 @@ function InfluencerDiscoveryContent() {
                               setOpenPlatform(false)
                             }}
                             className={`w-full flex items-center justify-center px-4 py-3 hover:bg-gray-50 transition-colors ${
-                              selectedPlatform === platform.name ? 'bg-green-50' : ''
+                              selectedPlatform === platform.name
+                                ? "bg-green-50"
+                                : ""
                             }`}
                             title={platform.name}
                           >
-                            <div className={`${
-                              platform.name === "Instagram" ? "text-[#E4405F]" : 
-                              platform.name === "TikTok" ? "text-black" : 
-                              "text-[#FF0000]"
-                            }`}>
+                            <div
+                              className={`${
+                                platform.name === "Instagram"
+                                  ? "text-[#E4405F]"
+                                  : platform.name === "TikTok"
+                                  ? "text-black"
+                                  : "text-[#FF0000]"
+                              }`}
+                            >
                               {platform.icon}
                             </div>
                           </button>
@@ -237,7 +326,6 @@ function InfluencerDiscoveryContent() {
                       </div>
                     </>
                   )}
-
                 </div>
 
                 {/* Topic Input */}
@@ -259,10 +347,96 @@ function InfluencerDiscoveryContent() {
                 >
                   Find Creators
                 </button>
-
               </div>
-
             </div>
+          </div>
+        </div>
+
+        {/* Quick Username Lookup — direct API call */}
+        <div className="max-w-4xl mx-auto mb-12">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-gradient-to-br from-[#0F6B3E] to-[#2A9D6E] rounded-xl flex items-center justify-center">
+                <Users size={20} className="text-white" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Look up by Username</h3>
+                <p className="text-sm text-gray-500">
+                  Fetch real data from {selectedPlatform} API instantly
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                  @
+                </span>
+                <input
+                  value={quickUsername}
+                  onChange={(e) => {
+                    setQuickUsername(e.target.value)
+                    setQuickError(null)
+                    setQuickResult(null)
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleQuickLookup()}
+                  placeholder="username"
+                  className="w-full pl-9 pr-4 py-3 bg-gray-50 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0F6B3E]/20 text-sm"
+                />
+              </div>
+              <button
+                onClick={handleQuickLookup}
+                disabled={quickLoading || !quickUsername.trim()}
+                className="bg-gradient-to-r from-[#0F6B3E] to-[#2A9D6E] text-white font-medium px-6 py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-shadow flex items-center gap-2 text-sm"
+              >
+                {quickLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Search size={16} />
+                )}
+                Lookup
+              </button>
+            </div>
+
+            {/* Quick result */}
+            {quickResult && (
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-4">
+                <img
+                  src={quickResult.avatar}
+                  alt={quickResult.name}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${quickResult.username}&background=0F6B3E&color=fff`
+                  }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">
+                    {quickResult.name}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    @{quickResult.username} · {quickResult.followers} followers
+                  </p>
+                </div>
+                <button
+                  onClick={handleGoToProfile}
+                  className="bg-[#0F6B3E] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#0c5a34] transition"
+                >
+                  View Full Profile
+                </button>
+              </div>
+            )}
+
+            {/* Quick error */}
+            {quickError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-sm text-red-700">
+                <AlertCircle size={16} className="flex-shrink-0" />
+                {quickError}
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400 mt-3">
+              Supported: Instagram &amp; TikTok · YouTube coming soon
+            </p>
           </div>
         </div>
 
@@ -270,7 +444,9 @@ function InfluencerDiscoveryContent() {
         {recentSearches.length > 0 && (
           <div className="max-w-4xl mx-auto mb-8">
             <div className="flex items-center justify-between mb-3 px-2">
-              <h3 className="text-sm font-semibold text-gray-700">Recent Searches</h3>
+              <h3 className="text-sm font-semibold text-gray-700">
+                Recent Searches
+              </h3>
               <button
                 onClick={clearRecentSearches}
                 className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
@@ -294,7 +470,9 @@ function InfluencerDiscoveryContent() {
 
         {/* Recommended Searches */}
         <div className="max-w-4xl mx-auto mb-16">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3 px-2">Recommended Searches</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 px-2">
+            Recommended Searches
+          </h3>
           <div className="flex flex-wrap gap-3 justify-center">
             {recommendedSearches.map((tag) => (
               <button
@@ -307,7 +485,6 @@ function InfluencerDiscoveryContent() {
             ))}
           </div>
         </div>
-
       </div>
     </div>
   )

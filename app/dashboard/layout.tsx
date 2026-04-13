@@ -2,6 +2,8 @@
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
+import InstroomChatbot from "@/components/instroom-chatbot"
+
 import {
   SidebarInset,
   SidebarProvider,
@@ -32,6 +34,10 @@ export default function DashboardLayout({
           </div>
         </div>
       </SidebarInset>
+
+      {/* Instroom Chatbot */}
+      {/* <InstroomChatbot /> */}
+
     </SidebarProvider>
   )
 }
