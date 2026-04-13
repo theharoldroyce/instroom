@@ -2104,8 +2104,9 @@ export default function TableSheet({
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4 md:p-6" onClick={() => setAddModalType(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md sm:max-w-lg md:max-w-2xl p-4 sm:p-6 md:p-8 max-h-[85vh] sm:max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             {addModalType === 'type' && (
-              <AddInfluencerModal 
+              <AddInfluencerModal
                 setType={(type) => handleAddInfluencerType(type)}
+                onClose={() => setAddModalType(null)}
               />
             )}
             {addModalType === 'manual' && (
