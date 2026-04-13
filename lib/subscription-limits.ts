@@ -10,6 +10,11 @@ export async function canAddBrand(userId: string): Promise<{
   message?: string
 }> {
   try {
+    // Count existing brands
+    const brandCount = await prisma.brand.count({
+      where: { owner_id: userId },
+    })
+
     const subscription = await prisma.userSubscription.findUnique({
       where: { user_id: userId },
       include: {
@@ -17,19 +22,18 @@ export async function canAddBrand(userId: string): Promise<{
       },
     })
 
+    // Freemium: allow 1 brand without subscription
     if (!subscription || subscription.status !== "active") {
       return {
-        allowed: false,
-        current: 0,
-        max: 0,
-        message: "No active subscription found",
+        allowed: brandCount < 1,
+        current: brandCount,
+        max: 1,
+        message:
+          brandCount >= 1
+            ? "Free plan allows 1 brand only. Subscribe to add more brands."
+            : undefined,
       }
     }
-
-    // Count existing brands
-    const brandCount = await prisma.brand.count({
-      where: { owner_id: userId },
-    })
 
     // Unlimited if max_brands is null (Agency plan)
     if (subscription.plan.max_brands === null) {
@@ -92,47 +96,11 @@ export async function canAddCollaborator(
       }
     }
 
-    const subscription = await prisma.userSubscription.findUnique({
-      where: { user_id: userId },
-      include: { plan: true },
-    })
-
-    if (!subscription || subscription.status !== "active") {
-      return {
-        allowed: false,
-        current: 0,
-        max: 0,
-        message: "No active subscription found",
-      }
-    }
-
-    // Count existing members (exclude owner)
-    const memberCount = await prisma.brandMember.count({
-      where: { brand_id: brandId },
-    })
-
-    // Unlimited if max_seats is null (Agency plan)
-    if (subscription.plan.max_seats === null) {
-      return {
-        allowed: true,
-        current: memberCount,
-        max: null,
-      }
-    }
-
-    // Calculate max seats
-    // For Solo: included=0, max=5 → maxSeats = 0 + extra (up to max)
-    // For Team: included=10, max=25 → maxSeats = 10 + extra (up to max)
-    const maxSeats = subscription.plan.included_seats + subscription.extra_seats
-
+    // Unlimited collaborators for all users (free or paid)
     return {
-      allowed: memberCount < maxSeats,
-      current: memberCount,
-      max: maxSeats,
-      message:
-        memberCount >= maxSeats
-          ? `You've reached your collaborator limit (${maxSeats}). Upgrade your plan or purchase extra seats.`
-          : undefined,
+      allowed: true,
+      current: 0,
+      max: null,
     }
   } catch (error) {
     return {

@@ -256,3 +256,128 @@ export async function sendPasswordResetEmail(email: string, name: string, resetU
     return false
   }
 }
+
+export async function sendOTPEmail(email: string, name: string, otp: string) {
+  try {
+    const mailOptions = {
+      from: `Instroom <${process.env.GMAIL_USER}>`,
+      to: email,
+      subject: "Verify Your Instroom Account - OTP Code",
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body {
+                font-family: 'Inter', sans-serif;
+                line-height: 1.6;
+                color: #1E1E1E;
+                background-color: #F7F9F8;
+              }
+              .container {
+                max-width: 600px;
+                margin: 0 auto;
+                background-color: white;
+                border-radius: 8px;
+                padding: 40px;
+                border: 1px solid #0F6B3E/15;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 30px;
+              }
+              .logo {
+                font-size: 28px;
+                font-weight: bold;
+                color: #1FAE5B;
+                margin-bottom: 10px;
+              }
+              h1 {
+                color: #0F6B3E;
+                font-size: 24px;
+                margin-bottom: 10px;
+              }
+              .content {
+                margin: 30px 0;
+                line-height: 1.8;
+              }
+              .otp-box {
+                background-color: #F7F9F8;
+                border: 2px solid #1FAE5B;
+                border-radius: 8px;
+                padding: 20px;
+                text-align: center;
+                margin: 30px 0;
+              }
+              .otp-code {
+                font-size: 32px;
+                font-weight: bold;
+                color: #1FAE5B;
+                letter-spacing: 4px;
+                font-family: 'Courier New', monospace;
+              }
+              .warning {
+                background-color: #fff3cd;
+                border: 1px solid #ffc107;
+                border-radius: 6px;
+                padding: 15px;
+                margin: 20px 0;
+                color: #856404;
+                font-size: 14px;
+              }
+              .footer {
+                text-align: center;
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #0F6B3E/10;
+                color: #666;
+                font-size: 12px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <div class="logo">Instroom</div>
+              </div>
+              
+              <h1>Verify Your Email</h1>
+              
+              <div class="content">
+                <p>Hi ${name},</p>
+                
+                <p>Welcome to Instroom! To complete your signup, please verify your email using the OTP code below:</p>
+                
+                <div class="otp-box">
+                  <div class="otp-code">${otp}</div>
+                </div>
+                
+                <p style="text-align: center;">This code will expire in <strong>10 minutes</strong></p>
+                
+                <div class="warning">
+                  <strong>⚠️ Keep this code confidential</strong><br/>
+                  Never share this code with anyone. Instroom staff will never ask for it.
+                </div>
+                
+                <p><strong>Didn't sign up for Instroom?</strong><br/>
+                If you didn't create this account, you can safely ignore this email.</p>
+              </div>
+              
+              <div class="footer">
+                <p>© 2026 Instroom. All rights reserved.<br/>
+                Simplify your Influencer Marketing Workflow</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+    }
+
+    await transporter.sendMail(mailOptions)
+    return true
+  } catch (error) {
+    console.error("OTP email error:", error instanceof Error ? error.message : String(error))
+    return false
+  }
+}

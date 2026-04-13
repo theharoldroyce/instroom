@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Find the user's onboarding record
     const onboarding = await prisma.onboarding.findFirst({
       where: {
         user: {
@@ -21,7 +20,6 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Check if onboarding is complete
     const isComplete = !!onboarding?.completed_at
 
     return NextResponse.json({ isComplete }, { status: 200 })

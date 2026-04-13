@@ -90,22 +90,22 @@ export function OnboardingForm({
 
   if (showWelcome) {
     return (
-      <div className="flex w-full max-w-2xl rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
+      <div className="flex w-full max-w-sm sm:max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
-        <div className="w-full px-10 py-12 flex flex-col items-center justify-center text-center">
-          <div className="text-6xl mb-4">🎉</div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            You're all set!
+        <div className="w-full px-6 sm:px-10 py-8 sm:py-12 flex flex-col items-center justify-center text-center">
+          <div className="text-4xl sm:text-6xl mb-4">🎉</div>
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-2">
+            Almost there!
           </h1>
-          <p className="text-gray-600 mb-8 max-w-sm">
-            Your Instroom account is ready. Start exploring your analytics dashboard.
+          <p className="text-xs sm:text-base text-gray-600 mb-8 max-w-xs sm:max-w-sm">
+            Onboarding complete. Now let's find the perfect plan for your needs.
           </p>
           <Button
             onClick={onSubmit}
             disabled={isLoading}
-            className="h-12 px-12 bg-[#4caf50] text-white font-semibold hover:bg-[#2d7d32] rounded-full"
+            className="h-10 sm:h-12 px-8 sm:px-12 text-sm sm:text-base bg-[#4caf50] text-white font-semibold hover:bg-[#2d7d32] rounded-full"
           >
-            {isLoading ? 'Getting Started...' : 'Get Started →'}
+            {isLoading ? 'Choosing Plan...' : 'Choose Plan →'}
           </Button>
         </div>
       </div>
@@ -113,20 +113,20 @@ export function OnboardingForm({
   }
 
   return (
-    <div className="flex w-full max-w-5xl h-[520px] rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
+    <div className="flex flex-col sm:flex-row w-full max-w-full sm:max-w-4xl min-h-[620px] sm:h-[520px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
       {/* Left Content Area */}
-      <div className="flex-1 px-12 py-8 flex flex-col overflow-y-auto">
+      <div className="flex-1 px-6 sm:px-12 py-6 sm:py-8 flex flex-col overflow-y-auto">
         {/* Logo */}
-        <div className="flex items-center gap-2 mb-8">
+        <div className="flex items-center gap-2 mb-6 sm:mb-8">
           <Image 
             src="/images/instroomLogo.png" 
             alt="Instroom Logo" 
-            width={28}
-            height={28}
-            className="rounded-lg"
+            width={24}
+            height={24}
+            className="rounded-lg w-6 h-6"
           />
-          <span className="font-bold text-gray-900">Instroom</span>
+          <span className="font-bold text-sm sm:text-base text-gray-900">Instroom</span>
         </div>
 
         {/* Step Indicator */}
@@ -135,7 +135,7 @@ export function OnboardingForm({
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden mb-6">
+        <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden mb-4 sm:mb-6">
           <div
             className="h-full bg-[#4caf50] transition-all duration-300"
             style={{ width: `${(step / STEPS.length) * 100}%` }}
@@ -143,26 +143,26 @@ export function OnboardingForm({
         </div>
 
         {/* Question */}
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">
+        <h2 className="text-xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">
           {currentStep.title}
         </h2>
 
         {/* Content */}
-        <div className="flex-1 mb-8">
+        <div className="flex-1 mb-6 sm:mb-8">
           {step === 1 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 {['Brand Awareness', 'Conversion (Sales)', 'Get UGC', 'Increase Traffic', 'Analytics', 'Global Reach'].map((option) => (
                   <button
                     key={option}
                     onClick={() => onFormChange('goal', option)}
-                    className={`p-4 rounded-xl border-2 transition-all text-center min-h-[100px] flex flex-col items-center justify-center ${
+                    className={`p-3 sm:p-4 rounded-xl border-2 transition-all text-center min-h-[90px] sm:min-h-[100px] flex flex-col items-center justify-center ${
                       formData.goal === option
                         ? 'border-[#4caf50] bg-green-50'
                         : 'border-gray-200 bg-white hover:border-[#4caf50]'
                     }`}
                   >
-                    <span className="text-xl block mb-2">
+                    <span className="text-lg sm:text-xl block mb-1 sm:mb-2">
                       {option === 'Brand Awareness' && '📣'}
                       {option === 'Conversion (Sales)' && '💸'}
                       {option === 'Get UGC' && '📸'}
@@ -170,7 +170,7 @@ export function OnboardingForm({
                       {option === 'Analytics' && '📊'}
                       {option === 'Global Reach' && '🌍'}
                     </span>
-                    <p className="text-xs font-semibold text-gray-900">{option}</p>
+                    <p className="text-xs font-semibold text-gray-900 leading-tight">{option}</p>
                     {formData.goal === option && (
                       <div className="absolute top-2 right-2 w-5 h-5 bg-[#4caf50] rounded-full flex items-center justify-center">
                         <span className="text-white text-xs">✓</span>
@@ -196,7 +196,7 @@ export function OnboardingForm({
           )}
 
           {step === 3 && (
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3">
               {['Only me', '2–5', '6–10', '11–20', '21–50', '51–100', '100+'].map((option) => (
                 <button
                   key={option}
@@ -207,7 +207,7 @@ export function OnboardingForm({
                       : 'border-gray-200 bg-white hover:border-[#4caf50]'
                   }`}
                 >
-                  <span className="text-lg block mb-1">
+                  <span className="text-lg sm:text-xl block mb-1 sm:mb-2">
                     {option === 'Only me' && '🧑'}
                     {option === '2–5' && '👥'}
                     {option === '6–10' && '👨‍👩‍👧'}
@@ -228,18 +228,18 @@ export function OnboardingForm({
           )}
 
           {step === 4 && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
               {['$10K–$20K', '$20K–$30K', '$30K–$40K', '$40K–$50K', '$50K+'].map((option) => (
                 <button
                   key={option}
                   onClick={() => onFormChange('revenue', option)}
-                  className={`p-4 rounded-xl border-2 text-center transition-all relative min-h-[100px] flex flex-col items-center justify-center ${
+                  className={`p-3 sm:p-4 rounded-xl border-2 text-center transition-all relative min-h-[90px] sm:min-h-[100px] flex flex-col items-center justify-center ${
                     formData.revenue === option
                       ? 'border-[#4caf50] bg-green-50'
                       : 'border-gray-200 bg-white hover:border-[#4caf50]'
                   }`}
                 >
-                  <span className="text-xl block mb-2">
+                  <span className="text-lg sm:text-xl block mb-1 sm:mb-2">
                     {option === '$10K–$20K' && '💵'}
                     {option === '$20K–$30K' && '💴'}
                     {option === '$30K–$40K' && '💶'}
@@ -258,7 +258,7 @@ export function OnboardingForm({
           )}
 
           {step === 5 && (
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3">
               {['Facebook', 'Instagram', 'TikTok', 'LinkedIn', 'YouTube', 'X', 'Google', 'Upwork', 'Referral', 'Ads'].map((option) => (
                 <button
                   key={option}
@@ -269,7 +269,7 @@ export function OnboardingForm({
                       : 'border-gray-200 bg-white hover:border-[#4caf50]'
                   }`}
                 >
-                  <span className="text-lg block mb-1">
+                  <span className="text-lg sm:text-xl block mb-1 sm:mb-2">
                     {option === 'Facebook' && '👍'}
                     {option === 'Instagram' && '📷'}
                     {option === 'TikTok' && '🎵'}
@@ -294,8 +294,8 @@ export function OnboardingForm({
         </div>
 
         {/* Navigation */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-0">
+          <div className="flex gap-1 order-2 sm:order-1">
             {STEPS.map((_, index) => (
               <div
                 key={index}
@@ -317,7 +317,7 @@ export function OnboardingForm({
             ) : (
               <button
                 onClick={onBack}
-                className="px-6 py-2 border-2 border-gray-300 rounded-full text-sm font-semibold text-gray-600 hover:border-gray-400"
+                className="px-4 sm:px-6 py-2 border-2 border-gray-300 rounded-full text-xs sm:text-sm font-semibold text-gray-600 hover:border-gray-400 whitespace-nowrap"
                 disabled={isLoading}
               >
                 Back
@@ -326,7 +326,7 @@ export function OnboardingForm({
             <Button
               onClick={handleNext}
               disabled={isLoading}
-              className="px-8 h-10 bg-[#4caf50] text-white font-semibold hover:bg-[#2d7d32] rounded-full"
+              className="px-6 sm:px-8 h-9 sm:h-10 text-xs sm:text-sm bg-[#4caf50] text-white font-semibold hover:bg-[#2d7d32] rounded-full whitespace-nowrap"
             >
               {step === STEPS.length ? (isLoading ? 'Completing...' : 'Complete Setup →') : 'Next Step →'}
             </Button>
@@ -334,8 +334,8 @@ export function OnboardingForm({
         </div>
       </div>
 
-      {/* Right Sidebar */}
-      <div className="w-64 bg-gradient-to-b from-[#d4edcf] to-[#aed9b0] relative overflow-hidden">
+      {/* Right Sidebar - Hidden on mobile */}
+      <div className="hidden sm:block w-full sm:w-64 bg-gradient-to-b from-[#d4edcf] to-[#aed9b0] relative overflow-hidden">
         <div className="absolute w-40 h-40 bg-white/20 rounded-full -top-20 -right-20" />
         <div className="absolute w-24 h-24 bg-white/15 rounded-full -bottom-10 -left-10" />
         

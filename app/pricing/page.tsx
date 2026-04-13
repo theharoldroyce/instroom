@@ -26,14 +26,14 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
     const userSub = await prisma.userSubscription.findFirst({
       where: {
         user_id: session.user.id,
-        status: "active",
       },
     });
-    if (userSub) {
+    if (userSub && userSub.status === "active") {
       redirect("/dashboard");
     }
   }
-  const plans = await getActivePlans();
+  const allPlans = await getActivePlans();
+  const plans = allPlans.filter((plan: any) => plan.name !== "agency");
   const params = await searchParams;
   const cycle = params?.cycle === "yearly" ? "yearly" : "monthly";
 
@@ -55,110 +55,141 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
         />
       </div>
 
-
-
-      <section className="mx-auto max-w-3xl px-6 pt-20 pb-10 text-center lg:px-0">
-        <h1 className="text-4xl font-extrabold md:text-5xl bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] bg-clip-text text-transparent">
-          Subscription Plans
+      <section className="mx-auto max-w-4xl px-6 pt-20 pb-12 text-center lg:px-0">
+        <h1 className="text-3xl font-extrabold md:text-4xl bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] bg-clip-text text-transparent">
+          Simple, Transparent Pricing
         </h1>
-        <p className="mt-4 text-[#666666] text-lg md:text-xl">
-          Simple, transparent pricing. No hidden fees. Cancel anytime.
+        <p className="mt-6 text-[#666666] text-lg md:text-xl max-w-2xl mx-auto">
+          Choose the perfect plan for your influencer marketing needs. No hidden fees. Cancel anytime.
         </p>
-        <div className="flex justify-center mt-8 mb-2">
+
+        <div className="flex justify-center mt-10 gap-1 bg-white border border-[#0F6B3E]/20 rounded-full p-1 w-fit mx-auto">
           <a
             href="?cycle=monthly"
-            className={`px-4 py-2 rounded-l-full border border-[#0F6B3E]/40 text-base font-semibold transition-all duration-150 ${cycle === 'monthly' ? 'bg-[#0F6B3E] text-white' : 'bg-white hover:bg-[#f0f0f0] text-[#1E1E1E]'}`}
+            className={`px-6 py-2 rounded-full text-base font-semibold transition-all duration-150 ${
+              cycle === "monthly"
+                ? "bg-[#1FAE5B] text-white shadow-md"
+                : "text-[#1E1E1E] hover:text-[#1FAE5B]"
+            }`}
           >
-            Monthly
+            Monthly Billing
           </a>
           <a
             href="?cycle=yearly"
-            className={`px-4 py-2 rounded-r-full border-t border-b border-r border-[#0F6B3E]/40 text-base font-semibold transition-all duration-150 ${cycle === 'yearly' ? 'bg-[#0F6B3E] text-white' : 'bg-white hover:bg-[#f0f0f0] text-[#1E1E1E]'}`}
+            className={`px-6 py-2 rounded-full text-base font-semibold transition-all duration-150 flex items-center gap-2 ${
+              cycle === "yearly"
+                ? "bg-[#1FAE5B] text-white shadow-md"
+                : "text-[#1E1E1E] hover:text-[#1FAE5B]"
+            }`}
           >
-            Yearly <span className="ml-1 text-xs text-[#1FAE5B]"></span>
+            Yearly Billing
+            <span className="text-xs bg-[#F4B740]/20 text-[#C87500] px-2 py-0.5 rounded-full font-semibold">
+              Save 20%
+            </span>
           </a>
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-6 pb-20">
-        <div className="mb-8" />
-        <div className="flex flex-col md:flex-row md:justify-center md:items-stretch gap-y-16 gap-x-16">
+      <section className="mx-auto max-w-5xl px-6 pb-8">
+        <div className="flex flex-col lg:flex-row justify-center items-end gap-8 lg:gap-6">
           {plans.map((plan, idx) => {
-            const price = cycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
-            const priceLabel = cycle === 'yearly' ? '/yr' : '/mo';
+            const price = cycle === "yearly" ? plan.price_yearly : plan.price_monthly;
+            const priceLabel = cycle === "yearly" ? "/yr" : "/mo";
             return (
               <div
                 key={plan.id}
-                className={`relative flex flex-col rounded-2xl border p-8 transition-all duration-300 shadow-xl group ${
+                className={`relative w-full lg:w-80 rounded-2xl border transition-all duration-300 shadow-lg group ${
                   idx === 1
-                    ? "border-[#1FAE5B]/60 bg-gradient-to-br from-[#1FAE5B]/10 to-[#0F6B3E]/8 scale-105 z-10"
-                    : "border-[#0F6B3E]/15 bg-white hover:scale-105 hover:z-10"
+                    ? "border-[#1FAE5B]/60 bg-gradient-to-br from-white to-[#1FAE5B]/5 ring-2 ring-[#1FAE5B]/30 lg:scale-105"
+                    : "border-[#0F6B3E]/15 bg-white hover:shadow-xl hover:border-[#0F6B3E]/25"
                 }`}
-                style={{
-                  minWidth: "300px",
-                  maxWidth: "350px",
-                  marginLeft: "auto",
-                  marginRight: "auto",
-                }}
               >
-                <div
-                  className={`pointer-events-none absolute -inset-1 rounded-2xl blur-2xl opacity-60 z-0 ${
-                    idx === 1
-                      ? "bg-gradient-to-br from-[#1FAE5B]/20 to-[#0F6B3E]/15"
-                      : "bg-gradient-to-br from-[#1FAE5B]/10 to-[#0F6B3E]/5"
-                  }`}
-                  aria-hidden="true"
-                />
                 {idx === 1 && (
-                  <span className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-[#1FAE5B] px-4 py-1 text-xs font-semibold text-white shadow-md z-20">
-                    Most popular
-                  </span>
-                )}
-                <div className="relative z-10 flex flex-col flex-1">
-                  <h3 className="text-lg font-bold text-[#1E1E1E] mb-2">{plan.display_name}</h3>
-                  <div className="flex items-end gap-1 mb-2">
-                    <span className="text-4xl font-extrabold text-[#1E1E1E]">${Number(price).toLocaleString()}</span>
-                    <span className="mb-1 text-base text-[#666666]">{priceLabel}</span>
+                  <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-20">
+                    <span className="inline-block rounded-full bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] px-4 py-1.5 text-xs font-bold text-white shadow-lg">
+                      ⭐ MOST POPULAR
+                    </span>
                   </div>
-                  <p className="mb-2 text-xs text-[#0F6B3E] font-semibold">{getPlanSummary(plan)}</p>
-                  <ul className="mb-8 flex-1 space-y-2 text-sm text-[#1E1E1E]">
-                    <li>
-                      <b>Seats:</b> {plan.included_seats}
-                      {plan.max_seats ? ` (up to ${plan.max_seats})` : ""}
+                )}
+
+                <div className="pointer-events-none absolute -inset-0.5 rounded-2xl blur opacity-30 group-hover:opacity-40 transition duration-300 -z-10 ${
+                  idx === 1
+                    ? 'bg-gradient-to-br from-[#1FAE5B]/40 to-[#0F6B3E]/20'
+                    : 'bg-gradient-to-br from-[#1FAE5B]/10 to-[#0F6B3E]/5'
+                }" />
+
+                <div className="p-8 flex flex-col h-full">
+                  <div className="mb-6">
+                    <h3 className="text-2xl font-bold text-[#1E1E1E] capitalize mb-1">
+                      {plan.display_name}
+                    </h3>
+                    <p className="text-sm text-[#666666]">
+                      {getPlanSummary(plan)}
+                    </p>
+                  </div>
+
+                  <div className="mb-8">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-5xl font-extrabold text-[#1E1E1E]">
+                        ${Number(price).toLocaleString()}
+                      </span>
+                      <span className="text-base text-[#666666] font-medium">{priceLabel}</span>
+                    </div>
+                  </div>
+
+                  <ul className="mb-8 flex-1 space-y-3 text-sm">
+                    <li className="flex items-start gap-3">
+                      <span className="text-[#1FAE5B] font-bold mt-0.5">✓</span>
+                      <span className="text-[#1E1E1E]">
+                        <b className="font-semibold">Unlimited seats</b>
+                      </span>
                     </li>
-                    <li>
-                      <b>Brands:</b> {plan.included_brands}
-                      {plan.max_brands ? ` (up to ${plan.max_brands})` : ""}
+                    <li className="flex items-start gap-3">
+                      <span className="text-[#1FAE5B] font-bold mt-0.5">✓</span>
+                      <span className="text-[#1E1E1E]">
+                        <b className="font-semibold">{plan.included_brands} brands</b>
+                        {plan.max_brands ? ` (up to ${plan.max_brands})` : ""}
+                      </span>
                     </li>
                     {plan.max_influencers && (
-                      <li>
-                        <b>Influencers/brand:</b> {plan.max_influencers}
+                      <li className="flex items-start gap-3">
+                        <span className="text-[#1FAE5B] font-bold mt-0.5">✓</span>
+                        <span className="text-[#1E1E1E]">
+                          <b className="font-semibold">{plan.max_influencers}</b> influencers per brand
+                        </span>
                       </li>
                     )}
                     {plan.max_campaigns && (
-                      <li>
-                        <b>Active campaigns:</b> {plan.max_campaigns}
+                      <li className="flex items-start gap-3">
+                        <span className="text-[#1FAE5B] font-bold mt-0.5">✓</span>
+                        <span className="text-[#1E1E1E]">
+                          <b className="font-semibold">{plan.max_campaigns}</b> active campaigns
+                        </span>
                       </li>
                     )}
-                    <li>
-                      <b>API Access:</b> {plan.can_use_api ? "Yes" : "No"}
+                    <li className="flex items-start gap-3">
+                      <span className={plan.can_use_api ? "text-[#1FAE5B] font-bold mt-0.5" : "text-[#ccc] font-bold mt-0.5"}>{plan.can_use_api ? "✓" : "✕"}</span>
+                      <span className={plan.can_use_api ? "text-[#1E1E1E]" : "text-[#999]"}>API Access</span>
                     </li>
-                    <li>
-                      <b>Custom Branding:</b> {plan.custom_branding ? "Yes" : "No"}
+                    <li className="flex items-start gap-3">
+                      <span className={plan.custom_branding ? "text-[#1FAE5B] font-bold mt-0.5" : "text-[#ccc] font-bold mt-0.5"}>{plan.custom_branding ? "✓" : "✕"}</span>
+                      <span className={plan.custom_branding ? "text-[#1E1E1E]" : "text-[#999]"}>Custom Branding</span>
                     </li>
-                    <li>
-                      <b>Priority Support:</b> {plan.priority_support ? "Yes" : "No"}
+                    <li className="flex items-start gap-3">
+                      <span className={plan.priority_support ? "text-[#1FAE5B] font-bold mt-0.5" : "text-[#ccc] font-bold mt-0.5"}>{plan.priority_support ? "✓" : "✕"}</span>
+                      <span className={plan.priority_support ? "text-[#1E1E1E]" : "text-[#999]"}>Priority Support</span>
                     </li>
                   </ul>
+
                   <Link
                     href={`/pricing/payment?plan=${plan.name}&cycle=${cycle}`}
-                    className={`mt-auto block rounded-full py-3 text-center text-base font-semibold transition-all duration-150 ${
+                    className={`w-full block rounded-lg py-3 text-center text-base font-semibold transition-all duration-150 ${
                       idx === 1
-                        ? "bg-[#1FAE5B] text-white shadow-lg shadow-[#1FAE5B]/20 hover:opacity-90"
-                        : "border border-[#0F6B3E]/20 bg-white text-[#1E1E1E] hover:bg-[#f9f9f9]"
+                        ? "bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] text-white shadow-lg shadow-[#1FAE5B]/25 hover:shadow-xl hover:shadow-[#1FAE5B]/35"
+                        : "border-2 border-[#0F6B3E]/30 bg-white text-[#1E1E1E] hover:border-[#1FAE5B]/60 hover:bg-[#1FAE5B]/5"
                     }`}
                   >
-                    Start Subscription
+                    Get Started
                   </Link>
                 </div>
               </div>
@@ -167,9 +198,19 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
         </div>
       </section>
 
+      <div className="mx-auto max-w-5xl px-6 pb-20 flex justify-end">
+        <Link
+          href="/dashboard"
+          className="text-base text-[#1E1E1E] font-medium hover:text-[#1FAE5B] transition-colors flex items-center gap-2 group"
+        >
+          Skip for now
+          <span className="group-hover:translate-x-1 transition-transform">→</span>
+        </Link>
+      </div>
+
       <section className="mx-auto max-w-3xl px-6 pb-20">
-        <h2 className="text-2xl font-semibold mb-8 text-center text-[#1E1E1E]">Frequently asked questions</h2>
-        <div className="space-y-8">
+        <h2 className="text-3xl font-bold mb-12 text-center text-[#1E1E1E]">Frequently Asked Questions</h2>
+        <div className="space-y-4">
           {[
             {
               q: "Can I try Instroom for free?",
@@ -177,40 +218,49 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
             },
             {
               q: "Can I cancel or change plans anytime?",
-              a: "Absolutely. You can upgrade, downgrade, or cancel your subscription at any time from your dashboard.",
+              a: "Absolutely. You can upgrade, downgrade, or cancel your subscription at any time from your dashboard with no penalties.",
             },
             {
               q: "Do you offer discounts for agencies or teams?",
-              a: "Yes, the Agency plan is designed for teams and agencies. For custom needs, contact us.",
+              a: "Yes, the Team plan offers better value for collaboration. For custom enterprise needs, contact our sales team.",
             },
             {
               q: "What payment methods do you accept?",
-              a: "We accept all major credit cards. For annual or custom billing, please contact us.",
+              a: "We accept all major credit cards (Visa, Mastercard, AmEx). For annual billing or custom arrangements, contact us.",
             },
           ].map(({ q, a }) => (
-            <div key={q} className="rounded-xl bg-white p-5 border border-[#0F6B3E]/15">
-              <p className="font-medium text-[#1E1E1E]">{q}</p>
-              <p className="text-[#666666] mt-2">{a}</p>
+            <div
+              key={q}
+              className="rounded-xl bg-white p-6 border border-[#0F6B3E]/10 hover:border-[#0F6B3E]/30 transition-colors"
+            >
+              <p className="font-semibold text-[#1E1E1E] text-lg mb-2">{q}</p>
+              <p className="text-[#666666] leading-relaxed">{a}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <footer className="border-t border-[#0F6B3E]/10 px-6 py-10 lg:px-10">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-xs text-[#999999] sm:flex-row">
+      <footer className="border-t border-[#0F6B3E]/10 px-6 py-12 lg:px-10">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 text-sm text-[#999999] lg:flex-row">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#1FAE5B]">
-              <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-[#1FAE5B]">
+              <svg className="h-3.5 w-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
               </svg>
             </span>
-            <span className="font-medium text-[#666666]">Instroom</span>
+            <span className="font-semibold text-[#1E1E1E]">Instroom</span>
           </div>
           <p>© {new Date().getFullYear()} Instroom. All rights reserved.</p>
-          <div className="flex gap-5">
-            <a href="#" className="transition-colors hover:text-[#1E1E1E]">Terms</a>
-            <a href="#" className="transition-colors hover:text-[#1E1E1E]">Privacy</a>
-            <a href="#" className="transition-colors hover:text-[#1E1E1E]">Contact</a>
+          <div className="flex gap-6">
+            <a href="#" className="transition-colors hover:text-[#1FAE5B]">
+              Terms
+            </a>
+            <a href="#" className="transition-colors hover:text-[#1FAE5B]">
+              Privacy
+            </a>
+            <a href="#" className="transition-colors hover:text-[#1FAE5B]">
+              Contact
+            </a>
           </div>
         </div>
       </footer>

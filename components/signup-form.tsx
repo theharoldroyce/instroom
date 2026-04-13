@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
@@ -47,13 +47,19 @@ const getPasswordStrengthLevel = (requirements: ReturnType<typeof checkPasswordS
 
 export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   const router = useRouter()
+  const [step, setStep] = useState<'form' | 'otp'>('form')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resendTimer, setResendTimer] = useState(0)
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
+  })
+  const [otpData, setOtpData] = useState({
+    otp: "",
+    signupToken: "",
   })
   const [passwordStrength, setPasswordStrength] = useState({
     hasMinLength: false,
@@ -63,6 +69,14 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     hasSpecialChar: false,
   })
   const [passwordStrengthLevel, setPasswordStrengthLevel] = useState<'weak' | 'medium' | 'strong'>('weak')
+
+  // Timer for resend button
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [resendTimer])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target
@@ -81,7 +95,19 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     setError(null)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleOtpInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6)
+    setOtpData((prev) => ({ ...prev, otp: value }))
+    setError(null)
+  }
+
+  const handleBackToForm = () => {
+    setStep('form')
+    setOtpData({ otp: "", signupToken: "" })
+    setError(null)
+  }
+
+  const handleGenerateOTP = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
@@ -131,7 +157,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     setIsLoading(true)
 
     try {
-      const response = await fetch("/api/auth/signup", {
+      const response = await fetch("/api/auth/generate-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -143,9 +169,51 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
 
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.error || "Signup failed")
+        throw new Error(data.error || "Failed to generate OTP")
       }
 
+      const data = await response.json()
+      setOtpData((prev) => ({ ...prev, signupToken: data.signupToken }))
+      setStep('otp')
+      setResendTimer(30)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!otpData.otp || otpData.otp.length !== 6) {
+      setError("Please enter a valid 6-digit OTP")
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const response = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          otp: otpData.otp,
+          name: formData.name,
+          password: formData.password,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "OTP verification failed")
+      }
+
+      const data = await response.json()
+
+      // Auto-login with NextAuth
       const signInResult = await signIn("credentials", {
         email: formData.email,
         password: formData.password,
@@ -157,9 +225,36 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         return
       }
 
-      router.push("/pricing")
+      router.push("/onboarding")
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResendOTP = async () => {
+    setError(null)
+    setIsLoading(true)
+
+    try {
+      const response = await fetch("/api/auth/resend-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          name: formData.name,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Failed to resend OTP")
+      }
+
+      setResendTimer(30)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resend OTP")
     } finally {
       setIsLoading(false)
     }
@@ -168,7 +263,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   const handleGoogleSignup = async () => {
     try {
       setIsLoading(true)
-      await signIn("google", { callbackUrl: "/pricing" })
+      await signIn("google", { callbackUrl: "/onboarding" })
     } catch (err) {
       setError("Google signup failed. Please try again.")
     } finally {
@@ -177,26 +272,29 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full max-w-lg">
-      <Card className={cn("rounded-2xl shadow-lg p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden")}>
+    <div className="flex flex-col gap-4 sm:gap-6 w-full max-w-sm sm:max-w-lg">
+      <Card className={cn("rounded-2xl shadow-lg p-6 sm:p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden")}>
         {/* Decorative accent line at top */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
-        <CardHeader className="gap-2 pb-1 pt-4">
-          <CardTitle className="text-2xl font-bold text-gray-900">Create an account</CardTitle>
-          <CardDescription className="text-sm text-gray-600">
-            Enter your information below to create your account
-          </CardDescription>
-        </CardHeader>
+        
+        {step === 'form' ? (
+          <>
+            <CardHeader className="gap-2 pb-1 pt-4">
+              <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900">Create an account</CardTitle>
+              <CardDescription className="text-xs sm:text-sm text-gray-600">
+                Enter your information below to create your account
+              </CardDescription>
+            </CardHeader>
         <CardContent className="pt-1">
           {error && (
-            <div className="mb-6 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-3 text-sm text-[#C87500]">
+            <div className="mb-6 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-3 text-xs sm:text-sm text-[#C87500]">
               {error}
             </div>
           )}
-          <form onSubmit={handleSubmit}>
-            <FieldGroup className="space-y-1">
+          <form onSubmit={handleGenerateOTP}>
+            <FieldGroup className="space-y-2 sm:space-y-1">
               <Field>
-                <FieldLabel htmlFor="name" className="font-medium text-gray-700 text-sm">
+                <FieldLabel htmlFor="name" className="font-medium text-gray-700 text-xs sm:text-sm">
                   Full Name
                 </FieldLabel>
                 <Input
@@ -211,7 +309,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="email" className="font-medium text-gray-700 text-sm">
+                <FieldLabel htmlFor="email" className="font-medium text-gray-700 text-xs sm:text-sm">
                   Email
                 </FieldLabel>
                 <Input
@@ -222,7 +320,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                   onChange={handleInputChange}
                   disabled={isLoading}
                   required
-                  className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors"
+                  className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors text-sm"
                 />
                 <FieldDescription className="text-gray-600 text-xs mt-1">
                   We&apos;ll use this to contact you. We will not share your email
@@ -230,7 +328,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                 </FieldDescription>
               </Field>
               <Field>
-                <FieldLabel htmlFor="password" className="font-medium text-gray-700 text-sm">
+                <FieldLabel htmlFor="password" className="font-medium text-gray-700 text-xs sm:text-sm">
                   Password
                 </FieldLabel>
                 <Input
@@ -256,7 +354,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                     
                     {/* Strength Label */}
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-gray-600">Strength:</span>
+                      <span className="text-xs font-medium text-gray-600 whitespace-nowrap">Strength:</span>
                       <span className={cn(
                         "text-xs font-semibold",
                         passwordStrengthLevel === 'weak' && 'text-red-500',
@@ -306,7 +404,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                 )}
               </Field>
               <Field>
-                <FieldLabel htmlFor="confirm-password" className="font-medium text-gray-700 text-sm">
+                <FieldLabel htmlFor="confirm-password" className="font-medium text-gray-700 text-xs sm:text-sm">
                   Confirm Password
                 </FieldLabel>
                 <Input
@@ -320,19 +418,19 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                   className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors"
                 />
               </Field>
-              <Field className="space-y-3 pt-4">
+              <Field className="space-y-2 sm:space-y-3 pt-4">
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="h-11 w-full bg-[#1FAE5B] text-white font-semibold rounded-lg shadow-md hover:bg-[#17a04e] hover:shadow-lg transition-all disabled:opacity-50"
+                  className="h-10 sm:h-11 w-full text-sm sm:text-base bg-[#1FAE5B] text-white font-semibold rounded-lg shadow-md hover:bg-[#17a04e] hover:shadow-lg transition-all disabled:opacity-50"
                 >
-                  {isLoading ? "Creating Account..." : "Create Account"}
+                  {isLoading ? "Sending OTP..." : "Continue"}
                 </Button>
                 <Button
                   type="button"
                   onClick={handleGoogleSignup}
                   disabled={isLoading}
-                  className="h-11 w-full border-2 border-[#0F6B3E]/20 bg-[#0F6B3E]/5 text-[#0F6B3E] rounded-lg hover:bg-[#0F6B3E]/10 hover:border-[#0F6B3E]/40 transition-all font-medium"
+                  className="h-10 sm:h-11 w-full text-sm sm:text-base border-2 border-[#0F6B3E]/20 bg-[#0F6B3E]/5 text-[#0F6B3E] rounded-lg hover:bg-[#0F6B3E]/10 hover:border-[#0F6B3E]/40 transition-all font-medium"
                 >
                   <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -344,7 +442,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                 </Button>
               </Field>
               <Field className="pt-2 border-t border-gray-100">
-                <FieldDescription className="text-center text-gray-600">
+                <FieldDescription className="text-center text-xs sm:text-sm text-gray-600">
                   Already have an account?{" "}
                   <Link href="/login" className="text-[#0F6B3E] hover:text-[#1FAE5B] font-semibold">
                     Sign in
@@ -353,9 +451,79 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
               </Field>
             </FieldGroup>
           </form>
-        </CardContent>
+            </CardContent>
+          </>
+        ) : (
+          <>
+            <CardHeader className="gap-2 pb-1 pt-4">
+              <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900">Verify your email</CardTitle>
+              <CardDescription className="text-xs sm:text-sm text-gray-600">
+                We sent a 6-digit code to <span className="font-medium text-gray-900">{formData.email}</span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-1">
+              {error && (
+                <div className="mb-6 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-3 text-xs sm:text-sm text-[#C87500]">
+                  {error}
+                </div>
+              )}
+              <form onSubmit={handleVerifyOTP}>
+                <FieldGroup className="space-y-2 sm:space-y-1">
+                  <Field>
+                    <FieldLabel htmlFor="otp" className="font-medium text-gray-700 text-xs sm:text-sm">
+                      Verification Code
+                    </FieldLabel>
+                    <Input
+                      id="otp"
+                      type="text"
+                      placeholder="000000"
+                      value={otpData.otp}
+                      onChange={handleOtpInputChange}
+                      disabled={isLoading}
+                      maxLength={6}
+                      inputMode="numeric"
+                      required
+                      className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors text-center text-2xl font-mono tracking-widest"
+                    />
+                    <FieldDescription className="text-gray-600 text-xs mt-1">
+                      Enter the 6-digit code you received by email
+                    </FieldDescription>
+                  </Field>
+                  <Field className="space-y-2 sm:space-y-3 pt-4">
+                    <Button
+                      type="submit"
+                      disabled={isLoading || otpData.otp.length !== 6}
+                      className="h-10 sm:h-11 w-full text-sm sm:text-base bg-[#1FAE5B] text-white font-semibold rounded-lg shadow-md hover:bg-[#17a04e] hover:shadow-lg transition-all disabled:opacity-50"
+                    >
+                      {isLoading ? "Verifying..." : "Verify & Create Account"}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleResendOTP}
+                      disabled={resendTimer > 0 || isLoading}
+                      className="h-10 sm:h-11 w-full text-sm sm:text-base border-2 border-[#0F6B3E]/20 bg-[#0F6B3E]/5 text-[#0F6B3E] rounded-lg hover:bg-[#0F6B3E]/10 hover:border-[#0F6B3E]/40 transition-all font-medium disabled:opacity-50"
+                    >
+                      {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend Code"}
+                    </Button>
+                  </Field>
+                  <Field className="pt-2 border-t border-gray-100">
+                    <FieldDescription className="text-center text-xs sm:text-sm text-gray-600">
+                      <button
+                        type="button"
+                        onClick={handleBackToForm}
+                        className="text-[#0F6B3E] hover:text-[#1FAE5B] font-semibold underline"
+                      >
+                        Change email address
+                      </button>
+                    </FieldDescription>
+                  </Field>
+                </FieldGroup>
+              </form>
+            </CardContent>
+          </>
+        )}
       </Card>
-      <FieldDescription className="px-6 text-center text-[#1E1E1E]">
+      <FieldDescription className="px-0 sm:px-6 text-center text-xs sm:text-sm text-[#1E1E1E]">
         By clicking continue, you agree to our{" "}
         <Link href="#" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
           Terms of Service

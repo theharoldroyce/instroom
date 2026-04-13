@@ -120,14 +120,12 @@ export function LoginForm({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className={cn(className, "rounded-2xl shadow-lg p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden")}
-        {...props}
-      >
+    <div className="flex flex-col gap-4 sm:gap-6 w-full max-w-sm sm:max-w-lg">
+      <Card className={cn(className, "rounded-2xl shadow-lg p-6 sm:p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden")} {...props}>
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
         <CardHeader className="gap-2 pb-2 pt-4">
-          <CardTitle className="text-2xl font-bold text-gray-900">Sign in to Instroom</CardTitle>
-          <CardDescription className="text-sm text-gray-600">
+          <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900">Sign in to Instroom</CardTitle>
+          <CardDescription className="text-xs sm:text-sm text-gray-600">
             Choose your preferred login method
           </CardDescription>
         </CardHeader>
@@ -177,11 +175,11 @@ export function LoginForm({
                   className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors"
                 />
               </Field>
-              <Field className="space-y-3 pt-4">
+              <Field className="space-y-2 sm:space-y-3 pt-4">
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="h-11 w-full bg-[#1FAE5B] text-white font-semibold rounded-lg shadow-md hover:bg-[#17a04e] hover:shadow-lg transition-all disabled:opacity-50"
+                  className="h-10 sm:h-11 w-full text-sm sm:text-base bg-[#1FAE5B] text-white font-semibold rounded-lg shadow-md hover:bg-[#17a04e] hover:shadow-lg transition-all disabled:opacity-50"
                 >
                   {isLoading ? "Signing in..." : "Sign in with Email"}
                 </Button>
@@ -189,7 +187,7 @@ export function LoginForm({
                   type="button"
                   onClick={handleGoogleLogin}
                   disabled={isLoading}
-                  className="h-11 w-full border-2 border-[#0F6B3E]/20 bg-[#0F6B3E]/5 text-[#0F6B3E] rounded-lg hover:bg-[#0F6B3E]/10 hover:border-[#0F6B3E]/40 transition-all font-medium"
+                  className="h-10 sm:h-11 w-full text-sm sm:text-base border-2 border-[#0F6B3E]/20 bg-[#0F6B3E]/5 text-[#0F6B3E] rounded-lg hover:bg-[#0F6B3E]/10 hover:border-[#0F6B3E]/40 transition-all font-medium"
                 >
                   <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -201,7 +199,7 @@ export function LoginForm({
                 </Button>
               </Field>
               <Field className="pt-2 border-t border-gray-100">
-                <FieldDescription className="text-center text-gray-600">
+                <FieldDescription className="text-center text-xs sm:text-sm text-gray-600">
                   Don&apos;t have an account?{" "}
                   <a href="/signup" className="text-[#0F6B3E] hover:text-[#1FAE5B] font-semibold">
                     Sign up
@@ -212,7 +210,7 @@ export function LoginForm({
           </form>
         </CardContent>
       </Card>
-      <FieldDescription className="px-6 text-center text-[#1E1E1E]">
+      <FieldDescription className="px-0 sm:px-6 text-center text-xs sm:text-sm text-[#1E1E1E]">
         By clicking continue, you agree to our{" "}
         <a href="#" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
           Terms of Service
