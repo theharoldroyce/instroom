@@ -2,9 +2,10 @@
 
 type Props = {
   setType: (v: "manual" | "instagram" | "tiktok") => void
+  onClose: () => void
 }
 
-export default function AddInfluencerModal({ setType }: Props) {
+export default function AddInfluencerModal({ setType, onClose }: Props) {
   return (
     <div className="relative flex flex-col gap-5">
       <div className="flex items-start justify-between">
@@ -16,6 +17,7 @@ export default function AddInfluencerModal({ setType }: Props) {
             Choose how you want to add a new influencer
           </p>
         </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
       </div>
       <div className="flex flex-col gap-3">
         <button

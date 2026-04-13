@@ -285,9 +285,9 @@ export default function InfluencerList() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white w-[560px] rounded-2xl shadow-xl p-8">
             {modalType === "select" && <AddInfluencerModal setType={setModalType} onClose={() => setOpenModal(false)} />}
-            {modalType === "manual" && <AddManualInfluencer close={() => setModalType("select")} onAdd={addInfluencer} />}
-            {modalType === "instagram" && <AddInstagramInfluencer close={() => setModalType("select")} onAdd={addInfluencer} />}
-            {modalType === "tiktok" && <AddTiktokCreator close={() => setModalType("select")} onAdd={addInfluencer} />}
+            {modalType === "manual" && <AddManualInfluencer onBack={() => setModalType("select")} onSave={addInfluencer} />}
+            {modalType === "instagram" && <AddInstagramInfluencer onBack={() => setModalType("select")} onSave={addInfluencer} />}
+            {modalType === "tiktok" && <AddTiktokCreator onBack={() => setModalType("select")} onSave={addInfluencer} />}
           </div>
         </div>
       )}
