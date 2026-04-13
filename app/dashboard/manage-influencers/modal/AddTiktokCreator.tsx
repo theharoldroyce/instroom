@@ -3,87 +3,108 @@
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
 
-export default function AddTiktokCreator({ close }: any) {
+const getProfileUrl = (platform: string, handle: string): string => {
+  if (!handle || handle === "@") return ""
+  const urlMap: Record<string, (h: string) => string> = {
+    instagram: (h) => `https://instagram.com/${h.replace(/^@/, "")}`,
+    tiktok: (h) => `https://tiktok.com/@${h.replace(/^@/, "")}`,
+    youtube: (h) => `https://youtube.com/@${h.replace(/^@/, "")}`,
+    twitter: (h) => `https://x.com/${h.replace(/^@/, "")}`,
+    other: () => ""
+  }
+  return urlMap[platform]?.(handle) ?? ""
+}
 
-  const [form, setForm] = useState({
+type FormData = {
+  handle: string
+  email: string
+  name: string
+  followers: string
+  engagement: string
+  location: string
+  niche: string
+  gender: string
+  social_link: string
+}
+
+export default function AddTiktokCreator({
+  onSave,
+  onBack
+}: {
+  onSave: (data: FormData) => void
+  onBack: () => void
+}) {
+
+  const [form, setForm] = useState<FormData>({
     handle: "",
     email: "",
     name: "",
     followers: "",
     engagement: "",
-    avgViews: "",
-    gmv: "",
-    postRate: "",
     location: "",
-    niche: ""
+    niche: "",
+    gender: "",
+    social_link: getProfileUrl("tiktok", ""),
   })
 
-  const handleChange = (e: any) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const updated = { ...form, [e.target.name]: e.target.value }
+    if (e.target.name === "handle") {
+      updated.social_link = getProfileUrl("tiktok", updated.handle)
+    }
+    setForm(updated)
   }
 
   const handleSubmit = () => {
-    console.log(form)
-    close()
+    if (!form.handle || !form.followers || !form.engagement || !form.location || !form.niche || !form.gender) {
+      alert("Please fill in all required fields")
+      return
+    }
+    onSave(form)
   }
 
   const handleCancel = () => {
     const hasInput = Object.values(form).some((v) => v !== "")
-
     if (hasInput) {
       const confirmClose = window.confirm("Discard entered information?")
       if (!confirmClose) return
     }
-
-    close()
+    onBack()
   }
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-      {/* Modal Container - No scroll, adjusted height */}
-      <div className="w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-3xl xl:max-w-4xl bg-white rounded-xl shadow-lg px-4 sm:px-6 py-5 sm:py-6">
+    <div className="w-full">
         
-        {/* HEADER */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h2 className="text-lg sm:text-xl font-semibold text-[#1E1E1E]">
             Add TikTok Creator
           </h2>
-
-          <button
-            onClick={handleCancel}
-            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 text-gray-500 text-lg transition-colors"
-          >
-            ×
-          </button>
         </div>
 
-        <p className="text-xs sm:text-sm text-gray-500 mb-6">
-          Just type the TikTok username — their profile info and performance data will be filled in automatically.
+        <p className="text-xs sm:text-sm text-gray-500 mb-4 sm:mb-6">
+          Enter the TikTok username — we'll fill in their profile info and performance data automatically.
         </p>
 
-        <div className="space-y-4">
-          {/* HANDLE - Full width on all screens */}
+        <div className="space-y-3 sm:space-y-4 max-h-[70vh] overflow-y-auto">
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-gray-700">
               Handlename <span className="text-red-500">*</span>
             </label>
-
             <Input
               name="handle"
               value={form.handle}
               onChange={handleChange}
-              placeholder="https://www.tiktok.com/@username or @username"
+              placeholder="@username"
               className="w-full"
             />
           </div>
 
-          {/* EMAIL & FULL NAME - Responsive grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
                 Email address
               </label>
-
               <Input
                 name="email"
                 type="email"
@@ -109,89 +130,41 @@ export default function AddTiktokCreator({ close }: any) {
             </div>
           </div>
 
-          {/* METRICS - Responsive grid with 2 columns on tablet, 3 on desktop */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Followers
+                Followers <span className="text-red-500">*</span>
               </label>
-
               <Input
                 name="followers"
                 value={form.followers}
                 onChange={handleChange}
-                placeholder="Followers"
+                placeholder="100000"
                 className="w-full"
               />
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Engagement Rate
+                Engagement Rate <span className="text-red-500">*</span>
               </label>
-
               <Input
                 name="engagement"
                 value={form.engagement}
                 onChange={handleChange}
-                placeholder="Eng. Rate (%)"
-                className="w-full"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Avg Video Views
-              </label>
-
-              <Input
-                name="avgViews"
-                value={form.avgViews}
-                onChange={handleChange}
-                placeholder="Avg Video Views"
+                placeholder="3.5"
                 className="w-full"
               />
             </div>
           </div>
 
-          {/* GMV + POST RATE - Responsive grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                GMV
+                Location <span className="text-red-500">*</span>
               </label>
-
-              <Input
-                name="gmv"
-                value={form.gmv}
-                onChange={handleChange}
-                placeholder="GMV ($)"
-                className="w-full"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Est. Post Rate
-              </label>
-
-              <Input
-                name="postRate"
-                value={form.postRate}
-                onChange={handleChange}
-                placeholder="Est. Post Rate (per week)"
-                className="w-full"
-              />
-            </div>
-          </div>
-
-          {/* LOCATION + NICHE - Responsive grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Location
-              </label>
-
               <Input
                 name="location"
                 value={form.location}
@@ -203,41 +176,66 @@ export default function AddTiktokCreator({ close }: any) {
 
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Niche
+                Niche <span className="text-red-500">*</span>
               </label>
-
               <Input
                 name="niche"
                 value={form.niche}
                 onChange={handleChange}
-                placeholder="e.g., Beauty, Fitness, Comedy"
+                placeholder="Comedy, Beauty, etc."
                 className="w-full"
               />
             </div>
           </div>
+
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Gender <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="gender"
+                value={form.gender}
+                onChange={(e) => setForm({...form, gender: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Non-binary">Non-binary</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">Social Link</label>
+              <div className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 text-gray-600 truncate">
+                {form.social_link || "Auto-generated"}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* ACTIONS - Responsive button layout */}
-        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
+
+        <div className="flex justify-end gap-3 sm:gap-4 pt-4 sm:pt-6 border-t">
           <button
             onClick={handleCancel}
-            className="h-10 px-4 sm:px-5 text-sm font-medium rounded-lg border border-gray-300 
-                       text-gray-600 hover:bg-gray-100 transition-colors
-                       w-full sm:w-auto"
+            className="h-10 px-5 text-sm font-medium rounded-lg border border-gray-300 
+                       text-gray-600 hover:bg-gray-100"
           >
-            Cancel
+            Back
           </button>
 
           <button
             onClick={handleSubmit}
-            className="h-10 px-4 sm:px-6 text-sm font-medium rounded-lg
-                       bg-[#1FAE5B] text-white hover:bg-[#0F6B3E] transition-colors
-                       w-full sm:w-auto"
+            className="h-10 px-6 text-sm font-medium rounded-lg
+                       bg-[#1FAE5B] text-white hover:bg-[#0F6B3E]"
           >
-            Save Creator
+            Save
           </button>
         </div>
-      </div>
+
     </div>
   )
 }

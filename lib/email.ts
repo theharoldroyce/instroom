@@ -84,7 +84,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
                 <div class="logo">Instroom</div>
               </div>
               
-              <h1>Welcome to Instroom, ${name}! 🎉</h1>
+              <h1>Welcome to Instroom, ${name}!</h1>
               
               <div class="content">
                 <p>We're thrilled to have you on board! Your account has been successfully created.</p>

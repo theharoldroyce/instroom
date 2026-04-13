@@ -9,6 +9,11 @@ import React, {
   type ReactNode,
   type DragEvent,
 } from "react"
+import AddInfluencerModal from "@/app/dashboard/manage-influencers/modal/AddInfluencerModal"
+import AddManualInfluencer from "@/app/dashboard/manage-influencers/modal/AddManualInfluencer"
+import AddInstagramInfluencer from "@/app/dashboard/manage-influencers/modal/AddInstagramInfluencer"
+import AddTiktokCreator from "@/app/dashboard/manage-influencers/modal/AddTiktokCreator"
+import { LimitExceededDialog } from "@/components/limit-exceeded-dialog"
 import {
   IconTrash,
   IconPlus,
@@ -58,23 +63,21 @@ export type InfluencerRow = {
   platform: string
   full_name: string
   email: string
+  gender?: string
+  location?: string
+  niche: string
+  social_link?: string
   follower_count: string
   engagement_rate: string
-  niche: string
   contact_status: string
   stage: string
   outreach_method: string
   agreed_rate: string
   notes: string
-  custom: Record<string, string>
-  gender?: string
-  location?: string
-  social_link?: string
-  first_name?: string
-  contact_info?: string
   approval_status?: "Approved" | "Declined" | "Pending"
   transferred_date?: string
   approval_notes?: string
+  custom: Record<string, string>
 }
 
 export type CustomColumn = {
@@ -126,14 +129,14 @@ type AnyColDef = ColDef | CustomColDef
 const STATIC_COLS: ColDef[] = [
   { key: "handle", label: "Handle", group: "Influencer Details", minWidth: 140, type: "text" },
   { key: "platform", label: "Platform", group: "Influencer Details", minWidth: 110, type: "select", options: ["instagram", "tiktok", "youtube", "twitter", "other"] },
+  { key: "full_name", label: "First Name", group: "Influencer Details", minWidth: 110, type: "text" },
+  { key: "email", label: "Contact Info", group: "Influencer Details", minWidth: 160, type: "text" },
   { key: "niche", label: "Niche", group: "Influencer Details", minWidth: 120, type: "text" },
   { key: "gender", label: "Gender", group: "Influencer Details", minWidth: 110, type: "select", options: ["Male", "Female", "Non-binary", "Other"] },
   { key: "location", label: "Location", group: "Influencer Details", minWidth: 130, type: "text" },
   { key: "follower_count", label: "Follower Count", group: "Influencer Details", minWidth: 120, type: "number" },
   { key: "engagement_rate", label: "Engagement Rate (%)", group: "Influencer Details", minWidth: 140, type: "number" },
   { key: "social_link", label: "Social Link", group: "Influencer Details", minWidth: 150, type: "url" },
-  { key: "first_name", label: "First Name", group: "Influencer Details", minWidth: 110, type: "text" },
-  { key: "contact_info", label: "Contact Info", group: "Influencer Details", minWidth: 160, type: "text" },
   { key: "approval_status", label: "Approve/Decline", group: "Approval Details", minWidth: 130, type: "select", options: ["Approved", "Declined", "Pending"] },
   { key: "transferred_date", label: "Transferred Date", group: "Approval Details", minWidth: 140, type: "date" },
   { key: "approval_notes", label: "Notes", group: "Approval Details", minWidth: 200, type: "text" },
@@ -181,11 +184,26 @@ function newEmptyRow(customCols: CustomColumn[]): InfluencerRow {
   const custom: Record<string, string> = {}
   customCols.forEach((c) => { custom[c.field_key] = c.field_type === "boolean" ? "No" : "" })
   return {
-    id: crypto.randomUUID(), handle: "@", platform: "instagram", full_name: "", email: "",
-    follower_count: "", engagement_rate: "", niche: "", contact_status: "not_contacted",
-    stage: "1", outreach_method: "", agreed_rate: "", notes: "", custom,
-    gender: "", location: "", social_link: "", first_name: "", contact_info: "",
-    approval_status: "Pending", transferred_date: "", approval_notes: "",
+    id: crypto.randomUUID(), 
+    handle: "@", 
+    platform: "instagram", 
+    full_name: "", 
+    email: "",
+    gender: "", 
+    location: "", 
+    niche: "", 
+    social_link: "",
+    follower_count: "", 
+    engagement_rate: "",
+    contact_status: "not_contacted",
+    stage: "1", 
+    outreach_method: "", 
+    agreed_rate: "", 
+    notes: "", 
+    approval_status: "Pending", 
+    transferred_date: "", 
+    approval_notes: "",
+    custom,
   }
 }
 
@@ -385,7 +403,7 @@ function DetailSection({ row, customCols, onUpdate, onClose, readOnly=false, sho
     } else if (field === "approval_status") {
       setEditedRow(handleApprovalChange(editedRow, value))
     } else if (field === "handle" || field === "platform") {
-      // Auto-update social_link when handle/platform changes in detail panel
+
       const newHandle = field === "handle" ? value : editedRow.handle
       const newPlatform = field === "platform" ? value : editedRow.platform
       const oldUrl = getProfileUrl(editedRow.platform, editedRow.handle)
@@ -1509,7 +1527,7 @@ interface TableSheetProps {
 }
 
 export default function TableSheet({
-  initialRows = MOCK_ROWS, initialCustomColumns = [], onRowsChange, onCustomColumnsChange,
+  initialRows = [], initialCustomColumns = [], onRowsChange, onCustomColumnsChange,
   readOnly = false, showEmptyDetailState = true, emptyDetailStateMessage = "Select a row to view details", showDetailPanelByDefault = false, brandId = "",
 }: TableSheetProps) {
   const [rows, setRows] = useState<InfluencerRow[]>(initialRows)
@@ -1536,8 +1554,9 @@ export default function TableSheet({
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [selectedRowId, setSelectedRowId] = useState<string|null>(null)
   const [showDetailPanel, setShowDetailPanel] = useState(showDetailPanelByDefault)
+  const [addModalType, setAddModalType] = useState<'type' | 'manual' | 'instagram' | 'tiktok' | null>(null)
+  const [limitExceeded, setLimitExceeded] = useState<{show: boolean; message: string; current: number; max: number | null; type: string} | null>(null)
 
-  // Fetch influencers from API if brandId is provided
   useEffect(() => {
     if (!brandId) return
 
@@ -1553,22 +1572,26 @@ export default function TableSheet({
           return
         }
 
-        // Convert API response to InfluencerRow format
-        // This is a simplified conversion; adjust based on actual API response structure
         const convertedRows: InfluencerRow[] = (data.influencers || []).map((inf: any) => ({
           id: inf.id,
           handle: `@${inf.influencer?.handle || ''}`,
           platform: inf.influencer?.platform || 'instagram',
           full_name: inf.influencer?.full_name || '',
           email: inf.influencer?.email || '',
+          gender: inf.influencer?.gender || '',
+          location: inf.influencer?.location || '',
           follower_count: String(inf.influencer?.follower_count || 0),
           engagement_rate: String(inf.influencer?.engagement_rate || 0),
           niche: inf.influencer?.niche || '',
+          social_link: inf.influencer?.social_link || '',
           contact_status: inf.contact_status || 'not_contacted',
           stage: String(inf.stage || 1),
           outreach_method: inf.outreach_method || '',
           agreed_rate: String(inf.agreed_rate || 0),
           notes: inf.notes || '',
+          approval_status: inf.approval_status || 'Pending',
+          transferred_date: inf.transferred_date || '',
+          approval_notes: inf.approval_notes || '',
           custom: {},
         }))
 
@@ -1610,7 +1633,6 @@ export default function TableSheet({
   const allCols = order.map(i=>rawCols[i])
   const totalCols = allCols.length
 
-  // Filtering
   const filteredRows = rows.filter(row => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
@@ -1638,8 +1660,140 @@ export default function TableSheet({
   const handleUpdateRow = (r: InfluencerRow) => { setRows(prev=>{const next=prev.map(x=>x.id===r.id?r:x);onRowsChange?.(next);return next}) }
   const handleApplyFilter = (c: string,v: string) => { setFilterColumn(c);setFilterValue(v);setCurrentPage(1) }
   const handleClearFilter = () => { setFilterColumn("");setFilterValue("");setCurrentPage(1) }
+  
+  const handleAddInfluencerType = (type: "manual" | "instagram" | "tiktok") => {
+    setAddModalType(type)
+  }
 
-  // Column drag
+  const checkInfluencerLimit = async (): Promise<boolean> => {
+    if (!brandId) return true
+
+    try {
+      const res = await fetch(`/api/subscription/can-add-influencer?brandId=${brandId}`)
+      const data = await res.json()
+
+      if (!data.allowed) {
+        setLimitExceeded({
+          show: true,
+          message: data.message || "Influencer limit reached for your plan",
+          current: data.current || 0,
+          max: data.max || 0,
+          type: "Influencer",
+        })
+        return false
+      }
+
+      return true
+    } catch (error) {
+      return true // Allow if check fails
+    }
+  }
+
+  const handleSaveManual = async (data: any) => {
+    const canAdd = await checkInfluencerLimit()
+    if (!canAdd) return
+
+    const newRow: InfluencerRow = {
+      id: crypto.randomUUID(),
+      handle: data.username,
+      platform: data.platform,
+      full_name: data.name,
+      email: data.email,
+      gender: data.gender,
+      location: data.location,
+      niche: data.niche,
+      social_link: data.social_link,
+      follower_count: data.followers,
+      engagement_rate: data.engagement,
+      contact_status: "not_contacted",
+      stage: "1",
+      outreach_method: "",
+      agreed_rate: "",
+      notes: "",
+      approval_status: "Pending",
+      transferred_date: "",
+      approval_notes: "",
+      custom: {}
+    }
+    setRows(prev => {
+      const next = [newRow, ...prev]
+      onRowsChange?.(next)
+      return next
+    })
+    setAddModalType(null)
+    setSelectedRowId(newRow.id)
+  }
+
+  const handleSaveInstagram = async (data: any) => {
+    const canAdd = await checkInfluencerLimit()
+    if (!canAdd) return
+
+    const newRow: InfluencerRow = {
+      id: crypto.randomUUID(),
+      handle: data.username,
+      platform: "instagram",
+      full_name: data.name,
+      email: data.email,
+      gender: data.gender,
+      location: data.location,
+      niche: data.niche,
+      social_link: data.social_link,
+      follower_count: data.followers,
+      engagement_rate: data.engagement,
+      contact_status: "not_contacted",
+      stage: "1",
+      outreach_method: "",
+      agreed_rate: "",
+      notes: "",
+      approval_status: "Pending",
+      transferred_date: "",
+      approval_notes: "",
+      custom: {}
+    }
+    setRows(prev => {
+      const next = [newRow, ...prev]
+      onRowsChange?.(next)
+      return next
+    })
+    setAddModalType(null)
+    setSelectedRowId(newRow.id)
+  }
+
+  const handleSaveTiktok = async (data: any) => {
+    const canAdd = await checkInfluencerLimit()
+    if (!canAdd) return
+
+    const newRow: InfluencerRow = {
+      id: crypto.randomUUID(),
+      handle: data.handle.replace(/^@/, ''),
+      platform: "tiktok",
+      full_name: data.name,
+      email: data.email,
+      gender: data.gender,
+      location: data.location,
+      niche: data.niche,
+      social_link: data.social_link,
+      follower_count: data.followers,
+      engagement_rate: data.engagement,
+      contact_status: "not_contacted",
+      stage: "1",
+      outreach_method: "",
+      agreed_rate: "",
+      notes: "",
+      approval_status: "Pending",
+      transferred_date: "",
+      approval_notes: "",
+      custom: {}
+    }
+    setRows(prev => {
+      const next = [newRow, ...prev]
+      onRowsChange?.(next)
+      return next
+    })
+    setAddModalType(null)
+    setSelectedRowId(newRow.id)
+  }
+
   const onColDragStart = (vi: number,e: DragEvent) => { setDragIdx(vi);e.dataTransfer.effectAllowed="move";e.dataTransfer.setDragImage(e.currentTarget as HTMLElement,40,18) }
   const onColDragOver = (vi: number,e: DragEvent) => { e.preventDefault();e.dataTransfer.dropEffect="move";setDragOverIdx(vi);const tc=allCols[vi];if(tc&&(tc.group==="Influencer Details"||tc.group==="Approval Details"||tc.group==="Outreach Details")){setDragOverGroup(tc.group)}else{setDragOverGroup(null)} }
   const onColDragEnd = () => {
@@ -1658,9 +1812,6 @@ export default function TableSheet({
     if(key.startsWith("custom."))return row.custom[key.slice(7)]??""; return String((row as Record<string,unknown>)[key]??"")
   }, [])
 
-  /* ═══════════════════════════════════════════════════════════════════════
-     KEY FIX: Auto-update social_link when handle or platform changes
-     ═══════════════════════════════════════════════════════════════════════ */
   const applyCellValue = useCallback((rowIdx: number,colKey: string,value: string) => {
     const actualRow = filteredRows[rowIdx]
     const actualRowIdx = rows.findIndex(r=>r.id===actualRow.id)
@@ -1675,7 +1826,7 @@ export default function TableSheet({
       } else {
         (row as Record<string,unknown>)[colKey]=value
       }
-      // ★ AUTO SOCIAL LINK: when handle or platform changes, update social_link automatically
+      // When handle or platform changes, update social_link automatically
       if(colKey==="handle"||colKey==="platform"){
         const newHandle = colKey==="handle"?value:row.handle
         const newPlatform = colKey==="platform"?value:row.platform
@@ -1684,12 +1835,12 @@ export default function TableSheet({
           colKey==="handle"?prev[actualRowIdx].handle:row.handle
         )
         const freshUrl = getProfileUrl(newPlatform, newHandle)
-        // Auto-update built-in social_link if empty or matches the old auto-generated URL
+        
         const curSocialLink = row.social_link ?? ""
         if(!curSocialLink || curSocialLink===oldUrl){
           row.social_link = freshUrl
         }
-        // Also update custom URL columns
+        
         const urlFieldKeys = customCols.filter(c=>c.field_type==="url").map(c=>c.field_key)
         if(urlFieldKeys.length){
           row.custom={...row.custom}
@@ -1857,6 +2008,7 @@ export default function TableSheet({
           <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search by handle, name, email, niche, location, notes..." className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"/>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={()=>setAddModalType('type')} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition"><IconPlus size={16}/>Add Influencer</button>
           <button onClick={()=>setShowFilterModal(true)} className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg transition ${filterColumn?"bg-blue-100 text-blue-700":"text-gray-600 hover:bg-gray-100"}`}><IconFilter size={16}/>Filter{filterColumn&&<span className="w-2 h-2 bg-blue-500 rounded-full"/>}</button>
           <button onClick={()=>setShowDetailPanel(!showDetailPanel)} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">{showDetailPanel?<IconEyeOff size={16}/>:<IconEye size={16}/>}{showDetailPanel?"Hide Details":"Show Details"}</button>
         </div>
@@ -1944,6 +2096,47 @@ export default function TableSheet({
             <div className="flex gap-2 pt-1"><button onClick={()=>setAddingCol(false)} className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm text-red-500 hover:bg-gray-50 transition">Cancel</button><button onClick={confirmAddCol} disabled={!newColName.trim()} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-40 transition">Add</button></div>
           </div>
         </div>
+      )}
+
+      {addModalType && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4 md:p-6" onClick={() => setAddModalType(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md sm:max-w-lg md:max-w-2xl p-4 sm:p-6 md:p-8 max-h-[85vh] sm:max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {addModalType === 'type' && (
+              <AddInfluencerModal 
+                setType={(type) => handleAddInfluencerType(type)}
+              />
+            )}
+            {addModalType === 'manual' && (
+              <AddManualInfluencer 
+                onSave={handleSaveManual}
+                onBack={() => setAddModalType('type')}
+              />
+            )}
+            {addModalType === 'instagram' && (
+              <AddInstagramInfluencer 
+                onSave={handleSaveInstagram}
+                onBack={() => setAddModalType('type')}
+              />
+            )}
+            {addModalType === 'tiktok' && (
+              <AddTiktokCreator 
+                onSave={handleSaveTiktok}
+                onBack={() => setAddModalType('type')}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {limitExceeded && (
+        <LimitExceededDialog
+          isOpen={limitExceeded.show}
+          onClose={() => setLimitExceeded(null)}
+          limitType={limitExceeded.type}
+          current={limitExceeded.current}
+          max={limitExceeded.max}
+          message={limitExceeded.message}
+        />
       )}
       </>
       )}
