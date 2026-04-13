@@ -8,45 +8,18 @@ type Props = {
 export default function AddInfluencerModal({ setType, onClose }: Props) {
   return (
     <div className="relative flex flex-col gap-5">
-
-      {/* HEADER */}
       <div className="flex items-start justify-between">
-
         <div>
           <h2 className="text-lg font-semibold text-[#1E1E1E]">
             Add Influencer
           </h2>
-
           <p className="text-sm text-gray-500">
             Choose how you want to add a new influencer
           </p>
         </div>
-
-        {/* CLOSE BUTTON WITH X */}
-        <button
-          onClick={onClose}
-          className="w-7 h-7 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"
-        >
-          <svg 
-            className="w-4 h-4" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={2} 
-              d="M6 18L18 6M6 6l12 12" 
-            />
-          </svg>
-        </button>
-
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
       </div>
-
-      {/* OPTIONS */}
       <div className="flex flex-col gap-3">
-
         <button
           onClick={() => setType("manual")}
           className="bg-[#1FAE5B] text-white py-3 rounded-lg font-medium hover:bg-[#0F6B3E] transition"
@@ -67,9 +40,7 @@ export default function AddInfluencerModal({ setType, onClose }: Props) {
         >
           Add TikTok Creator
         </button>
-
       </div>
-
     </div>
   )
 }

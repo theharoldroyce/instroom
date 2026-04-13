@@ -9,6 +9,11 @@ import React, {
   type ReactNode,
   type DragEvent,
 } from "react"
+import AddInfluencerModal from "@/app/dashboard/manage-influencers/modal/AddInfluencerModal"
+import AddManualInfluencer from "@/app/dashboard/manage-influencers/modal/AddManualInfluencer"
+import AddInstagramInfluencer from "@/app/dashboard/manage-influencers/modal/AddInstagramInfluencer"
+import AddTiktokCreator from "@/app/dashboard/manage-influencers/modal/AddTiktokCreator"
+import { LimitExceededDialog } from "@/components/limit-exceeded-dialog"
 import {
   IconTrash,
   IconPlus,
@@ -397,6 +402,8 @@ const MOCK_ROWS: InfluencerRow[] = [
 export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColumns = [], onRowsChange, onCustomColumnsChange, readOnly = false }: { initialRows?: InfluencerRow[]; initialCustomColumns?: CustomColumn[]; onRowsChange?: (rows: InfluencerRow[]) => void; onCustomColumnsChange?: (cols: CustomColumn[]) => void; readOnly?: boolean }) {
   const [rows, setRows] = useState<InfluencerRow[]>(initialRows)
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
+  const [loading, setLoading] = useState(!!brandId)
+  const [error, setError] = useState<string | null>(null)
   const [activeCell, setActiveCell] = useState<CellAddress|null>(null)
   const [editCell, setEditCell] = useState<CellAddress|null>(null)
   const [editValue, setEditValue] = useState("")

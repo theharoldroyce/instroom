@@ -1,14 +1,15 @@
 import { LoginForm } from "@/components/login-form"
 import Image from "next/image"
+import { Suspense } from "react"
 
 export default function LoginPage() {
   return (
     <div className="min-h-svh w-full bg-[#F7F9F8] text-[#1E1E1E] relative overflow-hidden">
       <div className="fixed top-6 left-12 z-50">
-        <Image 
-          src="/images/Instroom Logo 1.png" 
-          alt="Instroom Logo" 
-          width={180} 
+        <Image
+          src="/images/Instroom Logo 1.png"
+          alt="Instroom Logo"
+          width={180}
           height={180}
           priority
           quality={95}
@@ -21,7 +22,9 @@ export default function LoginPage() {
       <div className="absolute top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
 
       <div className="min-h-svh flex items-center justify-center relative z-20">
-        <LoginForm className="bg-[#1E1E1E] text-white rounded-2xl shadow-xl p-8" />
+        <Suspense>
+          <LoginForm className="bg-[#1E1E1E] text-white rounded-2xl shadow-xl p-8" />
+        </Suspense>
       </div>
     </div>
   )

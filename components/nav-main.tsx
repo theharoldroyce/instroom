@@ -13,15 +13,23 @@ import {
 
 export function NavMain({
   items,
+  brandId,
 }: {
   items: {
     title: string
     url: string
     icon?: Icon
   }[]
+  brandId?: string | null
 }) {
   const router = useRouter()
   const pathname = usePathname()
+
+  const buildUrl = (baseUrl: string) => {
+    if (!brandId) return baseUrl
+    const separator = baseUrl.includes("?") ? "&" : "?"
+    return `${baseUrl}${separator}brandId=${brandId}`
+  }
 
   return (
     <SidebarGroup>
@@ -35,7 +43,7 @@ export function NavMain({
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton
                   tooltip={item.title}
-                  onClick={() => router.push(item.url)}
+                  onClick={() => router.push(buildUrl(item.url))}
                   className={`
                     flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors
                     ${

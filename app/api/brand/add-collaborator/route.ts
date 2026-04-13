@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         success: true,
         type: "direct_member",
         member,
-        remaining: canAdd.max - canAdd.current - 1,
+        remaining: (canAdd.max ?? 0) - canAdd.current - 1,
       })
     } else {
       // Create invitation for non-existing user
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
         success: true,
         type: "invitation_sent",
         invitation,
-        remaining: canAdd.max - canAdd.current - 1,
+        remaining: (canAdd.max ?? 0) - canAdd.current - 1,
       })
     }
   } catch (error) {

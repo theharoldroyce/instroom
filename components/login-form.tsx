@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -20,14 +20,19 @@ import {
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { ForgotPasswordModal } from "@/components/forgot-password-modal"
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showForgotPassword, setShowForgotPassword] = useState(
+    searchParams?.get("showForgotPassword") === "true"
+  )
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -51,6 +56,19 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
+      // Check rate limit first
+      const rateLimitResponse = await fetch("/api/auth/check-rate-limit", {
+        method: "POST",
+      })
+
+      const rateLimitData = await rateLimitResponse.json()
+
+      if (!rateLimitResponse.ok || rateLimitData.blocked) {
+        setError(rateLimitData.error || "Too many login attempts. Please try again later.")
+        setIsLoading(false)
+        return
+      }
+
       const result = await signIn("credentials", {
         email: formData.email,
         password: formData.password,
@@ -141,12 +159,13 @@ export function LoginForm({
                   <FieldLabel htmlFor="password" className="font-medium text-gray-700 text-sm">
                     Password
                   </FieldLabel>
-                  <a
-                    href="#"
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
                     className="ml-auto text-xs text-[#0F6B3E] underline-offset-4 hover:text-[#1FAE5B] hover:underline"
                   >
                     Forgot your password?
-                  </a>
+                  </button>
                 </div>
                 <Input
                   id="password"
@@ -204,6 +223,15 @@ export function LoginForm({
         </a>
         .
       </FieldDescription>
+
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => {
+          setShowForgotPassword(false)
+          // Clean up URL
+          router.replace("/login")
+        }}
+      />
     </div>
   )
 }

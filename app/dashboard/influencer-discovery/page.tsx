@@ -27,6 +27,8 @@ type QuickResult = {
 
 export default function InfluencerDiscoveryPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [brandId, setBrandId] = useState<string | null>(null)
 
   const [topic, setTopic] = useState("")
   const [selectedPlatform, setSelectedPlatform] = useState("Instagram")
@@ -54,6 +56,12 @@ export default function InfluencerDiscoveryPage() {
     }
   }, [])
 
+  // Watch for brand changes
+  useEffect(() => {
+    const id = searchParams.get("brandId")
+    setBrandId(id)
+  }, [searchParams])
+
   // Save recent search
   const saveRecentSearch = (searchTerm: string) => {
     const cleanTerm = searchTerm.replace("#", "")
@@ -70,10 +78,13 @@ export default function InfluencerDiscoveryPage() {
     const cleanTopic = topic.replace("#", "")
     saveRecentSearch(cleanTopic)
 
+    const params = new URLSearchParams()
+    params.set("topic", cleanTopic)
+    params.set("platform", selectedPlatform)
+    if (brandId) params.set("brandId", brandId)
+
     router.push(
-      `/dashboard/influencer-discovery/search?topic=${encodeURIComponent(
-        cleanTopic
-      )}&platform=${encodeURIComponent(selectedPlatform)}`
+      `/dashboard/influencer-discovery/search?${params.toString()}`
     )
   }
 
@@ -81,10 +92,13 @@ export default function InfluencerDiscoveryPage() {
     const cleanTag = tag.replace("#", "")
     saveRecentSearch(cleanTag)
 
+    const params = new URLSearchParams()
+    params.set("topic", cleanTag)
+    params.set("platform", selectedPlatform)
+    if (brandId) params.set("brandId", brandId)
+
     router.push(
-      `/dashboard/influencer-discovery/search?topic=${encodeURIComponent(
-        cleanTag
-      )}&platform=${encodeURIComponent(selectedPlatform)}`
+      `/dashboard/influencer-discovery/search?${params.toString()}`
     )
   }
 
@@ -93,9 +107,7 @@ export default function InfluencerDiscoveryPage() {
     saveRecentSearch(search)
 
     router.push(
-      `/dashboard/influencer-discovery/search?topic=${encodeURIComponent(
-        search
-      )}&platform=${encodeURIComponent(selectedPlatform)}`
+      `/dashboard/influencer-discovery/search?${params.toString()}`
     )
   }
 
@@ -475,5 +487,13 @@ export default function InfluencerDiscoveryPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function InfluencerDiscoveryPage() {
+  return (
+    <Suspense>
+      <InfluencerDiscoveryContent />
+    </Suspense>
   )
 }
