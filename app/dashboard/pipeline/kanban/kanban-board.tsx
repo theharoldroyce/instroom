@@ -1,6 +1,8 @@
+// C:\Users\reyme\Videos\instroom\app\dashboard\pipeline\kanban\kanban-board.tsx
+
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import {
   DndContext,
   DragOverlay,
@@ -27,8 +29,6 @@ import {
   IconX,
   IconLayoutList,
   IconChevronDown,
-  IconMail,
-  IconSend,
 } from "@tabler/icons-react"
 
 import InfluencerProfileSidebar, {
@@ -38,6 +38,30 @@ import InfluencerProfileSidebar, {
 
 // Import the JSON data
 import jsonData from "@/app/dashboard/data.json"
+
+// ─── Platform Icons ─────────────────────────────────────────────────────────
+export const PLATFORM_ICONS: Record<string, ReactNode> = {
+  Instagram: (
+    <img
+      src="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
+      alt="Instagram"
+      className="w-4 h-4"
+    />
+  ),
+  TikTok: (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-2.89 2.89 2.896 2.896 0 0 1-2.889-2.89 2.896 2.896 0 0 1 2.89-2.889c.302 0 .595.05.872.137V9.257a6.339 6.339 0 0 0-5.053 2.212 6.339 6.339 0 0 0-1.33 5.52 6.34 6.34 0 0 0 5.766 4.731 6.34 6.34 0 0 0 6.34-6.34V8.898a7.756 7.756 0 0 0 4.422 1.393V6.825a4.8 4.8 0 0 1-2.443-.139z" />
+    </svg>
+  ),
+  YouTube: (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.376.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.376-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  ),
+  Twitter: (
+    <IconBrandTwitter size={14} className="text-blue-400" />
+  ),
+}
 
 type Influencer = {
   id: number
@@ -61,8 +85,7 @@ type Influencer = {
 }
 
 // ─── Filter constants ───────────────────────────────────────────────────────
-const PLATFORMS = ["Instagram", "YouTube", "TikTok"]
-const NICHES = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech"]
+const NICHES = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech", "Fashion", "Travel"]
 const LOCATIONS = [
   "Philippines",
   "Singapore",
@@ -70,13 +93,9 @@ const LOCATIONS = [
   "Australia",
   "United Kingdom",
   "Malaysia",
-]
-const COMMUNITY_STATUS = [
-  "Pending",
-  "Invited",
-  "Joined",
-  "Not Interested",
-  "Left",
+  "Indonesia",
+  "Thailand",
+  "Vietnam",
 ]
 
 // ─── Helpers: map Influencer → Partner ──────────────────────────────────────
@@ -94,10 +113,6 @@ function parseFollowers(raw: string): number {
 function parseEngagement(raw: string): number {
   if (!raw) return 0
   return parseFloat(raw.replace("%", "").trim()) || 0
-}
-
-function getDisplayTier(inf: Influencer): string {
-  return inf.tier || "Bronze"
 }
 
 function influencerToPartner(inf: Influencer): Partner {
@@ -194,24 +209,20 @@ const getOptionDotColor = (status: string) => {
 }
 
 // ─── Platform helpers ───────────────────────────────────────────────────────
-const getPlatformDotColor = (platform?: string) => {
-  switch (platform?.toLowerCase()) {
-    case "instagram": return "bg-pink-500"
-    case "tiktok": return "bg-black"
-    case "youtube": return "bg-red-500"
-    case "twitter": return "bg-blue-400"
-    default: return "bg-gray-400"
-  }
+const getPlatformIcon = (platform?: string): ReactNode => {
+  if (!platform) return PLATFORM_ICONS.Instagram
+  return PLATFORM_ICONS[platform] || PLATFORM_ICONS.Instagram
 }
 
-const getPlatformIcon = (platform?: string) => {
-  switch (platform?.toLowerCase()) {
-    case "instagram": return <IconBrandInstagram size={14} className="text-pink-500" />
-    case "tiktok": return <IconBrandTiktok size={14} className="text-black" />
-    case "youtube": return <IconBrandYoutube size={14} className="text-red-500" />
-    case "twitter": return <IconBrandTwitter size={14} className="text-blue-400" />
-    default: return <IconBrandInstagram size={14} className="text-gray-400" />
-  }
+// ─── Avatar color generator based on name ──────────────────────────────────
+const getAvatarColor = (name: string) => {
+  const colors = [
+    "bg-pink-500", "bg-purple-500", "bg-indigo-500", "bg-blue-500", 
+    "bg-cyan-500", "bg-teal-500", "bg-green-500", "bg-yellow-500",
+    "bg-orange-500", "bg-red-500", "bg-rose-500"
+  ]
+  const index = name.charCodeAt(0) % colors.length
+  return colors[index]
 }
 
 // ─── Custom Status Dropdown Component ──────────────────────────────────────
@@ -264,7 +275,7 @@ function StatusDropdown({
   )
 }
 
-// ─── Droppable / Draggable (whole card is drag handle) ──────────────────────
+// ─── Droppable / Draggable ──────────────────────────────────────────────────
 function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
@@ -291,7 +302,7 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
       style={style}
       {...listeners}
       {...attributes}
-      className={`bg-white border rounded-lg p-3 hover:shadow-md transition cursor-grab active:cursor-grabbing border-gray-200 ${
+      className={`bg-gray-50 border border-gray-200 rounded-lg p-3 hover:shadow-sm transition cursor-grab active:cursor-grabbing ${
         isDragging ? "shadow-lg opacity-50" : ""
       }`}
     >
@@ -315,14 +326,13 @@ export default function PipelinePage() {
   // Column filter state for list view
   const [selectedColumnStatus, setSelectedColumnStatus] = useState<string | null>(null)
 
-  // ── Filter panel state (matches your existing filter UI) ──────────────────
+  // ── Filter panel state (Influencer, Handle, Location, Niche) ─────────────
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [filters, setFilters] = useState({
-    tier: "all",
-    platform: "all",
-    niche: "all",
+    influencer: "",
+    handle: "",
     location: "all",
-    comm: "all",
+    niche: "all",
   })
 
   // ── Unsaved changes tracking ──────────────────────────────────────────────
@@ -360,7 +370,7 @@ export default function PipelinePage() {
     }
   }, [])
 
-  // ── Drag handlers (direct move — no modal) ────────────────────────────────
+  // ── Drag handlers ─────────────────────────────────────────────────────────
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string)
   }
@@ -428,7 +438,7 @@ export default function PipelinePage() {
     setTimeout(() => setShowSuccessMessage(null), 2000)
   }
 
-  // ── Filtered data (uses your exact filter logic) ──────────────────────────
+  // ── Filtered data ─────────────────────────────────────────────────────────
   let filteredData = data
     .filter(
       (d) =>
@@ -437,16 +447,19 @@ export default function PipelinePage() {
     )
     .filter((d) => (selectedColumnStatus ? d.pipelineStatus === selectedColumnStatus : true))
 
-  if (filters.tier !== "all")
-    filteredData = filteredData.filter((p) => getDisplayTier(p) === filters.tier)
-  if (filters.platform !== "all")
-    filteredData = filteredData.filter((p) => p.platform === filters.platform)
-  if (filters.niche !== "all")
-    filteredData = filteredData.filter((p) => p.niche === filters.niche)
+  // Apply filter panel filters
+  if (filters.influencer)
+    filteredData = filteredData.filter((p) => 
+      p.influencer.toLowerCase().includes(filters.influencer.toLowerCase())
+    )
+  if (filters.handle)
+    filteredData = filteredData.filter((p) => 
+      p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase())
+    )
   if (filters.location !== "all")
     filteredData = filteredData.filter((p) => p.location === filters.location)
-  if (filters.comm !== "all")
-    filteredData = filteredData.filter((p) => p.commSt === filters.comm)
+  if (filters.niche !== "all")
+    filteredData = filteredData.filter((p) => p.niche === filters.niche)
 
   const getItemsByColumn = (columnKey: string) => {
     const status = getStatusFromColumnKey(columnKey)
@@ -454,11 +467,10 @@ export default function PipelinePage() {
   }
 
   const hasActiveFilters =
-    filters.tier !== "all" ||
-    filters.platform !== "all" ||
-    filters.niche !== "all" ||
+    filters.influencer !== "" ||
+    filters.handle !== "" ||
     filters.location !== "all" ||
-    filters.comm !== "all" ||
+    filters.niche !== "all" ||
     search !== "" ||
     selectedColumnStatus !== null
 
@@ -468,7 +480,26 @@ export default function PipelinePage() {
     ? columns.find((col) => col.status === selectedColumnStatus)
     : null
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ─── Render Card Content (Clean design matching Closed page) ──────────────
+  const renderCardContent = (inf: Influencer) => (
+    <div className="flex items-center gap-3">
+      {/* Avatar with first letter */}
+      <div className={`w-9 h-9 rounded-full ${getAvatarColor(inf.influencer)}/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-sm`}>
+        {inf.influencer.charAt(0)}
+      </div>
+      <div className="flex flex-col text-sm flex-1 min-w-0">
+        <span className="font-medium truncate">{inf.influencer}</span>
+        <span className="text-xs text-gray-500 truncate">
+          {inf.instagramHandle}
+        </span>
+        <span className="text-xs text-gray-400">
+          👥 {inf.followers}
+        </span>
+      </div>
+    </div>
+  )
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-4 p-6">
       {/* Success Toast */}
@@ -535,54 +566,37 @@ export default function PipelinePage() {
               Filters
             </button>
 
-            {/* Floating filter dropdown */}
+            {/* Floating filter dropdown - Influencer, Handle, Location, Niche */}
             {showFilterPanel && (
               <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[340px] p-5">
                 <div className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Filter by</div>
 
                 <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                  {/* Influencer Name */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Tier</label>
-                    <select
-                      value={filters.tier}
-                      onChange={(e) => setFilters((p) => ({ ...p, tier: e.target.value }))}
-                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"
-                    >
-                      <option value="all">All</option>
-                      <option value="Gold">🥇 Gold</option>
-                      <option value="Silver">🥈 Silver</option>
-                      <option value="Bronze">🥉 Bronze</option>
-                    </select>
+                    <label className="text-xs text-gray-500">Influencer</label>
+                    <input
+                      type="text"
+                      value={filters.influencer}
+                      onChange={(e) => setFilters((p) => ({ ...p, influencer: e.target.value }))}
+                      placeholder="Search by name..."
+                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]"
+                    />
                   </div>
 
+                  {/* Handle */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Platform</label>
-                    <select
-                      value={filters.platform}
-                      onChange={(e) => setFilters((p) => ({ ...p, platform: e.target.value }))}
-                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"
-                    >
-                      <option value="all">All</option>
-                      {PLATFORMS.map((p) => (
-                        <option key={p}>{p}</option>
-                      ))}
-                    </select>
+                    <label className="text-xs text-gray-500">Handle</label>
+                    <input
+                      type="text"
+                      value={filters.handle}
+                      onChange={(e) => setFilters((p) => ({ ...p, handle: e.target.value }))}
+                      placeholder="@username..."
+                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]"
+                    />
                   </div>
 
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Niche</label>
-                    <select
-                      value={filters.niche}
-                      onChange={(e) => setFilters((p) => ({ ...p, niche: e.target.value }))}
-                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"
-                    >
-                      <option value="all">All</option>
-                      {NICHES.map((n) => (
-                        <option key={n}>{n}</option>
-                      ))}
-                    </select>
-                  </div>
-
+                  {/* Location */}
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-500">Location</label>
                     <select
@@ -590,23 +604,24 @@ export default function PipelinePage() {
                       onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))}
                       className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"
                     >
-                      <option value="all">All</option>
+                      <option value="all">All Locations</option>
                       {LOCATIONS.map((l) => (
                         <option key={l}>{l}</option>
                       ))}
                     </select>
                   </div>
 
+                  {/* Niche */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Community</label>
+                    <label className="text-xs text-gray-500">Niche</label>
                     <select
-                      value={filters.comm}
-                      onChange={(e) => setFilters((p) => ({ ...p, comm: e.target.value }))}
+                      value={filters.niche}
+                      onChange={(e) => setFilters((p) => ({ ...p, niche: e.target.value }))}
                       className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"
                     >
-                      <option value="all">All</option>
-                      {COMMUNITY_STATUS.map((c) => (
-                        <option key={c}>{c}</option>
+                      <option value="all">All Niches</option>
+                      {NICHES.map((n) => (
+                        <option key={n}>{n}</option>
                       ))}
                     </select>
                   </div>
@@ -617,11 +632,10 @@ export default function PipelinePage() {
                     className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition"
                     onClick={() =>
                       setFilters({
-                        tier: "all",
-                        platform: "all",
-                        niche: "all",
+                        influencer: "",
+                        handle: "",
                         location: "all",
-                        comm: "all",
+                        niche: "all",
                       })
                     }
                   >
@@ -675,7 +689,7 @@ export default function PipelinePage() {
                 const items = getItemsByColumn(col.key)
                 return (
                   <DroppableColumn key={col.key} id={col.key}>
-                    {/* Column header — "2 For Outreach" */}
+                    {/* Column header */}
                     <div
                       onClick={() => handleColumnClick(col)}
                       className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center cursor-pointer hover:opacity-90 transition-opacity`}
@@ -683,63 +697,19 @@ export default function PipelinePage() {
                       <span>{items.length} {col.title}</span>
                     </div>
 
-                    {/* Cards */}
-                    {items.map((inf) => {
-                      const note = inf.notes || ""
-
-                      return (
-                        <DraggableCard key={inf.id} id={inf.id.toString()}>
-                          {/* Row 1: platform dots + name + mail/send icons */}
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-1.5">
-                              <div className={`w-3 h-3 rounded-full ${getPlatformDotColor(inf.platform)}`} />
-                              <div className="w-3 h-3 rounded-full bg-blue-500" />
-                              <span className="font-medium text-sm ml-1">{inf.influencer}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={(e) => { e.stopPropagation() }}
-                                onPointerDown={(e) => e.stopPropagation()}
-                                className="text-blue-500 hover:text-blue-700 transition"
-                                title="Send email"
-                              >
-                                <IconMail size={16} />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation() }}
-                                onPointerDown={(e) => e.stopPropagation()}
-                                className="text-blue-500 hover:text-blue-700 transition"
-                                title="Send message"
-                              >
-                                <IconSend size={16} />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Row 2: followers + engagement */}
-                          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                            <span className="flex items-center gap-1">
-                              👥 {inf.followers}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              💬 {inf.engagementRate}
-                            </span>
-                          </div>
-
-                          {/* Row 3: note text (if any) */}
-                          {note && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              {note}
-                            </div>
-                          )}
-                        </DraggableCard>
-                      )
-                    })}
+                    {/* Cards - Clean design matching Closed page */}
+                    {items.map((inf) => (
+                      <DraggableCard key={inf.id} id={inf.id.toString()}>
+                        <div onClick={() => openSidebar(inf)} className="cursor-pointer">
+                          {renderCardContent(inf)}
+                        </div>
+                      </DraggableCard>
+                    ))}
 
                     {/* Drop zone */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center text-sm text-gray-400 flex items-center justify-center gap-2 hover:bg-gray-50 transition cursor-pointer">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center text-sm text-gray-500 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition">
                       <span>Drop Here</span>
-                      <IconPlus size={14} />
+                      <IconPlus size={16} />
                     </div>
                   </DroppableColumn>
                 )
@@ -749,15 +719,17 @@ export default function PipelinePage() {
 
           <DragOverlay>
             {activeInfluencer ? (
-              <div className="bg-white border rounded-lg p-3 shadow-lg rotate-2 border-gray-200 w-[260px]">
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${getPlatformDotColor(activeInfluencer.platform)}`} />
-                  <div className="w-3 h-3 rounded-full bg-blue-500" />
-                  <span className="font-medium text-sm">{activeInfluencer.influencer}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
-                  <span>👥 {activeInfluencer.followers}</span>
-                  <span>💬 {activeInfluencer.engagementRate}</span>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 shadow-lg rotate-2 w-[220px]">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-full ${getAvatarColor(activeInfluencer.influencer)}/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-sm`}>
+                    {activeInfluencer.influencer.charAt(0)}
+                  </div>
+                  <div className="flex flex-col text-sm">
+                    <span className="font-medium">{activeInfluencer.influencer}</span>
+                    <span className="text-xs text-gray-500">
+                      {activeInfluencer.instagramHandle}
+                    </span>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -793,13 +765,14 @@ export default function PipelinePage() {
                   <th className="px-4 py-3 text-left">Engagement</th>
                   <th className="px-4 py-3 text-left">Niche</th>
                   <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Last Contact</th>
+                  {/* Last Contact - Commented out, uncomment when needed */}
+                  {/* <th className="px-4 py-3 text-left">Last Contact</th> */}
                 </tr>
               </thead>
               <tbody>
                 {filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                       No influencers found matching your filters
                     </td>
                   </tr>
@@ -812,14 +785,16 @@ export default function PipelinePage() {
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${getPlatformDotColor(inf.platform)}`} />
+                          <div className={`w-8 h-8 rounded-full ${getAvatarColor(inf.influencer)}/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-xs`}>
+                            {inf.influencer.charAt(0)}
+                          </div>
                           <span className="font-medium">{inf.influencer}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           {getPlatformIcon(inf.platform)}
-                          <span>{inf.platform}</span>
+                          <span>{inf.platform || "Instagram"}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-[#0F6B3E] font-medium">{inf.instagramHandle}</td>
@@ -840,9 +815,10 @@ export default function PipelinePage() {
                           onStatusChange={(newStatus) => handleStatusUpdate(inf.id, newStatus)}
                         />
                       </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">
+                      {/* Last Contact - Commented out, uncomment when needed */}
+                      {/* <td className="px-4 py-3 text-gray-500 text-xs">
                         {inf.lastContact ? new Date(inf.lastContact).toLocaleDateString() : "Never"}
-                      </td>
+                      </td> */}
                     </tr>
                   ))
                 )}

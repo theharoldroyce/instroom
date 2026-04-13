@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { ChevronDown, Search, Plus, Loader2, CheckCircle2, AlertCircle, X, Users } from "lucide-react"
+import { useState, useRef, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { ChevronDown, Search, Plus, Loader2, CheckCircle2, AlertCircle, X, Users, UserPlus, Check } from "lucide-react"
 
 // ─── API Config ─────────────────────────────────────────────────────────────
 const API_ENDPOINTS = {
@@ -22,10 +22,134 @@ type QuickResult = {
   name: string
   avatar: string
   followers: string
+  followersRaw: number
   platform: string
+  engagement: string
+  email: string
+  location: string
+  bio: string
+  profileUrl: string
 }
 
-export default function InfluencerDiscoveryPage() {
+// ─── Shared localStorage key for influencer list ────────────────────────────
+const INFLUENCER_LIST_KEY = "instroom_influencer_list"
+
+type StoredInfluencer = {
+  id: string
+  handle: string
+  platform: string
+  full_name: string
+  first_name: string
+  email: string
+  follower_count: string
+  engagement_rate: string
+  location: string
+  social_link: string
+  profile_picture: string
+  contact_info: string
+  niche: string
+  contact_status: string
+  stage: string
+  agreed_rate: string
+  notes: string
+  gender: string
+  approval_status: "Pending" | "Approved" | "Declined"
+  transferred_date: string
+  approval_notes: string
+  decline_reason: string
+  tier: string
+  community_status: string
+  custom: Record<string, string>
+  addedAt: number // timestamp for deduplication
+}
+
+function addToInfluencerList(creator: QuickResult, selectedPlatform: string): { success: boolean; message: string } {
+  try {
+    const existing: StoredInfluencer[] = JSON.parse(localStorage.getItem(INFLUENCER_LIST_KEY) || "[]")
+
+    const platformKey = selectedPlatform.toLowerCase()
+    const cleanHandle = creator.username.replace(/^@/, "").toLowerCase()
+
+    // Check for duplicates by handle + platform
+    const isDuplicate = existing.some(
+      (inf) => inf.handle.toLowerCase() === cleanHandle && inf.platform === platformKey
+    )
+
+    if (isDuplicate) {
+      return { success: false, message: `@${cleanHandle} is already in your influencer list` }
+    }
+
+    const newInfluencer: StoredInfluencer = {
+      id: crypto.randomUUID(),
+      handle: cleanHandle,
+      platform: platformKey,
+      full_name: creator.name || "",
+      first_name: creator.name ? creator.name.split(" ")[0] : "",
+      email: creator.email || "",
+      follower_count: String(creator.followersRaw || 0),
+      engagement_rate: creator.engagement ? creator.engagement.replace("%", "") : "0",
+      location: creator.location || "",
+      social_link: creator.profileUrl || "",
+      profile_picture: creator.avatar || "",
+      contact_info: creator.email || "",
+      niche: "",
+      contact_status: "not_contacted",
+      stage: "1",
+      agreed_rate: "",
+      notes: "",
+      gender: "",
+      approval_status: "Pending",
+      transferred_date: "",
+      approval_notes: "",
+      decline_reason: "",
+      tier: "Bronze",
+      community_status: "Pending",
+      custom: {},
+      addedAt: Date.now(),
+    }
+
+    existing.push(newInfluencer)
+    localStorage.setItem(INFLUENCER_LIST_KEY, JSON.stringify(existing))
+
+    return { success: true, message: `@${cleanHandle} added to your influencer list!` }
+  } catch (err) {
+    console.error("Error adding to influencer list:", err)
+    return { success: false, message: "Failed to add to list. Try again." }
+  }
+}
+
+function isInInfluencerList(username: string, platform: string): boolean {
+  try {
+    const existing: StoredInfluencer[] = JSON.parse(localStorage.getItem(INFLUENCER_LIST_KEY) || "[]")
+    const cleanHandle = username.replace(/^@/, "").toLowerCase()
+    const platformKey = platform.toLowerCase()
+    return existing.some(
+      (inf) => inf.handle.toLowerCase() === cleanHandle && inf.platform === platformKey
+    )
+  } catch {
+    return false
+  }
+}
+
+// ─── Toast Component ────────────────────────────────────────────────────────
+function Toast({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3500)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className={`fixed top-4 right-4 z-[999] flex items-center gap-2 px-4 py-3 rounded-xl border shadow-lg animate-in slide-in-from-right ${
+      type === "success" ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"
+    }`}>
+      {type === "success" ? <CheckCircle2 size={16} className="text-green-600" /> : <AlertCircle size={16} className="text-red-600" />}
+      <span className="text-sm font-medium">{message}</span>
+      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100"><X size={14} /></button>
+    </div>
+  )
+}
+
+function InfluencerDiscoveryContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [brandId, setBrandId] = useState<string | null>(null)
@@ -41,6 +165,12 @@ export default function InfluencerDiscoveryPage() {
   const [quickLoading, setQuickLoading] = useState(false)
   const [quickResult, setQuickResult] = useState<QuickResult | null>(null)
   const [quickError, setQuickError] = useState<string | null>(null)
+
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
+
+  // Track which creators have been added to list (for UI feedback)
+  const [addedToList, setAddedToList] = useState<Set<string>>(new Set())
 
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -106,6 +236,11 @@ export default function InfluencerDiscoveryPage() {
     setTopic(search)
     saveRecentSearch(search)
 
+    const params = new URLSearchParams()
+    params.set("topic", search)
+    params.set("platform", selectedPlatform)
+    if (brandId) params.set("brandId", brandId)
+
     router.push(
       `/dashboard/influencer-discovery/search?${params.toString()}`
     )
@@ -166,21 +301,54 @@ export default function InfluencerDiscoveryPage() {
         return n.toString()
       }
 
-      setQuickResult({
+      const engRate = d.engagement_rate ? parseFloat(String(d.engagement_rate)).toFixed(2) : "0"
+
+      const result: QuickResult = {
         username: d.username || clean,
         name: d.full_name || d.name || clean,
         avatar:
           d.profile_pic_url ||
+          d.photo ||
           d.avatar ||
           `https://ui-avatars.com/api/?name=${clean}&background=0F6B3E&color=fff`,
         followers: fmt(fol),
+        followersRaw: fol,
         platform: selectedPlatform,
-      })
+        engagement: engRate + "%",
+        email: d.email && d.email !== "Not Available" ? d.email : "",
+        location: d.location || d.city || d.country || "",
+        bio: d.biography || d.bio || "",
+        profileUrl:
+          d.profile_url ||
+          (platformKey === "tiktok"
+            ? `https://tiktok.com/@${clean}`
+            : `https://instagram.com/${clean}`),
+      }
+
+      setQuickResult(result)
+
+      // Check if already in list
+      if (isInInfluencerList(clean, selectedPlatform)) {
+        setAddedToList((prev) => new Set(prev).add(`${clean}:${platformKey}`))
+      }
     } catch (err) {
       console.error(err)
       setQuickError("Network error. Check your connection.")
     } finally {
       setQuickLoading(false)
+    }
+  }
+
+  // ★ Add to influencer list
+  const handleAddToList = () => {
+    if (!quickResult) return
+
+    const result = addToInfluencerList(quickResult, selectedPlatform)
+    setToast({ message: result.message, type: result.success ? "success" : "error" })
+
+    if (result.success) {
+      const platformKey = selectedPlatform.toLowerCase()
+      setAddedToList((prev) => new Set(prev).add(`${quickResult.username.toLowerCase()}:${platformKey}`))
     }
   }
 
@@ -238,8 +406,14 @@ export default function InfluencerDiscoveryPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
+  const isAlreadyAdded = quickResult
+    ? addedToList.has(`${quickResult.username.toLowerCase()}:${selectedPlatform.toLowerCase()}`)
+    : false
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F7F9F8] via-white to-[#F7F9F8]">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <div className="max-w-6xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
 
         {/* Header */}
@@ -400,29 +574,67 @@ export default function InfluencerDiscoveryPage() {
 
             {/* Quick result */}
             {quickResult && (
-              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-4">
-                <img
-                  src={quickResult.avatar}
-                  alt={quickResult.name}
-                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${quickResult.username}&background=0F6B3E&color=fff`
-                  }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">
-                    {quickResult.name}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    @{quickResult.username} · {quickResult.followers} followers
-                  </p>
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl">
+                <div className="flex items-center gap-4">
+                  <img
+                    src={quickResult.avatar}
+                    alt={quickResult.name}
+                    className="w-12 h-12 rounded-full object-cover border-2 border-white shadow"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${quickResult.username}&background=0F6B3E&color=fff`
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">
+                      {quickResult.name}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      @{quickResult.username} · {quickResult.followers} followers
+                      {quickResult.engagement !== "0%" && ` · ${quickResult.engagement} eng.`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* ★ Add to Influencer List button */}
+                    <button
+                      onClick={handleAddToList}
+                      disabled={isAlreadyAdded}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition flex items-center gap-1.5 ${
+                        isAlreadyAdded
+                          ? "bg-green-100 text-green-700 border border-green-200 cursor-default"
+                          : "bg-[#0F6B3E] text-white hover:bg-[#0c5a34]"
+                      }`}
+                    >
+                      {isAlreadyAdded ? (
+                        <>
+                          <Check size={14} />
+                          In List
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus size={14} />
+                          Add to List
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleGoToProfile}
+                      className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
+                    >
+                      View Full Profile
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={handleGoToProfile}
-                  className="bg-[#0F6B3E] text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-[#0c5a34] transition"
-                >
-                  View Full Profile
-                </button>
+                {/* Extra info row */}
+                {(quickResult.location || quickResult.email) && (
+                  <div className="mt-3 pt-3 border-t border-green-200/50 flex items-center gap-4 text-xs text-gray-500">
+                    {quickResult.location && (
+                      <span>📍 {quickResult.location}</span>
+                    )}
+                    {quickResult.email && (
+                      <span>✉️ {quickResult.email}</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
