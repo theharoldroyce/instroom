@@ -55,6 +55,8 @@ import {
   IconSettings,
   IconChevronDown,
   IconLoader2,
+  IconInfoCircle,
+  IconBulb,
 } from "@tabler/icons-react"
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -67,7 +69,8 @@ export type InfluencerRow = {
   gender?: string; location?: string; social_link?: string; first_name?: string;
   contact_info?: string; approval_status?: "Approved" | "Declined" | "Pending";
   transferred_date?: string; approval_notes?: string; decline_reason?: string;
-  tier?: string; community_status?: string
+  tier?: string; community_status?: string;
+  profile_picture?: string;
 }
 
 export type CustomColumn = {
@@ -82,10 +85,46 @@ type CellAddress = { rowIdx: number; colIdx: number }
 type ColDef = { key: string; label: string; group: "Influencer Details" | "Approval Details" | "Outreach Details"; minWidth: number; type: "text" | "number" | "select" | "url" | "date"; options?: string[]; isCustom?: false }
 type CustomColDef = { key: string; label: string; group: "Influencer Details" | "Approval Details" | "Outreach Details" | "Custom Fields"; minWidth: number; type: "text" | "number" | "dropdown" | "multi-select" | "date" | "boolean" | "url"; options?: string[]; isCustom: true; customId: string; fieldKey: string; assignedGroup: "Influencer Details" | "Approval Details" | "Outreach Details" }
 type AnyColDef = ColDef | CustomColDef
-type FilterState = { tier: string; platform: string; niche: string; location: string; community: string }
 
-// ★ Toast notification type
+type FilterState = { 
+  platform: string; 
+  niche: string; 
+  location: string; 
+  gender: string;
+}
+
 type ToastNotification = { id: string; type: "success" | "error" | "warning" | "info"; message: string }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   ★ LOCAL STORAGE HELPERS
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const STORAGE_KEYS = {
+  ROWS: "instroom_influencer_rows",
+  CUSTOM_COLS: "instroom_custom_columns",
+  NICHES: "instroom_niche_options",
+  LOCATIONS: "instroom_location_options",
+  ROWS_PER_PAGE: "instroom_rows_per_page",
+  COL_ORDER: "instroom_col_order",
+  FILTERS: "instroom_filters",
+}
+
+function loadFromStorage<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw === null) return fallback
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
+function saveToStorage<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch (err) {
+    console.warn("localStorage save failed:", err)
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    CONSTANTS
@@ -94,6 +133,7 @@ const DEFAULT_TIERS = ["Gold", "Silver", "Bronze"]
 const DEFAULT_PLATFORMS = ["Instagram", "YouTube", "TikTok", "X (Twitter)"]
 const DEFAULT_NICHES = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech", "Travel", "Fashion", "Gaming"]
 const DEFAULT_LOCATIONS = ["Philippines","Singapore","United States","Australia","United Kingdom","Malaysia","Indonesia","Thailand","Vietnam"]
+const DEFAULT_GENDERS = ["Male", "Female", "Non-binary", "Other"]
 const DEFAULT_CONTACT_STATUSES = [{ value: "not_contacted", label: "Not Contacted" },{ value: "contacted", label: "Contacted" },{ value: "interested", label: "Interested" },{ value: "agreed", label: "Agreed" }]
 const DEFAULT_COMMUNITY_STATUSES = ["Pending", "Invited", "Joined", "Not Interested", "Left"]
 
@@ -125,14 +165,64 @@ const PLATFORM_URL_MAP: Record<string, (h: string) => string> = {
 }
 
 function getProfileUrl(platform: string, handle: string): string {
-  if (!handle || handle === "@") return ""
+  if (!handle || handle === "@" || handle === "") return ""
   const fn = PLATFORM_URL_MAP[platform]; return fn ? fn(handle) : ""
+}
+
+function cleanHandle(raw: string): string {
+  return raw.trim().replace(/^@/, "")
+}
+
+function displayHandle(handle: string, platform: string): string {
+  const clean = cleanHandle(handle)
+  if (!clean) return ""
+  if (platform === "tiktok") return `@${clean}`
+  return clean
+}
+
+function ProfilePicture({ src, socialLink, name, size = 28 }: { src?: string; socialLink?: string; name?: string; size?: number }) {
+  const [imgError, setImgError] = useState(false)
+  const hasSrc = src && !imgError
+
+  const content = hasSrc ? (
+    <img
+      src={src}
+      alt={name || "Profile"}
+      onError={() => setImgError(true)}
+      className="rounded-full object-cover"
+      style={{ width: size, height: size }}
+    />
+  ) : (
+    <div
+      className="rounded-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size }}
+    >
+      <IconUserCircle size={size * 0.75} className="text-gray-400" />
+    </div>
+  )
+
+  if (socialLink) {
+    return (
+      <a
+        href={socialLink.startsWith("http") ? socialLink : `https://${socialLink}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="flex-shrink-0 rounded-full hover:ring-2 hover:ring-blue-400 transition-all cursor-pointer"
+        title={`Open profile${name ? ` (${name})` : ""}`}
+      >
+        {content}
+      </a>
+    )
+  }
+
+  return <span className="flex-shrink-0">{content}</span>
 }
 
 function newEmptyRow(customCols: CustomColumn[]): InfluencerRow {
   const custom: Record<string, string> = {}
   customCols.forEach((c) => { custom[c.field_key] = c.field_type === "boolean" ? "No" : "" })
-  return { id: crypto.randomUUID(), handle: "@", platform: "instagram", full_name: "", email: "", follower_count: "", engagement_rate: "", niche: "", contact_status: "not_contacted", stage: "1", agreed_rate: "", notes: "", custom, gender: "", location: "", social_link: "", first_name: "", contact_info: "", approval_status: "Pending", transferred_date: "", approval_notes: "", decline_reason: "", tier: "Bronze", community_status: "Pending" }
+  return { id: crypto.randomUUID(), handle: "", platform: "instagram", full_name: "", email: "", follower_count: "", engagement_rate: "", niche: "", contact_status: "not_contacted", stage: "1", agreed_rate: "", notes: "", custom, gender: "", location: "", social_link: "", first_name: "", contact_info: "", approval_status: "Pending", transferred_date: "", approval_notes: "", decline_reason: "", tier: "Bronze", community_status: "Pending", profile_picture: "" }
 }
 
 const STATUS_STYLE: Record<string, string> = { not_contacted: "bg-gray-100 text-gray-600", contacted: "bg-blue-100 text-blue-700", interested: "bg-yellow-100 text-yellow-700", agreed: "bg-green-100 text-green-700" }
@@ -158,29 +248,25 @@ const handleApprovalChange = (row: InfluencerRow, newStatus: string, declineReas
 
 function getStaticCols(niches: string[], locations: string[]): ColDef[] {
   return [
-    { key: "handle", label: "Handle", group: "Influencer Details", minWidth: 140, type: "text" },
-    { key: "platform", label: "Platform", group: "Influencer Details", minWidth: 110, type: "select", options: ["instagram", "tiktok", "youtube", "twitter", "other"] },
-    { key: "niche", label: "Niche", group: "Influencer Details", minWidth: 120, type: "select", options: niches },
-    { key: "gender", label: "Gender", group: "Influencer Details", minWidth: 110, type: "select", options: ["Male", "Female", "Non-binary", "Other"] },
-    { key: "location", label: "Location", group: "Influencer Details", minWidth: 130, type: "select", options: locations },
-    { key: "follower_count", label: "Follower Count", group: "Influencer Details", minWidth: 120, type: "number" },
-    { key: "engagement_rate", label: "Engagement Rate (%)", group: "Influencer Details", minWidth: 140, type: "number" },
-    { key: "social_link", label: "Social Link", group: "Influencer Details", minWidth: 150, type: "url" },
-    { key: "first_name", label: "First Name", group: "Influencer Details", minWidth: 110, type: "text" },
-    { key: "contact_info", label: "Email", group: "Influencer Details", minWidth: 160, type: "text" },
-    { key: "approval_status", label: "Approve/Decline", group: "Approval Details", minWidth: 130, type: "select", options: ["Approved", "Declined", "Pending"] },
-    { key: "transferred_date", label: "Transferred Date", group: "Approval Details", minWidth: 140, type: "date" },
-    { key: "approval_notes", label: "Notes", group: "Approval Details", minWidth: 200, type: "text" },
-    { key: "contact_status", label: "Status", group: "Outreach Details", minWidth: 120, type: "select", options: ["not_contacted", "contacted", "interested", "agreed"] },
-    { key: "agreed_rate", label: "Rate ($)", group: "Outreach Details", minWidth: 100, type: "number" },
-    { key: "notes", label: "Notes", group: "Outreach Details", minWidth: 200, type: "text" },
+    { key: "handle", label: "Handle", group: "Influencer Details", minWidth: 130, type: "text" },
+    { key: "platform", label: "Platform", group: "Influencer Details", minWidth: 100, type: "select", options: ["instagram", "tiktok", "youtube", "twitter", "other"] },
+    { key: "niche", label: "Niche", group: "Influencer Details", minWidth: 90, type: "select", options: niches },
+    { key: "gender", label: "Gender", group: "Influencer Details", minWidth: 80, type: "select", options: ["Male", "Female", "Non-binary", "Other"] },
+    { key: "location", label: "Location", group: "Influencer Details", minWidth: 95, type: "select", options: locations },
+    { key: "follower_count", label: "Followers", group: "Influencer Details", minWidth: 80, type: "number" },
+    { key: "engagement_rate", label: "Eng. Rate", group: "Influencer Details", minWidth: 75, type: "number" },
+    { key: "first_name", label: "First Name", group: "Influencer Details", minWidth: 85, type: "text" },
+    { key: "contact_info", label: "Email", group: "Influencer Details", minWidth: 120, type: "text" },
+    { key: "approval_status", label: "Approve/Decline", group: "Approval Details", minWidth: 105, type: "select", options: ["Approved", "Declined", "Pending"] },
+    { key: "transferred_date", label: "Transferred Date", group: "Approval Details", minWidth: 110, type: "date" },
+    { key: "approval_notes", label: "Notes", group: "Approval Details", minWidth: 130, type: "text" },
   ]
 }
 
 const OUTREACH_FIELDS = new Set(["contact_status", "stage", "agreed_rate", "notes"])
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   ★ INSTROOM API — Auto-fetch influencer data
+   ★ INSTROOM API — Auto-fetch influencer data + profile picture
    ═══════════════════════════════════════════════════════════════════════════════ */
 const INSTROOM_API: Record<string, (u: string) => string> = {
   instagram: (u: string) => `https://api.instroom.io/v2/${u}/instagram`,
@@ -215,6 +301,7 @@ async function fetchInfluencerFromAPI(handle: string, platform: string): Promise
       location: d.location || d.city || "",
       niche: d.category || d.business_category || "",
       gender: d.gender || "",
+      profile_picture: d.profile_pic_url || d.profile_picture || d.avatar || d.profile_image || d.profile_pic || "",
     }
   } catch (err) { console.error(`API fetch error for ${handle}:`, err); return null }
 }
@@ -299,7 +386,7 @@ function PlatformEditor({ value, onChange, onClose }: { value: string; onChange:
 
 function AddRowsModal({ isOpen, onClose, onAdd, selectedCount }: { isOpen: boolean; onClose: () => void; onAdd: (count: number) => void; selectedCount: number }) {
   const [count, setCount] = useState(5); const [insertPosition, setInsertPosition] = useState<"end"|"after-selection">(selectedCount > 0 ? "after-selection" : "end"); if (!isOpen) return null
-  return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget)onClose()}}><div className="bg-white rounded-2xl shadow-xl w-[400px] p-6"><div className="flex items-center justify-between mb-4"><h3 className="text-lg font-semibold text-gray-900">Add Multiple Rows</h3><button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600"><IconX size={20}/></button></div><div className="space-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-2">Number of rows</label><div className="flex items-center gap-2"><input type="number" min="1" max="100" value={count} onChange={e=>setCount(Math.min(100,Math.max(1,parseInt(e.target.value)||1)))} className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none text-center"/><span className="text-sm text-gray-500">rows</span></div></div><div><label className="block text-sm font-medium text-gray-700 mb-2">Insert position</label><div className="space-y-2"><label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="position" value="end" checked={insertPosition==="end"} onChange={()=>setInsertPosition("end")} className="w-4 h-4 text-blue-600"/><span className="text-sm text-gray-700">At the end</span></label><label className={`flex items-center gap-2 ${selectedCount===0?'opacity-50':'cursor-pointer'}`}><input type="radio" name="position" value="after-selection" checked={insertPosition==="after-selection"} onChange={()=>setInsertPosition("after-selection")} disabled={selectedCount===0} className="w-4 h-4 text-blue-600"/><span className="text-sm text-gray-700">After selected rows</span></label></div></div></div><div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button><button onClick={()=>{onAdd(count);onClose()}} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition"><IconPlus size={16}/> Add {count} Rows</button></div></div></div>)
+  return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget)onClose()}}><div className="bg-white rounded-2xl shadow-xl w-[400px] p-6"><div className="flex items-center justify-between mb-4"><h3 className="text-lg font-semibold text-gray-900">Add Multiple Rows</h3><button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600"><IconX size={20}/></button></div><div className="space-y-4"><div><label className="block text-sm font-medium text-gray-700 mb-2">Number of rows</label><div className="flex items-center gap-2"><input type="number" min="1" max="100" value={count} onChange={e=>setCount(Math.min(100,Math.max(1,parseInt(e.target.value)||1)))} className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none text-center"/><span className="text-sm text-gray-500">rows</span></div></div><div><label className="block text-sm font-medium text-gray-700 mb-2">Insert position</label><div className="space-y-2"><label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="position" value="end" checked={insertPosition==="end"} onChange={()=>setInsertPosition("end")} className="w-4 h-4 text-blue-600"/><span className="text-sm text-gray-700">At the end</span></label><label className={`flex items-center gap-2 ${selectedCount===0?'opacity-50':'cursor-pointer'}`}><input type="radio" name="position" value="after-selection" checked={insertPosition==="after-selection"} onChange={()=>setInsertPosition("after-selection")} disabled={selectedCount===0} className="w-4 h-4 text-blue-600"/><span className="text-sm text-gray-700">After selected rows</span></label></div></div></div><div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button><button onClick={()=>{onAdd(count);onClose()}} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition"> Add {count} Rows</button></div></div></div>)
 }
 
 function DeclineConfirmationModal({ isOpen, onClose, onConfirm, influencerName }: { isOpen: boolean; onClose: () => void; onConfirm: (reason: string) => void; influencerName: string }) {
@@ -307,7 +394,7 @@ function DeclineConfirmationModal({ isOpen, onClose, onConfirm, influencerName }
   useEffect(() => { if (isOpen) { setDeclineReason(""); setError(""); setTimeout(() => inputRef.current?.focus(), 100) } }, [isOpen])
   if (!isOpen) return null
   const handleConfirm = () => { if (!declineReason.trim()) { setError("Please provide a reason"); return }; onConfirm(declineReason.trim()); onClose() }
-  return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget)onClose()}}><div className="bg-white rounded-2xl shadow-xl w-[450px] p-6"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-red-100 rounded-full"><IconAlertTriangle size={24} className="text-red-600"/></div><div><h3 className="text-lg font-semibold text-gray-900">Decline Influencer</h3><p className="text-sm text-gray-500">Declining <span className="font-medium text-gray-700">{influencerName}</span></p></div></div><div className="space-y-3"><div><label className="block text-sm font-medium text-gray-700 mb-2">Reason <span className="text-red-500">*</span></label><textarea ref={inputRef} value={declineReason} onChange={e=>{setDeclineReason(e.target.value);setError("")}} onKeyDown={e=>{if(e.key==="Enter"&&e.ctrlKey){e.preventDefault();handleConfirm()};if(e.key==="Escape")onClose()}} placeholder="e.g., Budget constraints..." rows={4} className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-red-400 outline-none resize-none ${error?"border-red-300 bg-red-50":"border-gray-200"}`}/>{error&&<p className="text-xs text-red-500 mt-1"><IconAlertCircle size={12}/> {error}</p>}</div><div className="bg-amber-50 border border-amber-200 rounded-lg p-3"><p className="text-xs text-amber-800"><strong>Note:</strong> Declining disables outreach fields and clears outreach data.</p></div></div><div className="flex gap-3 mt-6"><button onClick={()=>{onConfirm("");onClose()}} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 rounded-lg transition">Skip</button><button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button><button onClick={handleConfirm} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700 transition"><IconX size={16}/> Confirm Decline</button></div></div></div>)
+  return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget)onClose()}}><div className="bg-white rounded-2xl shadow-xl w-[450px] p-6"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-red-100 rounded-full"><IconAlertTriangle size={24} className="text-red-600"/></div><div><h3 className="text-lg font-semibold text-gray-900">Decline Influencer</h3><p className="text-sm text-gray-500">Declining <span className="font-medium text-gray-700">{influencerName}</span></p></div></div><div className="space-y-3"><div><label className="block text-sm font-medium text-gray-700 mb-2">Reason <span className="text-red-500">*</span></label><textarea ref={inputRef} value={declineReason} onChange={e=>{setDeclineReason(e.target.value);setError("")}} onKeyDown={e=>{if(e.key==="Enter"&&e.ctrlKey){e.preventDefault();handleConfirm()};if(e.key==="Escape")onClose()}} placeholder="e.g., Budget constraints..." rows={4} className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-red-400 outline-none resize-none ${error?"border-red-300 bg-red-50":"border-gray-200"}`}/>{error&&<p className="text-xs text-red-500 mt-1"><IconAlertCircle size={12}/> {error}</p>}</div><div className="bg-amber-50 border border-amber-200 rounded-lg p-3"><p className="text-xs text-amber-800"><strong>Note:</strong> Declining disables outreach fields and clears outreach data.</p></div></div><div className="flex gap-3 mt-6"><button onClick={()=>{onConfirm("");onClose()}} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 rounded-lg transition">Skip</button><button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button><button onClick={handleConfirm} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700 transition">Confirm Decline</button></div></div></div>)
 }
 
 function FilterPopover({ isOpen, onClose, filters, onApplyFilters, onClearFilters, niches, locations, anchorRef }: { isOpen: boolean; onClose: () => void; filters: FilterState; onApplyFilters: (f: FilterState) => void; onClearFilters: () => void; niches: string[]; locations: string[]; anchorRef: React.RefObject<HTMLButtonElement|null> }) {
@@ -315,7 +402,23 @@ function FilterPopover({ isOpen, onClose, filters, onApplyFilters, onClearFilter
   useEffect(() => { if (isOpen) setLf(filters) }, [isOpen, filters])
   useEffect(() => { if (!isOpen) return; const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node) && anchorRef.current && !anchorRef.current.contains(e.target as Node)) onClose() }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h) }, [isOpen, onClose, anchorRef])
   if (!isOpen) return null
-  return (<div ref={ref} className="absolute top-full right-0 mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl w-[340px]" onClick={e=>e.stopPropagation()}><div className="px-4 pt-4 pb-2"><h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filter by</h4></div><div className="px-4 pb-3 space-y-3"><div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-medium text-gray-500 mb-1">Tier</label><select value={lf.tier} onChange={e=>setLf(p=>({...p,tier:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option><option value="Gold">🥇 Gold</option><option value="Silver">🥈 Silver</option><option value="Bronze">🥉 Bronze</option></select></div><div><label className="block text-xs font-medium text-gray-500 mb-1">Platform</label><select value={lf.platform} onChange={e=>setLf(p=>({...p,platform:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option>{DEFAULT_PLATFORMS.map(p=><option key={p} value={p}>{p}</option>)}</select></div></div><div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-medium text-gray-500 mb-1">Niche</label><select value={lf.niche} onChange={e=>setLf(p=>({...p,niche:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option>{niches.map(n=><option key={n} value={n}>{n}</option>)}</select></div><div><label className="block text-xs font-medium text-gray-500 mb-1">Location</label><select value={lf.location} onChange={e=>setLf(p=>({...p,location:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option>{locations.map(l=><option key={l} value={l}>{l}</option>)}</select></div></div><div><label className="block text-xs font-medium text-gray-500 mb-1">Community</label><select value={lf.community} onChange={e=>setLf(p=>({...p,community:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option>{DEFAULT_COMMUNITY_STATUSES.map(c=><option key={c} value={c}>{c}</option>)}</select></div></div><div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100"><button onClick={()=>{setLf({tier:"all",platform:"all",niche:"all",location:"all",community:"all"});onClearFilters()}} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 rounded-lg transition">Clear all</button><button onClick={()=>{onApplyFilters(lf);onClose()}} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">Apply</button></div></div>)
+  return (<div ref={ref} className="absolute top-full right-0 mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl w-[380px]" onClick={e=>e.stopPropagation()}>
+    <div className="px-4 pt-4 pb-2"><h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filter by</h4></div>
+    <div className="px-4 pb-3 space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="block text-xs font-medium text-gray-500 mb-1">Platform</label><select value={lf.platform} onChange={e=>setLf(p=>({...p,platform:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option>{DEFAULT_PLATFORMS.map(p=><option key={p} value={p}>{p}</option>)}</select></div>
+        <div><label className="block text-xs font-medium text-gray-500 mb-1">Niche</label><select value={lf.niche} onChange={e=>setLf(p=>({...p,niche:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option>{niches.map(n=><option key={n} value={n}>{n}</option>)}</select></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="block text-xs font-medium text-gray-500 mb-1">Location</label><select value={lf.location} onChange={e=>setLf(p=>({...p,location:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option>{locations.map(l=><option key={l} value={l}>{l}</option>)}</select></div>
+        <div><label className="block text-xs font-medium text-gray-500 mb-1">Gender</label><select value={lf.gender} onChange={e=>setLf(p=>({...p,gender:e.target.value}))} className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg outline-none bg-white"><option value="all">All</option>{DEFAULT_GENDERS.map(g=><option key={g} value={g}>{g}</option>)}</select></div>
+      </div>
+    </div>
+    <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100">
+      <button onClick={()=>{setLf({platform:"all",niche:"all",location:"all",gender:"all"});onClearFilters()}} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 rounded-lg transition">Clear all</button>
+      <button onClick={()=>{onApplyFilters(lf);onClose()}} className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">Apply</button>
+    </div>
+  </div>)
 }
 
 function ManageOptionsModal({ isOpen, onClose, title, options, onSave }: { isOpen: boolean; onClose: () => void; title: string; options: string[]; onSave: (o: string[]) => void }) {
@@ -328,18 +431,23 @@ function ManageOptionsModal({ isOpen, onClose, title, options, onSave }: { isOpe
 /* ═══════════════════════════════════════════════════════════════════════════════
    IMPORT / EXPORT
    ═══════════════════════════════════════════════════════════════════════════════ */
-const CSV_EXPORT_FIELDS = [{ key: "handle", label: "Handle" },{ key: "platform", label: "Platform" },{ key: "full_name", label: "Full Name" },{ key: "first_name", label: "First Name" },{ key: "email", label: "Email" },{ key: "niche", label: "Niche" },{ key: "gender", label: "Gender" },{ key: "location", label: "Location" },{ key: "follower_count", label: "Follower Count" },{ key: "engagement_rate", label: "Engagement Rate (%)" },{ key: "social_link", label: "Social Link" },{ key: "contact_info", label: "Email" },{ key: "tier", label: "Tier" },{ key: "community_status", label: "Community Status" },{ key: "approval_status", label: "Approval Status" },{ key: "transferred_date", label: "Transferred Date" },{ key: "approval_notes", label: "Approval Notes" },{ key: "contact_status", label: "Contact Status" },{ key: "agreed_rate", label: "Agreed Rate ($)" },{ key: "notes", label: "Notes" }]
+const CSV_EXPORT_FIELDS = [{ key: "handle", label: "Handle" },{ key: "platform", label: "Platform" },{ key: "full_name", label: "Full Name" },{ key: "first_name", label: "First Name" },{ key: "email", label: "Email" },{ key: "niche", label: "Niche" },{ key: "gender", label: "Gender" },{ key: "location", label: "Location" },{ key: "follower_count", label: "Follower Count" },{ key: "engagement_rate", label: "Engagement Rate (%)" },{ key: "social_link", label: "Social Link" },{ key: "contact_info", label: "Email" },{ key: "tier", label: "Tier" },{ key: "community_status", label: "Community Status" },{ key: "approval_status", label: "Approval Status" },{ key: "transferred_date", label: "Transferred Date" },{ key: "approval_notes", label: "Approval Notes" },{ key: "contact_status", label: "Contact Status" },{ key: "agreed_rate", label: "Agreed Rate ($)" },{ key: "notes", label: "Notes" },{ key: "profile_picture", label: "Profile Picture URL" }]
 
 function escapeCSV(val: string): string { if (!val) return ""; if (val.includes(",") || val.includes('"') || val.includes("\n")) return `"${val.replace(/"/g, '""')}"`; return val }
 function exportToCSV(rows: InfluencerRow[], cc: CustomColumn[]): void { const af=[...CSV_EXPORT_FIELDS,...cc.map(c=>({key:`custom.${c.field_key}`,label:c.field_name}))]; const h=af.map(f=>escapeCSV(f.label)).join(","); const l=rows.map(r=>af.map(f=>{let v="";if(f.key.startsWith("custom."))v=r.custom[f.key.slice(7)]??"";else v=String((r as Record<string,unknown>)[f.key]??"");return escapeCSV(v)}).join(",")); const csv=[h,...l].join("\n"); const b=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download=`influencers_export_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(u) }
-function downloadTemplate(cc: CustomColumn[]): void { const af=[...CSV_EXPORT_FIELDS,...cc.map(c=>({key:`custom.${c.field_key}`,label:c.field_name}))]; const h=af.map(f=>escapeCSV(f.label)).join(","); const ex=["@example_handle","instagram","Jane Doe","Jane","jane@example.com","Beauty","Female","United States","50000","3.5","https://instagram.com/example_handle","jane@example.com","Bronze","Pending","Pending","","","not_contacted","","",...cc.map(()=>"")].map(v=>escapeCSV(v)).join(","); const csv=[h,ex].join("\n"); const b=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="influencers_import_template.csv"; a.click(); URL.revokeObjectURL(u) }
+function downloadTemplate(cc: CustomColumn[]): void { const af=[...CSV_EXPORT_FIELDS,...cc.map(c=>({key:`custom.${c.field_key}`,label:c.field_name}))]; const h=af.map(f=>escapeCSV(f.label)).join(","); const ex=["example_handle","instagram","Jane Doe","Jane","jane@example.com","Beauty","Female","United States","50000","3.5","https://instagram.com/example_handle","jane@example.com","Bronze","Pending","Pending","","","not_contacted","","","",...cc.map(()=>"")].map(v=>escapeCSV(v)).join(","); const csv=[h,ex].join("\n"); const b=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="influencers_import_template.csv"; a.click(); URL.revokeObjectURL(u) }
 function parseCSV(text: string): string[][] { const rows: string[][]=[]; let cur: string[]=[]; let cell=""; let inQ=false; for(let i=0;i<text.length;i++){const ch=text[i]; if(inQ){if(ch==='"'&&text[i+1]==='"'){cell+='"';i++}else if(ch==='"')inQ=false;else cell+=ch}else{if(ch==='"')inQ=true;else if(ch===','){cur.push(cell);cell=""}else if(ch==='\n'||(ch==='\r'&&text[i+1]==='\n')){cur.push(cell);cell="";rows.push(cur);cur=[];if(ch==='\r')i++}else cell+=ch}}; if(cell||cur.length){cur.push(cell);rows.push(cur)}; return rows }
-function importFromCSV(text: string, cc: CustomColumn[]): InfluencerRow[] { const p=parseCSV(text); if(p.length<2)return[]; const hd=p[0].map(h=>h.trim().toLowerCase()); const fm:Record<string,string>={}; CSV_EXPORT_FIELDS.forEach(f=>{fm[f.label.toLowerCase()]=f.key}); cc.forEach(c=>{fm[c.field_name.toLowerCase()]=`custom.${c.field_key}`}); const rows:InfluencerRow[]=[]; for(let i=1;i<p.length;i++){const vals=p[i]; if(vals.every(v=>!v.trim()))continue; const row=newEmptyRow(cc); hd.forEach((h,ci)=>{const key=fm[h]; if(!key||ci>=vals.length)return; const val=vals[ci].trim(); if(key.startsWith("custom."))row.custom[key.slice(7)]=val; else (row as Record<string,unknown>)[key]=val}); if(!["Approved","Declined","Pending"].includes(row.approval_status||""))row.approval_status="Pending"; rows.push(row)}; return rows }
+function importFromCSV(text: string, cc: CustomColumn[]): InfluencerRow[] { const p=parseCSV(text); if(p.length<2)return[]; const hd=p[0].map(h=>h.trim().toLowerCase()); const fm:Record<string,string>={}; CSV_EXPORT_FIELDS.forEach(f=>{fm[f.label.toLowerCase()]=f.key}); cc.forEach(c=>{fm[c.field_name.toLowerCase()]=`custom.${c.field_key}`}); const rows:InfluencerRow[]=[]; for(let i=1;i<p.length;i++){const vals=p[i]; if(vals.every(v=>!v.trim()))continue; const row=newEmptyRow(cc); hd.forEach((h,ci)=>{const key=fm[h]; if(!key||ci>=vals.length)return; const val=vals[ci].trim(); if(key.startsWith("custom."))row.custom[key.slice(7)]=val; else (row as Record<string,unknown>)[key]=val}); if(!["Approved","Declined","Pending"].includes(row.approval_status||""))row.approval_status="Pending"; row.handle=cleanHandle(row.handle); rows.push(row)}; return rows }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    PROFILE SIDEBAR
    ═══════════════════════════════════════════════════════════════════════════════ */
-function formatFollowers(n: number): string { return n >= 1_000_000 ? (n/1_000_000).toFixed(1)+"M" : n >= 1000 ? (n/1000).toFixed(1)+"K" : String(n) }
+function formatFollowers(n: number): string {
+  if (!n || isNaN(n)) return "0"
+  if (n >= 1_000_000) { const v = n / 1_000_000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, "")) + "M" }
+  if (n >= 1_000) { const v = n / 1_000; return (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, "")) + "K" }
+  return String(n)
+}
 
 function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, niches, locations, onAddNiche, onAddLocation }: { row: InfluencerRow|null; customCols: CustomColumn[]; onUpdate: (r: InfluencerRow) => void; onClose: () => void; readOnly?: boolean; niches: string[]; locations: string[]; onAddNiche: (v: string) => void; onAddLocation: (v: string) => void }) {
   const [profileTab, setProfileTab] = useState(0)
@@ -372,13 +480,18 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
     }
   }
   const handleSave = () => { if(editedRow) onUpdate(editedRow) }
-  const S = { overlay:{position:"fixed" as const,inset:0,background:"rgba(0,0,0,0.3)",zIndex:400}, panel:{position:"fixed" as const,top:0,right:0,width:520,maxWidth:"100vw",height:"100%",background:"#fff",boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",zIndex:500,display:"flex",flexDirection:"column" as const,fontFamily:"'Inter',system-ui,sans-serif"}, header:{padding:"16px 20px",borderBottom:"0.5px solid rgba(0,0,0,0.08)"}, avatar:{width:44,height:44,borderRadius:"50%",background:"#1fae5b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,color:"#fff",flexShrink:0}, name:{fontSize:15,fontWeight:600,color:"#1e1e1e"}, handle:{fontSize:12,color:"#888",marginTop:2}, pipeSel:{fontSize:11,padding:"5px 10px",borderRadius:8,border:"0.5px solid #f4b740",background:"#fffbeb",color:"#854f0b",cursor:"pointer",fontWeight:500}, atag:{fontSize:12,fontWeight:500,padding:"6px 14px",borderRadius:20,cursor:"pointer",border:"1px solid rgba(0,0,0,0.15)",background:"#f7f9f8",color:"#555"}, atagPlat:{fontSize:12,fontWeight:500,padding:"6px 14px",borderRadius:20,cursor:"pointer",border:"1px solid #1fae5b",background:"#1fae5b",color:"#fff"}, tabBar:{display:"flex",gap:0,padding:"0 20px",borderBottom:"0.5px solid rgba(0,0,0,0.08)"}, tab:(a:boolean)=>({fontSize:12,fontWeight:500,padding:"10px 14px",cursor:"pointer",color:a?"#1fae5b":"#888",borderBottom:a?"2px solid #1fae5b":"2px solid transparent",whiteSpace:"nowrap" as const}), body:{flex:1,overflowY:"auto" as const,padding:"16px 20px"}, statRow:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,background:"#f7f9f8",borderRadius:10,padding:12,marginBottom:14}, statBox:{textAlign:"center" as const}, statLabel:{fontSize:10,color:"#888"}, statVal:{fontSize:15,fontWeight:600,color:"#1e1e1e",marginTop:2}, fieldGrid:{display:"grid",gridTemplateColumns:"1fr 1fr"}, fieldRow:{padding:"8px 0",borderBottom:"0.5px solid rgba(0,0,0,0.05)"}, fieldLabel:{fontSize:10,color:"#888",marginBottom:2}, fieldVal:{fontSize:12,color:"#1e1e1e",fontWeight:500}, formRow:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}, formGroup:{display:"flex",flexDirection:"column" as const,gap:4,marginBottom:10}, formLabel:{fontSize:10,color:"#888"}, formInput:{width:"100%",fontSize:12,padding:"8px 10px",borderRadius:8,border:"0.5px solid rgba(0,0,0,0.15)",background:"#fff",color:"#1e1e1e"}, saveBtn:{background:"#1fae5b",color:"#fff",border:"none",padding:"6px 14px",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:500}, sectionTitle:{fontSize:11,fontWeight:600,color:"#555",textTransform:"uppercase" as const,letterSpacing:"0.05em",padding:"10px 0 6px",borderBottom:"0.5px solid rgba(0,0,0,0.06)",marginBottom:10} }
+  const socialLink = editedRow.social_link || getProfileUrl(editedRow.platform, editedRow.handle)
+  const S = { overlay:{position:"fixed" as const,inset:0,background:"rgba(0,0,0,0.3)",zIndex:400}, panel:{position:"fixed" as const,top:0,right:0,width:520,maxWidth:"100vw",height:"100%",background:"#fff",boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",zIndex:500,display:"flex",flexDirection:"column" as const,fontFamily:"'Inter',system-ui,sans-serif"}, header:{padding:"16px 20px",borderBottom:"0.5px solid rgba(0,0,0,0.08)"}, avatar:{width:52,height:52,borderRadius:"50%",overflow:"hidden",flexShrink:0}, name:{fontSize:15,fontWeight:600,color:"#1e1e1e"}, handle:{fontSize:12,color:"#888",marginTop:2}, pipeSel:{fontSize:11,padding:"5px 10px",borderRadius:8,border:"0.5px solid #f4b740",background:"#fffbeb",color:"#854f0b",cursor:"pointer",fontWeight:500}, atag:{fontSize:12,fontWeight:500,padding:"6px 14px",borderRadius:20,cursor:"pointer",border:"1px solid rgba(0,0,0,0.15)",background:"#f7f9f8",color:"#555"}, atagPlat:{fontSize:12,fontWeight:500,padding:"6px 14px",borderRadius:20,cursor:"pointer",border:"1px solid #1fae5b",background:"#1fae5b",color:"#fff"}, tabBar:{display:"flex",gap:0,padding:"0 20px",borderBottom:"0.5px solid rgba(0,0,0,0.08)"}, tab:(a:boolean)=>({fontSize:12,fontWeight:500,padding:"10px 14px",cursor:"pointer",color:a?"#1fae5b":"#888",borderBottom:a?"2px solid #1fae5b":"2px solid transparent",whiteSpace:"nowrap" as const}), body:{flex:1,overflowY:"auto" as const,padding:"16px 20px"}, statRow:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,background:"#f7f9f8",borderRadius:10,padding:12,marginBottom:14}, statBox:{textAlign:"center" as const}, statLabel:{fontSize:10,color:"#888"}, statVal:{fontSize:15,fontWeight:600,color:"#1e1e1e",marginTop:2}, fieldGrid:{display:"grid",gridTemplateColumns:"1fr 1fr"}, fieldRow:{padding:"8px 0",borderBottom:"0.5px solid rgba(0,0,0,0.05)"}, fieldLabel:{fontSize:10,color:"#888",marginBottom:2}, fieldVal:{fontSize:12,color:"#1e1e1e",fontWeight:500}, formRow:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}, formGroup:{display:"flex",flexDirection:"column" as const,gap:4,marginBottom:10}, formLabel:{fontSize:10,color:"#888"}, formInput:{width:"100%",fontSize:12,padding:"8px 10px",borderRadius:8,border:"0.5px solid rgba(0,0,0,0.15)",background:"#fff",color:"#1e1e1e"}, saveBtn:{background:"#1fae5b",color:"#fff",border:"none",padding:"6px 14px",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:500}, sectionTitle:{fontSize:11,fontWeight:600,color:"#555",textTransform:"uppercase" as const,letterSpacing:"0.05em",padding:"10px 0 6px",borderBottom:"0.5px solid rgba(0,0,0,0.06)",marginBottom:10} }
   return (
     <><DeclineConfirmationModal isOpen={showDeclineModal} onClose={()=>setShowDeclineModal(false)} onConfirm={(r)=>{if(editedRow)setEditedRow(handleApprovalChange(editedRow,"Declined",r))}} influencerName={editedRow.full_name||editedRow.handle||"this influencer"}/><div style={S.overlay} onClick={onClose}/><div style={S.panel}>
-      <div style={S.header}><div style={{fontSize:15,fontWeight:600,color:"#1e1e1e",marginBottom:12}}>Influencer Profile</div><div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}><div style={S.avatar}>{editedRow.first_name?editedRow.first_name[0]:editedRow.handle[1]?.toUpperCase()}</div><div style={{flex:1}}><div style={S.name}>{editedRow.full_name||editedRow.first_name||""}</div><div style={S.handle}>{editedRow.handle}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-start"}}><div style={{display:"flex",flexDirection:"column",gap:2}}><span style={{fontSize:10,color:"#888"}}>Pipeline</span><select style={S.pipeSel} value={editedRow.contact_status} onChange={e=>handleFieldChange("contact_status",e.target.value)}><option value="not_contacted">For Outreach</option><option value="contacted">In Conversation</option><option value="interested">Interested</option><option value="agreed">Agreed</option></select></div><div style={{display:"flex",flexDirection:"column",gap:2}}><span style={{fontSize:10,color:"#888"}}>Approval</span><select style={{...S.pipeSel,borderColor:editedRow.approval_status==="Approved"?"#16a34a":editedRow.approval_status==="Declined"?"#dc2626":"#f4b740",background:editedRow.approval_status==="Approved"?"#f0fdf4":editedRow.approval_status==="Declined"?"#fef2f2":"#fffbeb",color:editedRow.approval_status==="Approved"?"#166534":editedRow.approval_status==="Declined"?"#991b1b":"#854f0b"}} value={editedRow.approval_status||"Pending"} onChange={e=>handleFieldChange("approval_status",e.target.value)}><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Declined">Declined</option></select></div><button style={{background:"none",border:"none",fontSize:20,color:"#888",cursor:"pointer",alignSelf:"flex-end",paddingBottom:4}} onClick={onClose}>×</button></div></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button style={S.atagPlat}>{platformLabel}</button><button style={S.atag}>Send Email</button><button style={S.atag}>Send DM</button><button style={S.atag}>Follow up</button></div></div>
+      <div style={S.header}><div style={{fontSize:15,fontWeight:600,color:"#1e1e1e",marginBottom:12}}>Influencer Profile</div><div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+        <div style={S.avatar}>
+          <ProfilePicture src={editedRow.profile_picture} socialLink={socialLink} name={editedRow.full_name || editedRow.handle} size={52} />
+        </div>
+        <div style={{flex:1}}><div style={S.name}>{editedRow.full_name||editedRow.first_name||""}</div><div style={S.handle}>{displayHandle(editedRow.handle, editedRow.platform)}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-start"}}><div style={{display:"flex",flexDirection:"column",gap:2}}><span style={{fontSize:10,color:"#888"}}>Pipeline</span><select style={S.pipeSel} value={editedRow.contact_status} onChange={e=>handleFieldChange("contact_status",e.target.value)}><option value="not_contacted">For Outreach</option><option value="contacted">In Conversation</option><option value="interested">Interested</option><option value="agreed">Agreed</option></select></div><div style={{display:"flex",flexDirection:"column",gap:2}}><span style={{fontSize:10,color:"#888"}}>Approval</span><select style={{...S.pipeSel,borderColor:editedRow.approval_status==="Approved"?"#16a34a":editedRow.approval_status==="Declined"?"#dc2626":"#f4b740",background:editedRow.approval_status==="Approved"?"#f0fdf4":editedRow.approval_status==="Declined"?"#fef2f2":"#fffbeb",color:editedRow.approval_status==="Approved"?"#166534":editedRow.approval_status==="Declined"?"#991b1b":"#854f0b"}} value={editedRow.approval_status||"Pending"} onChange={e=>handleFieldChange("approval_status",e.target.value)}><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Declined">Declined</option></select></div><button style={{background:"none",border:"none",fontSize:20,color:"#888",cursor:"pointer",alignSelf:"flex-end",paddingBottom:4}} onClick={onClose}>×</button></div></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button style={S.atagPlat}>{platformLabel}</button><button style={S.atag}>Send Email</button><button style={S.atag}>Send DM</button><button style={S.atag}>Follow up</button></div></div>
       <div style={S.tabBar}>{["Basic","Order","Post","Stats"].map((tab,idx)=><div key={idx} style={S.tab(profileTab===idx)} onClick={()=>setProfileTab(idx)}>{tab}</div>)}</div>
       <div style={S.body}>
-        {profileTab===0&&(<div style={{display:"flex",flexDirection:"column",gap:14}}><div style={S.statRow}><div style={S.statBox}><div style={S.statLabel}>Followers</div><div style={S.statVal}>{formatFollowers(Number(editedRow.follower_count)||0)}</div></div><div style={S.statBox}><div style={S.statLabel}>Eng Rate</div><div style={S.statVal}>{editedRow.engagement_rate||"0"}%</div></div><div style={S.statBox}><div style={S.statLabel}>Tier</div><div style={S.statVal}>{editedRow.tier||"Bronze"}</div></div><div style={S.statBox}><div style={S.statLabel}>Rate</div><div style={{...S.statVal,color:"#1fae5b"}}>{editedRow.agreed_rate?"$"+Number(editedRow.agreed_rate).toLocaleString():"—"}</div></div></div><div style={S.fieldGrid}><div style={S.fieldRow}><div style={S.fieldLabel}>Location</div>{readOnly?<div style={S.fieldVal}>{editedRow.location||"—"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.location||""} onChange={e=>handleFieldChange("location",e.target.value)}><option value="">—</option>{locations.map(l=><option key={l} value={l}>{l}</option>)}</select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Niche</div>{readOnly?<div style={S.fieldVal}>{editedRow.niche||"—"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.niche||""} onChange={e=>handleFieldChange("niche",e.target.value)}><option value="">—</option>{niches.map(n=><option key={n} value={n}>{n}</option>)}</select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Gender</div>{readOnly?<div style={S.fieldVal}>{editedRow.gender||"—"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.gender||""} onChange={e=>handleFieldChange("gender",e.target.value)}><option value="">—</option><option>Male</option><option>Female</option><option>Non-binary</option><option>Other</option></select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Platform</div>{readOnly?<div style={S.fieldVal}>{platformLabel}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.platform} onChange={e=>handleFieldChange("platform",e.target.value)}><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="twitter">X (Twitter)</option></select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Email</div><div style={S.fieldVal}>{editedRow.contact_info||"—"}</div></div><div style={S.fieldRow}><div style={S.fieldLabel}>Tier</div>{readOnly?<div style={S.fieldVal}>{editedRow.tier||"Bronze"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.tier||"Bronze"} onChange={e=>handleFieldChange("tier",e.target.value)}><option value="Gold">🥇 Gold</option><option value="Silver">🥈 Silver</option><option value="Bronze">🥉 Bronze</option></select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Community</div>{readOnly?<div style={S.fieldVal}>{editedRow.community_status||"Pending"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.community_status||"Pending"} onChange={e=>handleFieldChange("community_status",e.target.value)}><option value="Pending">Pending</option><option value="Invited">Invited</option><option value="Joined">Joined</option><option value="Not Interested">Not Interested</option><option value="Left">Left</option></select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Social Link</div><div style={S.fieldVal}>{editedRow.social_link?<a href={normalizeUrl(editedRow.social_link)} target="_blank" rel="noopener noreferrer" style={{color:"#2C8EC4",textDecoration:"none"}}>{editedRow.social_link.replace(/^https?:\/\//,"").slice(0,30)}</a>:"—"}</div></div></div><div style={{marginTop:8}}><div style={S.fieldLabel}>Approval Notes</div>{readOnly?<div style={{fontSize:12,color:"#555",background:"#f7f9f8",borderRadius:8,padding:8,minHeight:40,marginTop:4}}>{editedRow.approval_notes||"No notes"}</div>:<textarea style={{...S.formInput,minHeight:60,resize:"vertical",marginTop:4}} value={editedRow.approval_notes||""} onChange={e=>{handleFieldChange("approval_notes",e.target.value);handleFieldChange("decline_reason",e.target.value)}} placeholder="Add approval notes..."/>}</div><div style={{marginTop:4}}><div style={S.fieldLabel}>Notes</div>{readOnly?<div style={{fontSize:12,color:"#555",background:"#f7f9f8",borderRadius:8,padding:8,minHeight:60,marginTop:4}}>{editedRow.notes||"No notes"}</div>:<textarea style={{...S.formInput,minHeight:80,resize:"vertical",marginTop:4}} value={editedRow.notes} onChange={e=>handleFieldChange("notes",e.target.value)} placeholder="Add notes..."/>}</div>{customCols.length>0&&(<div style={{marginTop:4}}><div style={S.sectionTitle}>Custom Fields</div><div style={S.fieldGrid}>{customCols.map(col=>{const val=editedRow.custom[col.field_key]||"";return(<div key={col.id} style={S.fieldRow}><div style={S.fieldLabel}>{col.field_name}</div>{readOnly?<div style={S.fieldVal}>{val||"—"}</div>:col.field_type==="boolean"?<select style={{...S.formInput,padding:"4px 8px"}} value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)}><option value="No">No</option><option value="Yes">Yes</option></select>:col.field_type==="dropdown"?<select style={{...S.formInput,padding:"4px 8px"}} value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)}><option value="">—</option>{col.field_options?.map(o=><option key={o} value={o}>{o}</option>)}</select>:<input style={{...S.formInput,padding:"4px 8px"}} type={col.field_type==="number"?"number":"text"} value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)}/>}</div>)})}</div></div>)}{!readOnly&&<div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button style={S.saveBtn} onClick={handleSave}>Save</button></div>}</div>)}
+        {profileTab===0&&(<div style={{display:"flex",flexDirection:"column",gap:14}}><div style={S.statRow}><div style={S.statBox}><div style={S.statLabel}>Followers</div><div style={S.statVal}>{formatFollowers(Number(editedRow.follower_count)||0)}</div></div><div style={S.statBox}><div style={S.statLabel}>Eng Rate</div><div style={S.statVal}>{editedRow.engagement_rate||"0"}%</div></div><div style={S.statBox}><div style={S.statLabel}>Tier</div><div style={S.statVal}>{editedRow.tier||"Bronze"}</div></div><div style={S.statBox}><div style={S.statLabel}>Rate</div><div style={{...S.statVal,color:"#1fae5b"}}>{editedRow.agreed_rate?"$"+Number(editedRow.agreed_rate).toLocaleString():"—"}</div></div></div><div style={S.fieldGrid}><div style={S.fieldRow}><div style={S.fieldLabel}>Location</div>{readOnly?<div style={S.fieldVal}>{editedRow.location||"—"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.location||""} onChange={e=>handleFieldChange("location",e.target.value)}><option value="">—</option>{locations.map(l=><option key={l} value={l}>{l}</option>)}</select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Niche</div>{readOnly?<div style={S.fieldVal}>{editedRow.niche||"—"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.niche||""} onChange={e=>handleFieldChange("niche",e.target.value)}><option value="">—</option>{niches.map(n=><option key={n} value={n}>{n}</option>)}</select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Gender</div>{readOnly?<div style={S.fieldVal}>{editedRow.gender||"—"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.gender||""} onChange={e=>handleFieldChange("gender",e.target.value)}><option value="">—</option><option>Male</option><option>Female</option><option>Non-binary</option><option>Other</option></select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Platform</div>{readOnly?<div style={S.fieldVal}>{platformLabel}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.platform} onChange={e=>handleFieldChange("platform",e.target.value)}><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="twitter">X (Twitter)</option></select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Email</div><div style={S.fieldVal}>{editedRow.contact_info||"—"}</div></div><div style={S.fieldRow}><div style={S.fieldLabel}>Tier</div>{readOnly?<div style={S.fieldVal}>{editedRow.tier||"Bronze"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.tier||"Bronze"} onChange={e=>handleFieldChange("tier",e.target.value)}><option value="Gold">🥇 Gold</option><option value="Silver">🥈 Silver</option><option value="Bronze">🥉 Bronze</option></select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Community</div>{readOnly?<div style={S.fieldVal}>{editedRow.community_status||"Pending"}</div>:<select style={{...S.formInput,padding:"4px 8px"}} value={editedRow.community_status||"Pending"} onChange={e=>handleFieldChange("community_status",e.target.value)}><option value="Pending">Pending</option><option value="Invited">Invited</option><option value="Joined">Joined</option><option value="Not Interested">Not Interested</option><option value="Left">Left</option></select>}</div><div style={S.fieldRow}><div style={S.fieldLabel}>Social Link</div><div style={S.fieldVal}>{socialLink?<a href={normalizeUrl(socialLink)} target="_blank" rel="noopener noreferrer" style={{color:"#2C8EC4",textDecoration:"none"}}>{socialLink.replace(/^https?:\/\//,"").slice(0,30)}</a>:"—"}</div></div></div><div style={{marginTop:8}}><div style={S.fieldLabel}>Approval Notes</div>{readOnly?<div style={{fontSize:12,color:"#555",background:"#f7f9f8",borderRadius:8,padding:8,minHeight:40,marginTop:4}}>{editedRow.approval_notes||"No notes"}</div>:<textarea style={{...S.formInput,minHeight:60,resize:"vertical",marginTop:4}} value={editedRow.approval_notes||""} onChange={e=>{handleFieldChange("approval_notes",e.target.value);handleFieldChange("decline_reason",e.target.value)}} placeholder="Add approval notes..."/>}</div><div style={{marginTop:4}}><div style={S.fieldLabel}>Notes</div>{readOnly?<div style={{fontSize:12,color:"#555",background:"#f7f9f8",borderRadius:8,padding:8,minHeight:60,marginTop:4}}>{editedRow.notes||"No notes"}</div>:<textarea style={{...S.formInput,minHeight:80,resize:"vertical",marginTop:4}} value={editedRow.notes} onChange={e=>handleFieldChange("notes",e.target.value)} placeholder="Add notes..."/>}</div>{customCols.length>0&&(<div style={{marginTop:4}}><div style={S.sectionTitle}>Custom Fields</div><div style={S.fieldGrid}>{customCols.map(col=>{const val=editedRow.custom[col.field_key]||"";return(<div key={col.id} style={S.fieldRow}><div style={S.fieldLabel}>{col.field_name}</div>{readOnly?<div style={S.fieldVal}>{val||"—"}</div>:col.field_type==="boolean"?<select style={{...S.formInput,padding:"4px 8px"}} value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)}><option value="No">No</option><option value="Yes">Yes</option></select>:col.field_type==="dropdown"?<select style={{...S.formInput,padding:"4px 8px"}} value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)}><option value="">—</option>{col.field_options?.map(o=><option key={o} value={o}>{o}</option>)}</select>:<input style={{...S.formInput,padding:"4px 8px"}} type={col.field_type==="number"?"number":"text"} value={val} onChange={e=>handleFieldChange(`custom.${col.field_key}`,e.target.value)}/>}</div>)})}</div></div>)}{!readOnly&&<div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button style={S.saveBtn} onClick={handleSave}>Save</button></div>}</div>)}
         {profileTab===1&&(<div style={{display:"flex",flexDirection:"column",gap:10}}><div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>First name</div><input style={S.formInput} value={editedRow.first_name||""} onChange={e=>handleFieldChange("first_name",e.target.value)}/></div><div style={S.formGroup}><div style={S.formLabel}>Last name</div><input style={S.formInput} value={editedRow.full_name?.split(" ").slice(1).join(" ")||""} readOnly/></div></div><div style={S.formGroup}><div style={S.formLabel}>Email</div><input style={S.formInput} value={editedRow.contact_info||""} onChange={e=>handleFieldChange("contact_info",e.target.value)}/></div><div style={S.formGroup}><div style={S.formLabel}>Product Name</div><input style={S.formInput} value={orderData.productName} onChange={e=>setOrderData(d=>({...d,productName:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>Order Number</div><input style={S.formInput} value={orderData.orderNumber} onChange={e=>setOrderData(d=>({...d,orderNumber:e.target.value}))}/></div><div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>Product Cost</div><input style={S.formInput} value={orderData.productCost} onChange={e=>setOrderData(d=>({...d,productCost:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>Discount Code</div><input style={S.formInput} value={orderData.discountCode} onChange={e=>setOrderData(d=>({...d,discountCode:e.target.value}))}/></div></div><div style={S.formGroup}><div style={S.formLabel}>Affiliate Link</div><input style={S.formInput} value={orderData.affiliateLink} onChange={e=>setOrderData(d=>({...d,affiliateLink:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>Shipping Address</div><input style={S.formInput} value={orderData.shippingAddress} onChange={e=>setOrderData(d=>({...d,shippingAddress:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>Tracking Link</div><input style={S.formInput} value={orderData.trackingLink} onChange={e=>setOrderData(d=>({...d,trackingLink:e.target.value}))}/></div><div style={{display:"flex",justifyContent:"flex-end"}}><button style={S.saveBtn} onClick={handleSave}>Save</button></div></div>)}
         {profileTab===2&&(<div style={{display:"flex",flexDirection:"column",gap:10}}><div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>Post Link</div><input style={S.formInput} value={postData.postLink} onChange={e=>setPostData(d=>({...d,postLink:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>Likes</div><input style={S.formInput} value={postData.likes} onChange={e=>setPostData(d=>({...d,likes:e.target.value}))}/></div></div><div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>Sales</div><input style={S.formInput} value={postData.sales} onChange={e=>setPostData(d=>({...d,sales:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>Drive Link</div><input style={S.formInput} value={postData.driveLink} onChange={e=>setPostData(d=>({...d,driveLink:e.target.value}))}/></div></div><div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>Comments</div><input style={S.formInput} value={postData.comments} onChange={e=>setPostData(d=>({...d,comments:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>Amount ($)</div><input style={S.formInput} value={postData.amount} onChange={e=>setPostData(d=>({...d,amount:e.target.value}))}/></div></div><div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>Usage Rights</div><select style={S.formInput} value={postData.usageRights} onChange={e=>setPostData(d=>({...d,usageRights:e.target.value}))}><option value="">Select...</option><option>Granted</option><option>Not Granted</option><option>Pending</option></select></div><div style={S.formGroup}><div style={S.formLabel}>Views</div><input style={S.formInput} value={postData.views} onChange={e=>setPostData(d=>({...d,views:e.target.value}))}/></div></div><div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>Clicks</div><input style={S.formInput} value={postData.clicks} onChange={e=>setPostData(d=>({...d,clicks:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>CVR (auto)</div><input style={{...S.formInput,background:"#f7f9f8",color:"#2C8EC4"}} readOnly value={postCVR}/></div></div><div style={{display:"flex",justifyContent:"flex-end"}}><button style={S.saveBtn} onClick={handleSave}>Save</button></div></div>)}
         {profileTab===3&&(<div style={{display:"flex",flexDirection:"column",gap:0}}><div style={S.sectionTitle}>Performance</div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}><div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:16,fontWeight:600,color:"#1e1e1e"}}>{formatFollowers(Number(editedRow.follower_count)||0)}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Followers</div></div><div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:16,fontWeight:600,color:"#2c8ec4"}}>{editedRow.engagement_rate||0}%</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Eng. Rate</div></div><div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:16,fontWeight:600,color:"#1fae5b"}}>{editedRow.agreed_rate?"$"+Number(editedRow.agreed_rate).toLocaleString():"—"}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Agreed Rate</div></div></div><div style={S.sectionTitle}>Status</div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}><div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:14,fontWeight:600}}>{editedRow.tier||"Bronze"}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Tier</div></div><div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:14,fontWeight:600,color:editedRow.approval_status==="Approved"?"#1fae5b":editedRow.approval_status==="Declined"?"#e24b4a":"#854f0b"}}>{editedRow.approval_status||"Pending"}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Approval</div></div><div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:14,fontWeight:600}}>{STATUS_LABEL[editedRow.contact_status]||editedRow.contact_status}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Pipeline</div></div></div><div style={S.sectionTitle}>Outreach</div><div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}}><div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:14,fontWeight:600}}>Stage {editedRow.stage||1}/5</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Outreach Stage</div></div><div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:14,fontWeight:600}}>{editedRow.community_status||"Pending"}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Community</div></div></div>{editedRow.transferred_date&&(<div style={{background:"#e6f9ee",borderRadius:8,padding:10,marginTop:12,fontSize:11,color:"#166534"}}><strong>Transferred:</strong> {new Date(editedRow.transferred_date).toLocaleDateString()}</div>)}</div>)}
@@ -388,18 +501,116 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   MOCK DATA
+   MOCK DATA — Default 10 empty rows
    ═══════════════════════════════════════════════════════════════════════════════ */
-const MOCK_ROWS: InfluencerRow[] = [
-  { id:"mock-1", handle:"@prettyliv", platform:"instagram", full_name:"Liv Santos", email:"liv@example.com", follower_count:"245000", engagement_rate:"3.2", niche:"Beauty", contact_status:"contacted", stage:"2", agreed_rate:"500", notes:"Very responsive.", custom:{}, gender:"Female", location:"United States", social_link:"https://instagram.com/prettyliv", first_name:"Olivia", contact_info:"liv@example.com", approval_status:"Pending", transferred_date:"", approval_notes:"", decline_reason:"", tier:"Gold", community_status:"Invited" },
-  { id:"mock-2", handle:"@fitwithjay", platform:"tiktok", full_name:"Jay Kim", email:"jay@example.com", follower_count:"890000", engagement_rate:"5.8", niche:"Fitness", contact_status:"interested", stage:"3", agreed_rate:"1200", notes:"Discussing deliverables", custom:{}, gender:"Male", location:"Singapore", social_link:"https://tiktok.com/@fitwithjay", first_name:"Jay", contact_info:"jay@example.com", approval_status:"Approved", transferred_date:"2024-03-15", approval_notes:"Approved for Q1", decline_reason:"", tier:"Gold", community_status:"Joined" },
-  { id:"mock-3", handle:"@travelwithmar", platform:"youtube", full_name:"Marco Reyes", email:"marco@example.com", follower_count:"1200000", engagement_rate:"2.1", niche:"Travel", contact_status:"agreed", stage:"4", agreed_rate:"2500", notes:"Contract signed", custom:{}, gender:"Male", location:"Philippines", social_link:"https://youtube.com/@travelwithmar", first_name:"Marco", contact_info:"marco@example.com", approval_status:"Declined", transferred_date:"", approval_notes:"Budget constraints", decline_reason:"Budget constraints", tier:"Silver", community_status:"Not Interested" },
-]
+const MOCK_ROWS: InfluencerRow[] = Array.from({ length: 10 }, () => newEmptyRow([]))
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   MAIN TABLE SHEET
+   ★ Add Custom Column Modal
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const FIELD_TYPE_INFO: Record<string, { icon: React.ReactNode; description: string; example: string }> = {
+  text: { icon: <IconFileText size={16} className="text-gray-500" />, description: "Free-form text input for any value", example: 'e.g., "Prefers email contact", "Agency: XYZ"' },
+  number: { icon: <IconChartBar size={16} className="text-blue-500" />, description: "Numeric values only — great for metrics", example: 'e.g., CPM rate, post count, score' },
+  dropdown: { icon: <IconChevronDown size={16} className="text-indigo-500" />, description: "Pick one option from a predefined list", example: 'e.g., Priority: High, Medium, Low' },
+  "multi-select": { icon: <IconChecklist size={16} className="text-purple-500" />, description: "Pick multiple options from a list", example: 'e.g., Content types: Reel, Story, Post' },
+  date: { icon: <IconCalendar size={16} className="text-green-500" />, description: "Calendar date picker", example: 'e.g., Contract start date, follow-up date' },
+  boolean: { icon: <IconCheck size={16} className="text-emerald-500" />, description: "Simple Yes / No toggle", example: 'e.g., Contract signed?, Has media kit?' },
+  url: { icon: <IconLink size={16} className="text-cyan-500" />, description: "Clickable link — auto-generates from profile if URL type", example: 'e.g., Media kit link, portfolio URL' },
+}
+
+function AddColumnModal({ isOpen, onClose, onConfirm, customCols }: { isOpen: boolean; onClose: () => void; onConfirm: (name: string, description: string, type: CustomColumn["field_type"], group: "Influencer Details"|"Approval Details"|"Outreach Details", options: string) => void; customCols: CustomColumn[] }) {
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [type, setType] = useState<CustomColumn["field_type"]>("text")
+  const [group, setGroup] = useState<"Influencer Details"|"Approval Details"|"Outreach Details">("Influencer Details")
+  const [options, setOptions] = useState("")
+  const [showTips, setShowTips] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { if (isOpen) { setName(""); setDescription(""); setType("text"); setGroup("Influencer Details"); setOptions(""); setShowTips(false); setTimeout(() => inputRef.current?.focus(), 100) } }, [isOpen])
+
+  if (!isOpen) return null
+
+  const isDuplicate = customCols.some(c => c.field_name.toLowerCase() === name.trim().toLowerCase())
+  const fieldKey = name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
+  const typeInfo = FIELD_TYPE_INFO[type]
+  const needsOptions = type === "dropdown" || type === "multi-select"
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-xl w-[620px] max-h-[90vh] overflow-y-auto">
+        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Add Custom Column</h3>
+              <p className="text-xs text-gray-400 mt-1">Extend your table with custom data fields</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"><IconX size={20} /></button>
+          </div>
+        </div>
+        <div className="px-6 py-5 space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Column Name <span className="text-red-400">*</span></label>
+            <input ref={inputRef} type="text" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === "Escape") onClose() }} placeholder="e.g., Content Type, Contract Status, Media Kit Link" className={`w-full px-3 py-2.5 text-sm border rounded-lg outline-none focus:ring-2 transition ${isDuplicate ? "border-red-300 focus:ring-red-300 bg-red-50" : "border-gray-200 focus:ring-blue-400"}`} />
+            {isDuplicate && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><IconAlertCircle size={12} /> A column with this name already exists</p>}
+            {name.trim() && !isDuplicate && <p className="text-xs text-gray-400 mt-1">Field key: <code className="bg-gray-100 px-1 py-0.5 rounded text-[11px]">{fieldKey}</code></p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Description <span className="text-gray-400 font-normal text-xs">(optional)</span></label>
+            <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Briefly describe what this column tracks" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 transition" />
+            <p className="text-xs text-gray-400 mt-1">Helps your team understand the purpose of this field</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Type</label>
+            <select
+              value={type}
+              onChange={e => setType(e.target.value as CustomColumn["field_type"])}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 transition bg-white appearance-none"
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center" }}
+            >
+              <option value="text">Text</option>
+              <option value="number">Number</option>
+              <option value="dropdown">Dropdown</option>
+              <option value="multi-select">Multi-select</option>
+              <option value="date">Date</option>
+              <option value="boolean">Yes / No</option>
+              <option value="url">URL</option>
+            </select>
+            {typeInfo && (<div className="mt-2 bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100"><p className="text-xs text-gray-600">{typeInfo.description}</p><p className="text-xs text-gray-400 mt-1 italic">{typeInfo.example}</p></div>)}
+          </div>
+          {needsOptions && (<div><label className="block text-sm font-medium text-gray-700 mb-1.5">Options <span className="text-red-400">*</span></label><input type="text" value={options} onChange={e => setOptions(e.target.value)} placeholder="Option A, Option B, Option C" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 transition" /><p className="text-xs text-gray-400 mt-1">Separate each option with a comma.</p>{options.trim() && (<div className="flex flex-wrap gap-1.5 mt-2">{options.split(",").map(o => o.trim()).filter(Boolean).map(o => (<span key={o} className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">{o}</span>))}</div>)}</div>)}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Section</label>
+            <div className="space-y-2">
+              {([{ value: "Influencer Details", color: "blue", description: "Profile info, demographics, social metrics" },{ value: "Approval Details", color: "purple", description: "Review status, notes, decision tracking" }] as const).map(opt => (
+                <label key={opt.value} className={`flex items-start gap-3 px-3 py-3 rounded-lg border cursor-pointer transition ${group === opt.value ? `border-${opt.color}-400 bg-${opt.color}-50/50 ring-1 ring-${opt.color}-200` : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>
+                  <input type="radio" name="column-group" value={opt.value} checked={group === opt.value} onChange={() => setGroup(opt.value)} className="mt-0.5 w-4 h-4 text-blue-600" />
+                  <div><span className={`text-sm font-medium ${group === opt.value ? "text-gray-900" : "text-gray-700"}`}>{opt.value}</span><p className="text-xs text-gray-400 mt-0.5">{opt.description}</p></div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <button onClick={() => setShowTips(!showTips)} className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 transition font-medium"><IconBulb size={14} />{showTips ? "Hide tips" : "How do custom columns work?"}</button>
+            {showTips && (<div className="mt-2.5 bg-blue-50 border border-blue-100 rounded-lg p-3.5 space-y-2"><p className="text-xs text-blue-800"><strong>Adding data:</strong> Click any cell in your new column to start typing or selecting values.</p><p className="text-xs text-blue-800"><strong>Drag to reorder:</strong> Grab the column header and drag it to reposition.</p><p className="text-xs text-blue-800"><strong>URL columns:</strong> Auto-generate a link from the influencer profile.</p><p className="text-xs text-blue-800"><strong>Export:</strong> Custom columns are included in CSV export.</p><p className="text-xs text-blue-800"><strong>Deleting:</strong> Hover over the column header and click ×.</p></div>)}
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition font-medium">Cancel</button>
+          <button onClick={() => { onConfirm(name, description, type, group, options); onClose() }} disabled={!name.trim() || isDuplicate || (needsOptions && !options.trim())} className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition font-medium">Add Column</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MAIN TABLE SHEET — ★ HYDRATION FIX + DELETE BUTTON
    ═══════════════════════════════════════════════════════════════════════════════ */
 export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColumns = [], onRowsChange, onCustomColumnsChange, readOnly = false }: { initialRows?: InfluencerRow[]; initialCustomColumns?: CustomColumn[]; onRowsChange?: (rows: InfluencerRow[]) => void; onCustomColumnsChange?: (cols: CustomColumn[]) => void; readOnly?: boolean }) {
+
+  // ★ HYDRATION FIX: Use static defaults for SSR, hydrate from localStorage in useEffect
+  const [hydrated, setHydrated] = useState(false)
   const [rows, setRows] = useState<InfluencerRow[]>(initialRows)
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
   const [loading, setLoading] = useState(false)
@@ -411,18 +622,13 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
   const [addingCol, setAddingCol] = useState(false)
-  const [newColName, setNewColName] = useState("")
-  const [newColDescription, setNewColDescription] = useState("")
-  const [newColType, setNewColType] = useState<CustomColumn["field_type"]>("text")
-  const [newColGroup, setNewColGroup] = useState<"Influencer Details"|"Approval Details"|"Outreach Details">("Influencer Details")
-  const [newColOpts, setNewColOpts] = useState("")
   const [colOrder, setColOrder] = useState<number[]|null>(null)
   const [dragIdx, setDragIdx] = useState<number|null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number|null>(null)
   const [dragOverGroup, setDragOverGroup] = useState<string|null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [showFilterPopover, setShowFilterPopover] = useState(false)
-  const [filters, setFilters] = useState<FilterState>({ tier:"all", platform:"all", niche:"all", location:"all", community:"all" })
+  const [filters, setFilters] = useState<FilterState>({ platform:"all", niche:"all", location:"all", gender:"all" })
   const [showAddRowsModal, setShowAddRowsModal] = useState(false)
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [pendingDeclineRowIdx, setPendingDeclineRowIdx] = useState<number|null>(null)
@@ -436,13 +642,11 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
   const [showManageLocations, setShowManageLocations] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState<{isOpen:boolean;title:string;message:ReactNode;onConfirm:()=>void;variant:"danger"|"warning"|"info"}>({isOpen:false,title:"",message:"",onConfirm:()=>{},variant:"danger"})
 
-  // ★ API auto-fetch state
   const [fetchingRows, setFetchingRows] = useState<Set<string>>(new Set())
   const [duplicateRowIds, setDuplicateRowIds] = useState<Set<string>>(new Set())
   const [pendingDuplicateInfo, setPendingDuplicateInfo] = useState<{ rowId: string; handle: string; existingName: string } | null>(null)
   const commitGuardRef = useRef(false)
 
-  // ★ Toast notifications
   const [toasts, setToasts] = useState<ToastNotification[]>([])
   const addToast = useCallback((type: ToastNotification["type"], message: string) => {
     const id = crypto.randomUUID()
@@ -452,7 +656,6 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
   const dismissToast = useCallback((id: string) => setToasts(prev => prev.filter(t => t.id !== id)), [])
 
   const editInputRef = useRef<HTMLInputElement|HTMLSelectElement|null>(null)
-  const newColInputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const tabPendingRef = useRef(false)
   const filterBtnRef = useRef<HTMLButtonElement>(null)
@@ -460,11 +663,33 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
   const importExportRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  /* ★ HYDRATION FIX: Load from localStorage only after client mount */
+  useEffect(() => {
+    setRows(loadFromStorage<InfluencerRow[]>(STORAGE_KEYS.ROWS, initialRows))
+    setCustomCols(loadFromStorage<CustomColumn[]>(STORAGE_KEYS.CUSTOM_COLS, initialCustomColumns))
+    setNicheOptions(loadFromStorage<string[]>(STORAGE_KEYS.NICHES, DEFAULT_NICHES))
+    setLocationOptions(loadFromStorage<string[]>(STORAGE_KEYS.LOCATIONS, DEFAULT_LOCATIONS))
+    setRowsPerPage(loadFromStorage<number>(STORAGE_KEYS.ROWS_PER_PAGE, 10))
+    setColOrder(loadFromStorage<number[]|null>(STORAGE_KEYS.COL_ORDER, null))
+    setFilters(loadFromStorage<FilterState>(STORAGE_KEYS.FILTERS, { platform:"all", niche:"all", location:"all", gender:"all" }))
+    setHydrated(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /* ★ LOCAL STORAGE: Persist state changes (guarded by hydrated) */
+  useEffect(() => { if (hydrated) saveToStorage(STORAGE_KEYS.ROWS, rows) }, [rows, hydrated])
+  useEffect(() => { if (hydrated) saveToStorage(STORAGE_KEYS.CUSTOM_COLS, customCols) }, [customCols, hydrated])
+  useEffect(() => { if (hydrated) saveToStorage(STORAGE_KEYS.NICHES, nicheOptions) }, [nicheOptions, hydrated])
+  useEffect(() => { if (hydrated) saveToStorage(STORAGE_KEYS.LOCATIONS, locationOptions) }, [locationOptions, hydrated])
+  useEffect(() => { if (hydrated) saveToStorage(STORAGE_KEYS.ROWS_PER_PAGE, rowsPerPage) }, [rowsPerPage, hydrated])
+  useEffect(() => { if (hydrated && colOrder) saveToStorage(STORAGE_KEYS.COL_ORDER, colOrder) }, [colOrder, hydrated])
+  useEffect(() => { if (hydrated) saveToStorage(STORAGE_KEYS.FILTERS, filters) }, [filters, hydrated])
+
   useEffect(() => { if (!showImportExportMenu) return; const h = (e: MouseEvent) => { if (importExportRef.current && !importExportRef.current.contains(e.target as Node) && importExportBtnRef.current && !importExportBtnRef.current.contains(e.target as Node)) setShowImportExportMenu(false) }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h) }, [showImportExportMenu])
 
   const getEffectiveGroup = useCallback((cc: CustomColumn) => cc.assignedGroup, [])
   const STATIC_COLS = getStaticCols(nicheOptions, locationOptions)
-  const rawCols: AnyColDef[] = [...STATIC_COLS, ...customCols.map<CustomColDef>(c => ({ key:`custom.${c.field_key}`, label:c.field_name, group:getEffectiveGroup(c), minWidth:c.field_type==="date"?160:c.field_type==="boolean"?100:140, type:c.field_type, options:c.field_options, isCustom:true, customId:c.id, fieldKey:c.field_key, assignedGroup:c.assignedGroup }))]
+  const rawCols: AnyColDef[] = [...STATIC_COLS, ...customCols.map<CustomColDef>(c => ({ key:`custom.${c.field_key}`, label:c.field_name, group:getEffectiveGroup(c), minWidth:c.field_type==="date"?110:c.field_type==="boolean"?70:100, type:c.field_type, options:c.field_options, isCustom:true, customId:c.id, fieldKey:c.field_key, assignedGroup:c.assignedGroup }))]
   useEffect(() => { setColOrder(prev => (!prev||prev.length!==rawCols.length)?rawCols.map((_,i)=>i):prev) }, [rawCols.length])
   const order = colOrder&&colOrder.length===rawCols.length ? colOrder : rawCols.map((_,i)=>i)
   const allCols = order.map(i=>rawCols[i])
@@ -472,11 +697,10 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
 
   const filteredRows = rows.filter(row => {
     if (searchQuery.trim()) { const q=searchQuery.toLowerCase(); if (!(row.handle.toLowerCase().includes(q)||row.full_name.toLowerCase().includes(q)||row.email.toLowerCase().includes(q)||row.niche.toLowerCase().includes(q)||row.notes.toLowerCase().includes(q)||(row.first_name&&row.first_name.toLowerCase().includes(q))||(row.location&&row.location.toLowerCase().includes(q)))) return false }
-    if (filters.tier!=="all"&&row.tier!==filters.tier) return false
     if (filters.platform!=="all") { const pm:Record<string,string>={"Instagram":"instagram","YouTube":"youtube","TikTok":"tiktok","X (Twitter)":"twitter"}; if(pm[filters.platform]!==row.platform) return false }
     if (filters.niche!=="all"&&row.niche!==filters.niche) return false
     if (filters.location!=="all"&&row.location!==filters.location) return false
-    if (filters.community!=="all"&&row.community_status!==filters.community) return false
+    if (filters.gender!=="all"&&row.gender!==filters.gender) return false
     return true
   })
 
@@ -488,31 +712,26 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
   const handleRowDoubleClick = (id: string) => { setSidebarRowId(id) }
   const handleUpdateRow = (r: InfluencerRow) => { setRows(prev=>{const n=prev.map(x=>x.id===r.id?r:x);onRowsChange?.(n);return n}) }
   const handleApplyFilters = (nf: FilterState) => { setFilters(nf); setCurrentPage(1) }
-  const handleClearFilters = () => { setFilters({tier:"all",platform:"all",niche:"all",location:"all",community:"all"}); setCurrentPage(1) }
+  const handleClearFilters = () => { setFilters({platform:"all",niche:"all",location:"all",gender:"all"}); setCurrentPage(1) }
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     ★ AUTO-FETCH with DUPLICATE CHECK
-     ═══════════════════════════════════════════════════════════════════════════ */
   const autoFetchInfluencer = useCallback(async (rowId: string, handle: string, platform: string) => {
     const clean = handle.trim().replace(/^@/, "").toLowerCase()
     if (!clean || clean.length < 2) return
     if (platform !== "instagram" && platform !== "tiktok") return
 
-    // ★ DUPLICATE CHECK — show popup and gray out the row
-    const duplicate = rows.find(r => r.id !== rowId && r.handle.replace(/^@/, "").toLowerCase() === clean)
+    const duplicate = rows.find(r => r.id !== rowId && cleanHandle(r.handle).toLowerCase() === clean)
     if (duplicate) {
       setPendingDuplicateInfo({ rowId, handle: clean, existingName: duplicate.full_name || duplicate.handle })
       setDuplicateRowIds(prev => { const n = new Set(prev); n.add(rowId); return n })
       return
     }
 
-    // Clear duplicate status if previously marked
     setDuplicateRowIds(prev => { if (!prev.has(rowId)) return prev; const n = new Set(prev); n.delete(rowId); return n })
 
     setFetchingRows(prev => { const n = new Set(prev); n.add(rowId); return n })
     try {
       const data = await fetchInfluencerFromAPI(handle, platform)
-      if (!data) { addToast("error", `@${clean} not found on ${platform}`); return }
+      if (!data) { addToast("error", `${clean} not found on ${platform}`); return }
 
       setRows(prev => {
         const next = prev.map(row => {
@@ -528,6 +747,7 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
           if (!u.location && data.location) u.location = data.location
           if (!u.niche && data.niche) u.niche = data.niche
           if (!u.gender && data.gender) u.gender = data.gender
+          if (!u.profile_picture && data.profile_picture) u.profile_picture = data.profile_picture
           return u
         })
         onRowsChange?.(next); return next
@@ -535,8 +755,6 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
     } catch (err) { console.error("Auto-fetch failed:", err) }
     finally { setFetchingRows(prev => { const n = new Set(prev); n.delete(rowId); return n }) }
   }, [onRowsChange, rows, addToast])
-
-  // (debounce removed — fetch fires directly on commit)
 
   const handleAddMultipleRows = (count: number) => { const nr:InfluencerRow[]=[];for(let i=0;i<count;i++)nr.push(newEmptyRow(customCols)); setRows(prev=>{let n:InfluencerRow[];if(selectedRowIds.size>0){const si=filteredRows.map((r,i)=>selectedRowIds.has(r.id)?i:-1).filter(i=>i!==-1);const li=Math.max(...si);const lid=filteredRows[li].id;const ii=prev.findIndex(r=>r.id===lid)+1;n=[...prev.slice(0,ii),...nr,...prev.slice(ii)]}else{n=[...prev,...nr]};onRowsChange?.(n);return n}); setCurrentPage(Math.ceil((rows.length+count)/rowsPerPage)); containerRef.current?.focus() }
   const addRow = () => { const r=newEmptyRow(customCols); setRows(prev=>{const n=[...prev,r];onRowsChange?.(n);return n}); setCurrentPage(Math.ceil((rows.length+1)/rowsPerPage)); setActiveCell({rowIdx:rows.length,colIdx:0}); containerRef.current?.focus() }
@@ -553,27 +771,28 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
 
   const handleDeclineConfirm = (reason: string) => { if(pendingDeclineRowIdx===null)return; const ar=filteredRows[pendingDeclineRowIdx]; const ai=rows.findIndex(r=>r.id===ar.id); if(ai===-1)return; setRows(prev=>{const n=[...prev];n[ai]=handleApprovalChange(prev[ai],"Declined",reason);onRowsChange?.(n);return n}); setShowDeclineModal(false); setPendingDeclineRowIdx(null); containerRef.current?.focus() }
 
-  /* ═══════════════════════════════════════════════════════════════════════════
-     ★ APPLY CELL VALUE — auto-fetches on handle/platform commit
-     ═══════════════════════════════════════════════════════════════════════════ */
   const applyCellValue = useCallback((rowIdx: number, colKey: string, value: string) => {
     const actualRow = filteredRows[rowIdx]; const actualRowIdx = rows.findIndex(r=>r.id===actualRow.id); if(actualRowIdx===-1)return;
     if (actualRow.approval_status==="Declined"&&isOutreachField(colKey)) return;
     if (colKey==="approval_status"&&value==="Declined") { setPendingDeclineRowIdx(rowIdx); setShowDeclineModal(true); return; }
 
-    // ★ Capture fetch info BEFORE setRows (so we know what to fetch after state updates)
     const currentRow = rows[actualRowIdx];
     let shouldFetch = false;
     let fetchRowId = currentRow.id;
     let fetchHandle = "";
     let fetchPlatform = "";
 
-    if (colKey === "handle" && value && value !== "@") {
+    let cleanedValue = value;
+    if (colKey === "handle") {
+      cleanedValue = cleanHandle(value);
+    }
+
+    if (colKey === "handle" && cleanedValue && cleanedValue.length >= 2) {
       shouldFetch = true;
-      fetchHandle = value;
+      fetchHandle = cleanedValue;
       fetchPlatform = currentRow.platform;
     }
-    if (colKey === "platform" && currentRow.handle && currentRow.handle !== "@") {
+    if (colKey === "platform" && currentRow.handle && cleanHandle(currentRow.handle).length >= 2) {
       shouldFetch = true;
       fetchHandle = currentRow.handle;
       fetchPlatform = value;
@@ -581,12 +800,12 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
 
     setRows(prev=>{
       const next=[...prev]; let row={...next[actualRowIdx]};
-      if(colKey==="approval_status") { row=handleApprovalChange(row,value); }
-      else if(colKey.startsWith("custom.")) { row.custom={...row.custom,[colKey.slice(7)]:value}; }
-      else { (row as Record<string,unknown>)[colKey]=value; }
+      if(colKey==="approval_status") { row=handleApprovalChange(row,cleanedValue); }
+      else if(colKey.startsWith("custom.")) { row.custom={...row.custom,[colKey.slice(7)]:cleanedValue}; }
+      else { (row as Record<string,unknown>)[colKey]=cleanedValue; }
 
       if(colKey==="handle"||colKey==="platform"){
-        const nH=colKey==="handle"?value:row.handle; const nP=colKey==="platform"?value:row.platform;
+        const nH=colKey==="handle"?cleanedValue:row.handle; const nP=colKey==="platform"?cleanedValue:row.platform;
         const oU=getProfileUrl(colKey==="platform"?prev[actualRowIdx].platform:row.platform,colKey==="handle"?prev[actualRowIdx].handle:row.handle);
         const fU=getProfileUrl(nP,nH); const cL=row.social_link??"";
         if(!cL||cL===oU) { row.social_link=fU; }
@@ -594,12 +813,11 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
         if(uk.length){row.custom={...row.custom};uk.forEach(fk=>{const c=row.custom[fk]??"";if(!c||c===oU){row.custom[fk]=fU;}});}
       }
 
-      if(colKey==="niche"&&value&&!nicheOptions.includes(value)) { setNicheOptions(p=>[...p,value]); }
-      if(colKey==="location"&&value&&!locationOptions.includes(value)) { setLocationOptions(p=>[...p,value]); }
+      if(colKey==="niche"&&cleanedValue&&!nicheOptions.includes(cleanedValue)) { setNicheOptions(p=>[...p,cleanedValue]); }
+      if(colKey==="location"&&cleanedValue&&!locationOptions.includes(cleanedValue)) { setLocationOptions(p=>[...p,cleanedValue]); }
       next[actualRowIdx]=row; onRowsChange?.(next); return next;
     })
 
-    // ★ Fire fetch DIRECTLY after commit — no debounce needed
     if (shouldFetch) {
       autoFetchInfluencer(fetchRowId, fetchHandle, fetchPlatform);
     }
@@ -611,8 +829,7 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
     if(readOnly)return; const col=allCols[ci]; const row=filteredRows[ri]
     if(row.approval_status==="Declined"&&isOutreachField(col.key))return
     if(col.type==="boolean"){applyCellValue(ri,col.key,getCellValue(row,col.key)==="Yes"?"No":"Yes");setActiveCell({rowIdx:ri,colIdx:ci});return}
-    if(col.key==="platform"||col.key==="niche"||col.key==="location"||col.type==="dropdown"||col.type==="multi-select"||col.type==="date"){setActiveCell({rowIdx:ri,colIdx:ci});setEditCell(null);setPopupCell({rowIdx:ri,colIdx:ci});return}
-    if(col.type==="select"&&col.key!=="contact_status"&&col.key!=="approval_status"){setActiveCell({rowIdx:ri,colIdx:ci});setEditCell(null);setPopupCell({rowIdx:ri,colIdx:ci});return}
+    if(col.key==="platform"||col.key==="niche"||col.key==="location"||col.key==="approval_status"||col.key==="contact_status"||col.key==="gender"||col.type==="dropdown"||col.type==="multi-select"||col.type==="date"||col.type==="select"){setActiveCell({rowIdx:ri,colIdx:ci});setEditCell(null);setPopupCell({rowIdx:ri,colIdx:ci});return}
     setActiveCell({rowIdx:ri,colIdx:ci});setPopupCell(null);setEditCell({rowIdx:ri,colIdx:ci});setEditValue(getCellValue(row,col.key))
   }, [allCols,getCellValue,readOnly,filteredRows,applyCellValue,isOutreachField])
 
@@ -626,7 +843,6 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
   const cancelEdit = useCallback(() => { setEditCell(null);setPopupCell(null) }, [])
 
   useEffect(() => { if(!editCell)return; requestAnimationFrame(()=>{const el=editInputRef.current;if(!el)return;el.focus();if(el instanceof HTMLInputElement)el.select()}) }, [editCell])
-  useEffect(() => { if(addingCol)newColInputRef.current?.focus() }, [addingCol])
 
   const handleEditKeyDown = (e: KeyboardEvent<HTMLInputElement|HTMLSelectElement>) => {
     if(e.key==="Enter"){e.preventDefault();commitEdit();if(activeCell&&activeCell.rowIdx<pageEnd-1)setActiveCell({rowIdx:activeCell.rowIdx+1,colIdx:activeCell.colIdx});containerRef.current?.focus()}
@@ -636,34 +852,71 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
   const handleEditBlur = () => { if(tabPendingRef.current)return; commitEdit() }
   const handleContainerKeyDown = (e: KeyboardEvent<HTMLDivElement>) => { if(editCell||popupCell||!activeCell)return; const{rowIdx:ri,colIdx:ci}=activeCell; switch(e.key){case"ArrowUp":e.preventDefault();if(ri>pageStart)setActiveCell({rowIdx:ri-1,colIdx:ci});break;case"ArrowDown":e.preventDefault();if(ri<pageEnd-1)setActiveCell({rowIdx:ri+1,colIdx:ci});break;case"ArrowLeft":e.preventDefault();if(ci>0)setActiveCell({rowIdx:ri,colIdx:ci-1});break;case"ArrowRight":e.preventDefault();if(ci<totalCols-1)setActiveCell({rowIdx:ri,colIdx:ci+1});break;case"Tab":e.preventDefault();setActiveCell({rowIdx:ri,colIdx:e.shiftKey?Math.max(0,ci-1):Math.min(totalCols-1,ci+1)});break;case"Enter":case"F2":e.preventDefault();startEdit(ri,ci);break;case"Delete":case"Backspace":e.preventDefault();applyCellValue(ri,allCols[ci].key,"");break} }
 
-  const confirmAddCol = () => { const name=newColName.trim();if(!name)return; const fk=name.toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,""); const ho=newColType==="dropdown"||newColType==="multi-select"; const col:CustomColumn={id:crypto.randomUUID(),field_key:fk,field_name:name,field_type:newColType,field_options:ho?newColOpts.split(",").map(s=>s.trim()).filter(Boolean):undefined,assignedGroup:newColGroup,description:newColDescription.trim()||undefined}; setCustomCols(prev=>{const n=[...prev,col];onCustomColumnsChange?.(n);return n}); setRows(prev=>prev.map(r=>{let dv="";if(newColType==="boolean")dv="No";else if(newColType==="url")dv=getProfileUrl(r.platform,r.handle);return{...r,custom:{...r.custom,[fk]:dv}}})); setNewColName("");setNewColDescription("");setNewColType("text");setNewColGroup("Influencer Details");setNewColOpts("");setAddingCol(false);containerRef.current?.focus() }
+  const confirmAddCol = (name: string, description: string, type: CustomColumn["field_type"], group: "Influencer Details"|"Approval Details"|"Outreach Details", options: string) => {
+    const fk = name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
+    const ho = type === "dropdown" || type === "multi-select"
+    const col: CustomColumn = { id: crypto.randomUUID(), field_key: fk, field_name: name.trim(), field_type: type, field_options: ho ? options.split(",").map(s => s.trim()).filter(Boolean) : undefined, assignedGroup: group, description: description.trim() || undefined }
+    setCustomCols(prev => { const n = [...prev, col]; onCustomColumnsChange?.(n); return n })
+    setRows(prev => prev.map(r => {
+      let dv = ""
+      if (type === "boolean") dv = "No"
+      else if (type === "url") dv = getProfileUrl(r.platform, r.handle)
+      return { ...r, custom: { ...r.custom, [fk]: dv } }
+    }))
+    containerRef.current?.focus()
+    addToast("success", `Column "${name.trim()}" added`)
+  }
+
   const deleteCustomCol = (fk: string) => { setConfirmDialog({isOpen:true,title:"Delete Custom Column",message:"Delete this column? All data will be lost.",onConfirm:()=>{setCustomCols(prev=>{const n=prev.filter(c=>c.field_key!==fk);onCustomColumnsChange?.(n);return n});setRows(prev=>prev.map(r=>{const custom={...r.custom};delete custom[fk];return{...r,custom}}));setActiveCell(null);setEditCell(null);setPopupCell(null)},variant:"danger"}) }
 
   const getGroupBgClass = (g: string) => { switch(g){case"Influencer Details":return"bg-blue-50 text-blue-700";case"Approval Details":return"bg-purple-50 text-purple-700";case"Outreach Details":return"bg-emerald-50 text-emerald-700";default:return"bg-gray-50 text-gray-500 border-dashed"} }
   const getColHeaderBgClass = (g: string) => { switch(g){case"Influencer Details":return"bg-blue-50/60";case"Approval Details":return"bg-purple-50/60";case"Outreach Details":return"bg-emerald-50/60";default:return"bg-gray-50/40 border-dashed"} }
   const groupSpans:{group:string;span:number}[]=[]; allCols.forEach(col=>{const l=groupSpans[groupSpans.length-1];if(l&&l.group===col.group)l.span++;else groupSpans.push({group:col.group,span:1})})
-  const hasActiveFilters = filters.tier!=="all"||filters.platform!=="all"||filters.niche!=="all"||filters.location!=="all"||filters.community!=="all"
+  const hasActiveFilters = filters.platform!=="all"||filters.niche!=="all"||filters.location!=="all"||filters.gender!=="all"
 
   const renderCell = (row: InfluencerRow, rowIdx: number, col: AnyColDef, colIdx: number) => {
     const isActive=activeCell?.rowIdx===rowIdx&&activeCell?.colIdx===colIdx; const isEditing=editCell?.rowIdx===rowIdx&&editCell?.colIdx===colIdx; const isPopup=popupCell?.rowIdx===rowIdx&&popupCell?.colIdx===colIdx; const value=getCellValue(row,col.key); const ringCls=isActive?"ring-2 ring-inset ring-blue-500 z-[1]":"";
     const isDuplicate = duplicateRowIds.has(row.id);
     const disabled = (row.approval_status==="Declined"&&isOutreachField(col.key)) || isDuplicate;
-    if(disabled) return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed`} style={{minWidth:col.minWidth}}>{col.key==="contact_status"?<StatusBadge value={value}/>:col.key==="approval_status"?<ApprovalBadge value={value}/>:<span className="block truncate text-gray-400">{value||"—"}</span>}</td>
+    if(disabled) return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed`} style={{minWidth:col.minWidth}}>{col.key==="contact_status"?<StatusBadge value={value}/>:col.key==="approval_status"?<ApprovalBadge value={value}/>:col.key==="handle"?<div className="flex items-center gap-2"><ProfilePicture src={row.profile_picture} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} size={24} /><span className="truncate text-gray-400">{displayHandle(value, row.platform) || "—"}</span></div>:col.key==="follower_count"?<span className="block truncate text-gray-400">{Number(value) ? formatFollowers(Number(value)) : "—"}</span>:col.key==="engagement_rate"?<span className="block truncate text-gray-400">{parseFloat(value) ? `${parseFloat(value)}%` : "—"}</span>:<span className="block truncate text-gray-400">{value||"—"}</span>}</td>
+
+    if(col.key==="handle"){
+      if(isEditing){
+        return <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{minWidth:col.minWidth}}>
+          <div className="flex items-center gap-2 px-2">
+            <ProfilePicture src={row.profile_picture} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} size={24} />
+            <input ref={editInputRef as any} type="text" value={editValue} placeholder="username" onChange={e=>setEditValue(e.target.value)} onBlur={handleEditBlur} onKeyDown={handleEditKeyDown} onMouseDown={e=>e.stopPropagation()} className="flex-1 h-full py-1.5 text-sm outline-none bg-white min-w-0"/>
+          </div>
+        </td>
+      }
+      const socialLink = row.social_link || getProfileUrl(row.platform, row.handle);
+      const tdCls=`border border-gray-200 px-2 py-1.5 text-sm cursor-cell select-none relative hover:bg-blue-50/20 ${ringCls}`;
+      return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={()=>startEdit(rowIdx,colIdx)} onFocus={()=>setActiveCell({rowIdx,colIdx})}>
+        <div className="flex items-center gap-2">
+          <ProfilePicture src={row.profile_picture} socialLink={socialLink} name={row.full_name} size={24} />
+          <span className="truncate text-sm text-gray-800 font-medium">{displayHandle(value, row.platform) || <span className="text-gray-300">Enter username</span>}</span>
+        </div>
+      </td>
+    }
+
     if(isEditing){
       if(col.type==="select"&&col.options&&col.key!=="platform"&&col.key!=="niche"&&col.key!=="location") return <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{minWidth:col.minWidth}}><select ref={editInputRef as any} value={editValue} onChange={e=>setEditValue(e.target.value)} onBlur={handleEditBlur} onKeyDown={handleEditKeyDown} onMouseDown={e=>e.stopPropagation()} className="w-full h-full px-2 py-1.5 text-sm outline-none bg-white appearance-none">{col.options.map(o=><option key={o} value={o}>{o||"—"}</option>)}</select></td>
       if(col.type==="url"){ const inv=editValue!==""&&!isValidUrl(editValue); return <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{minWidth:col.minWidth}}><input ref={editInputRef as any} type="text" value={editValue} placeholder="https://…" onChange={e=>setEditValue(e.target.value)} onBlur={handleEditBlur} onKeyDown={handleEditKeyDown} onMouseDown={e=>e.stopPropagation()} className={`w-full h-full px-2 py-1.5 text-sm outline-none bg-white ${inv?"text-red-500":"text-blue-600"}`}/>{inv&&<div className="absolute -bottom-5 left-1 text-[10px] text-red-400 whitespace-nowrap z-50">Invalid URL</div>}</td> }
       return <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{minWidth:col.minWidth}}><input ref={editInputRef as any} type={col.type==="number"?"number":"text"} value={editValue} onChange={e=>setEditValue(e.target.value)} onBlur={handleEditBlur} onKeyDown={handleEditKeyDown} onMouseDown={e=>e.stopPropagation()} className="w-full h-full px-2 py-1.5 text-sm outline-none bg-white"/></td>
     }
     if(isPopup){ const closeP=()=>{setPopupCell(null);containerRef.current?.focus()}
-      if(col.key==="platform") return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}><div className="flex items-center justify-center"><PlatformIcon platform={value} size={20}/></div><PlatformEditor value={value} onChange={v=>applyCellValue(rowIdx,col.key,v)} onClose={closeP}/></td>
+      if(col.key==="platform") { const platName = platforms.find(p=>p.value===value)?.name || value; return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}><div className="flex items-center gap-2"><PlatformIcon platform={value} size={18}/><span className="text-sm text-gray-700">{platName}</span></div><PlatformEditor value={value} onChange={v=>applyCellValue(rowIdx,col.key,v)} onClose={closeP}/></td> }
       if(col.key==="niche") return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}>{value?<span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span>:<span className="text-gray-300">—</span>}<DropdownEditor value={value} options={nicheOptions} onChange={v=>applyCellValue(rowIdx,col.key,v)} onClose={closeP} onAddOption={v=>setNicheOptions(p=>[...p,v])}/></td>
       if(col.key==="location") return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}>{value?<span className="truncate block text-sm">{value}</span>:<span className="text-gray-300">—</span>}<DropdownEditor value={value} options={locationOptions} onChange={v=>applyCellValue(rowIdx,col.key,v)} onClose={closeP} onAddOption={v=>setLocationOptions(p=>[...p,v])}/></td>
+      if(col.key==="approval_status") return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}><ApprovalBadge value={value}/><FloatingPopup onClose={closeP}><div className="w-52 max-h-60 overflow-auto py-1">{(["Approved","Declined","Pending"] as const).map(o=>(<button key={o} onMouseDown={e=>e.preventDefault()} onClick={()=>{applyCellValue(rowIdx,col.key,o);closeP()}} className={`flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition ${value===o?"font-medium bg-gray-50":"text-gray-700"}`}>{value===o&&<IconCheck size={14} className="text-indigo-600 flex-shrink-0"/>}<span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${APPROVAL_STYLE[o]??""}`}>{o}</span></button>))}</div></FloatingPopup></td>
+      if(col.key==="contact_status") return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}><StatusBadge value={value}/><FloatingPopup onClose={closeP}><div className="w-52 max-h-60 overflow-auto py-1">{DEFAULT_CONTACT_STATUSES.map(o=>(<button key={o.value} onMouseDown={e=>e.preventDefault()} onClick={()=>{applyCellValue(rowIdx,col.key,o.value);closeP()}} className={`flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition ${value===o.value?"font-medium bg-gray-50":"text-gray-700"}`}>{value===o.value&&<IconCheck size={14} className="text-indigo-600 flex-shrink-0"/>}<span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[o.value]??""}`}>{o.label}</span></button>))}</div></FloatingPopup></td>
+      if(col.key==="gender") return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}><span className="block truncate">{value||<span className="text-gray-300">—</span>}</span><FloatingPopup onClose={closeP}><div className="w-52 max-h-60 overflow-auto py-1"><button onMouseDown={e=>e.preventDefault()} onClick={()=>{applyCellValue(rowIdx,col.key,"");closeP()}} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition ${!value?"text-indigo-600 font-medium":"text-gray-400"}`}>— None —</button>{DEFAULT_GENDERS.map(g=>(<button key={g} onMouseDown={e=>e.preventDefault()} onClick={()=>{applyCellValue(rowIdx,col.key,g);closeP()}} className={`flex items-center gap-2 w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition ${value===g?"text-indigo-700 font-medium bg-indigo-50":"text-gray-700"}`}>{value===g&&<IconCheck size={14} className="text-indigo-600 flex-shrink-0"/>}{g}</button>))}</div></FloatingPopup></td>
       if(col.type==="dropdown"&&col.isCustom) return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}>{value?<span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span>:<span className="text-gray-300">—</span>}<DropdownEditor value={value} options={col.options??[]} onChange={v=>applyCellValue(rowIdx,col.key,v)} onClose={closeP} onAddOption={o=>addOptionToCol((col as CustomColDef).fieldKey,o)}/></td>
       if(col.type==="multi-select"&&col.isCustom) return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}><MultiSelectDisplay value={value}/><MultiSelectEditor value={value} options={col.options??[]} onChange={v=>applyCellValue(rowIdx,col.key,v)} onClose={closeP} onAddOption={o=>addOptionToCol((col as CustomColDef).fieldKey,o)}/></td>
       if(col.type==="date"){const disp=value?new Date(value+"T00:00:00").toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}):"";return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm relative ${ringCls}`} style={{minWidth:col.minWidth}}><div className="flex items-center gap-1.5"><IconCalendar size={14} className="text-blue-500 flex-shrink-0"/><span>{disp||<span className="text-gray-300">Pick a date</span>}</span></div><DatePicker value={value} onChange={v=>applyCellValue(rowIdx,col.key,v)} onClose={closeP}/></td>}
     }
     const tdCls=`border border-gray-200 px-2 py-1.5 text-sm cursor-cell select-none relative hover:bg-blue-50/20 ${ringCls}`; const onClick=()=>startEdit(rowIdx,colIdx); const onFocus=()=>setActiveCell({rowIdx,colIdx})
-    if(col.key==="platform") return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><div className="flex items-center justify-center"><PlatformIcon platform={value} size={20}/></div></td>
+    if(col.key==="platform") { const platName = platforms.find(p=>p.value===value)?.name || value; return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><div className="flex items-center gap-2"><PlatformIcon platform={value} size={18}/><span className="text-sm text-gray-700">{platName}</span></div></td> }
     if(col.type==="boolean"){const y=value==="Yes";return <td key={col.key} className={`${tdCls} cursor-pointer`} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${y?"bg-green-100 text-green-700":"bg-red-100 text-red-600"}`}>{y?"Yes":"No"}</span></td>}
     if(col.type==="multi-select") return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><MultiSelectDisplay value={value}/></td>
     if(col.type==="date"){const disp=value?new Date(value+"T00:00:00").toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}):"";return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><div className="flex items-center gap-1.5"><IconCalendar size={14} className="text-gray-400 flex-shrink-0"/><span className="truncate">{disp||<span className="text-gray-300">—</span>}</span></div></td>}
@@ -671,19 +924,33 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
     if(col.type==="dropdown") return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}>{value?<span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span>:<span className="text-gray-300">—</span>}</td>
     if(col.key==="niche") return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}>{value?<span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span>:<span className="text-gray-300">—</span>}</td>
     if(col.key==="approval_status") return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><ApprovalBadge value={value}/></td>
+    if(col.key==="follower_count") { const num=Number(value); return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><span className="block truncate font-medium">{num ? formatFollowers(num) : <span className="text-gray-300 font-normal">—</span>}</span></td> }
+    if(col.key==="engagement_rate") { const num=parseFloat(value); return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}><span className="block truncate">{num ? `${num}%` : <span className="text-gray-300">—</span>}</span></td> }
     return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={onClick} onFocus={onFocus}>{col.key==="contact_status"?<StatusBadge value={value}/>:<span className="block truncate">{value}</span>}</td>
   }
 
   const declineModalName = pendingDeclineRowIdx!==null ? filteredRows[pendingDeclineRowIdx]?.full_name||filteredRows[pendingDeclineRowIdx]?.handle||"this influencer" : "this influencer"
 
+  // ★ HYDRATION FIX: Show loading state until client-side hydration completes
+  if (!hydrated) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <IconLoader2 size={24} className="text-gray-400 animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      {/* ★ TOAST NOTIFICATIONS */}
+      <style>{`
+        .instroom-table-wrap { overflow: clip visible !important; overflow-x: auto !important; }
+        .instroom-table-wrap td { position: relative; overflow: visible !important; }
+        .instroom-table-wrap thead { overflow: visible; }
+      `}</style>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       <ConfirmationDialog isOpen={confirmDialog.isOpen} onClose={()=>setConfirmDialog(p=>({...p,isOpen:false}))} onConfirm={confirmDialog.onConfirm} title={confirmDialog.title} message={confirmDialog.message} variant={confirmDialog.variant}/>
 
-      {/* ★ DUPLICATE POPUP */}
       {pendingDuplicateInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget){setPendingDuplicateInfo(null)}}}>
           <div className="bg-white rounded-2xl shadow-xl w-[440px] p-6">
@@ -692,7 +959,7 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900">Duplicate Handle Detected</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  <span className="font-medium text-gray-700">@{pendingDuplicateInfo.handle}</span> already exists in the table<span className="font-medium text-gray-700"></span>.
+                  <span className="font-medium text-gray-700">{pendingDuplicateInfo.handle}</span> already exists in the table.
                 </p>
               </div>
             </div>
@@ -701,10 +968,9 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
             </div>
             <div className="flex gap-3">
               <button onClick={()=>{
-                // Clear handle back to @ and remove duplicate status
                 const rid = pendingDuplicateInfo.rowId;
                 setRows(prev => {
-                  const next = prev.map(r => r.id === rid ? {...r, handle: "@"} : r);
+                  const next = prev.map(r => r.id === rid ? {...r, handle: ""} : r);
                   onRowsChange?.(next);
                   return next;
                 });
@@ -721,33 +987,43 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
       <ManageOptionsModal isOpen={showManageLocations} onClose={()=>setShowManageLocations(false)} title="Locations" options={locationOptions} onSave={setLocationOptions}/>
       <input ref={fileInputRef} type="file" accept=".csv" onChange={handleImport} className="hidden"/>
 
+      <AddColumnModal isOpen={addingCol} onClose={() => setAddingCol(false)} onConfirm={confirmAddCol} customCols={customCols} />
+
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md"><IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search creators..." className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"/></div>
         <div className="flex items-center gap-2">
-          {selectedRowIds.size>0&&!readOnly&&(<button onClick={deleteSelectedRows} className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"><IconTrash size={16}/> Delete {selectedRowIds.size}</button>)}
           {!readOnly&&(<div className="relative"><button ref={importExportBtnRef} onClick={()=>setShowImportExportMenu(!showImportExportMenu)} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"><IconDownload size={16}/> Import/Export <IconChevronDown size={14}/></button>{showImportExportMenu&&(<div ref={importExportRef} className="absolute top-full right-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-[220px] py-1"><button onClick={()=>fileInputRef.current?.click()} className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><IconUpload size={16} className="text-gray-400"/> Import CSV</button><button onClick={()=>{downloadTemplate(customCols);setShowImportExportMenu(false)}} className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><IconDownload size={16} className="text-gray-400"/> Download Template</button><div className="border-t border-gray-100 my-1"/><button onClick={()=>{exportToCSV(filteredRows,customCols);setShowImportExportMenu(false)}} className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><IconDownload size={16} className="text-gray-400"/> Export CSV</button></div>)}</div>)}
           {!readOnly&&(<div className="relative group"><button className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"><IconSettings size={16}/> Manage</button><div className="absolute top-full right-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-[180px] py-1 hidden group-hover:block"><button onClick={()=>setShowManageNiches(true)} className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><IconTags size={16} className="text-gray-400"/> Niches</button><button onClick={()=>setShowManageLocations(true)} className="flex items-center gap-2 w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><IconMapPin size={16} className="text-gray-400"/> Locations</button></div></div>)}
           <div className="relative"><button ref={filterBtnRef} onClick={()=>setShowFilterPopover(!showFilterPopover)} className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg transition border ${hasActiveFilters?"bg-green-50 text-green-700 border-green-200":"text-gray-600 hover:bg-gray-100 border-gray-200"}`}><IconFilter size={16}/> Filters {hasActiveFilters&&<span className="w-2 h-2 bg-green-500 rounded-full"/>}</button><FilterPopover isOpen={showFilterPopover} onClose={()=>setShowFilterPopover(false)} filters={filters} onApplyFilters={handleApplyFilters} onClearFilters={handleClearFilters} niches={nicheOptions} locations={locationOptions} anchorRef={filterBtnRef}/></div>
+          {/* ★ FIX 2: Delete button when rows are selected */}
+          {!readOnly && selectedRowIds.size > 0 && (
+            <button
+              onClick={deleteSelectedRows}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition font-medium"
+            >
+              <IconTrash size={16} />
+              Delete {selectedRowIds.size} row{selectedRowIds.size > 1 ? "s" : ""}
+            </button>
+          )}
         </div>
       </div>
 
-      {hasActiveFilters&&(<div className="flex items-center gap-2 flex-wrap"><span className="text-xs text-gray-500">Active filters:</span>{filters.tier!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Tier: {filters.tier}</span><button onClick={()=>setFilters(p=>({...p,tier:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}{filters.platform!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Platform: {filters.platform}</span><button onClick={()=>setFilters(p=>({...p,platform:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}{filters.niche!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Niche: {filters.niche}</span><button onClick={()=>setFilters(p=>({...p,niche:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}{filters.location!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Location: {filters.location}</span><button onClick={()=>setFilters(p=>({...p,location:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}{filters.community!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Community: {filters.community}</span><button onClick={()=>setFilters(p=>({...p,community:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}<button onClick={handleClearFilters} className="text-xs text-gray-400 hover:text-gray-600">Clear all</button></div>)}
+      {hasActiveFilters&&(<div className="flex items-center gap-2 flex-wrap"><span className="text-xs text-gray-500">Active filters:</span>{filters.platform!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Platform: {filters.platform}</span><button onClick={()=>setFilters(p=>({...p,platform:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}{filters.niche!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Niche: {filters.niche}</span><button onClick={()=>setFilters(p=>({...p,niche:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}{filters.location!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Location: {filters.location}</span><button onClick={()=>setFilters(p=>({...p,location:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}{filters.gender!=="all"&&<div className="flex items-center gap-1.5 bg-blue-50 rounded-full px-3 py-1 text-xs"><span className="text-blue-700">Gender: {filters.gender}</span><button onClick={()=>setFilters(p=>({...p,gender:"all"}))} className="text-blue-400 hover:text-blue-600"><IconX size={12}/></button></div>}<button onClick={handleClearFilters} className="text-xs text-gray-400 hover:text-gray-600">Clear all</button></div>)}
 
       <AddRowsModal isOpen={showAddRowsModal} onClose={()=>setShowAddRowsModal(false)} onAdd={handleAddMultipleRows} selectedCount={selectedRowIds.size}/>
       {sidebarRow&&<ProfileSidebar row={sidebarRow} customCols={customCols} onUpdate={handleUpdateRow} onClose={()=>setSidebarRowId(null)} readOnly={readOnly} niches={nicheOptions} locations={locationOptions} onAddNiche={v=>setNicheOptions(p=>[...p,v])} onAddLocation={v=>setLocationOptions(p=>[...p,v])}/>}
 
       <div className="w-full min-w-0">
-        <div ref={containerRef} tabIndex={0} className="overflow-auto border border-gray-200 rounded-xl shadow-sm outline-none focus:ring-2 focus:ring-blue-200" onKeyDown={handleContainerKeyDown} onMouseDown={e=>{const t=e.target as HTMLElement;if(t.closest("input, select, button, [tabindex]")&&t!==containerRef.current)return;setTimeout(()=>containerRef.current?.focus(),0)}}>
-          <table className="text-sm border-collapse" style={{minWidth:"max-content"}}>
+        <div ref={containerRef} tabIndex={0} className="instroom-table-wrap overflow-auto border border-gray-200 rounded-xl shadow-sm outline-none focus:ring-2 focus:ring-blue-200" onKeyDown={handleContainerKeyDown} onMouseDown={e=>{const t=e.target as HTMLElement;if(t.closest("input, select, button, [tabindex]")&&t!==containerRef.current)return;setTimeout(()=>containerRef.current?.focus(),0)}}>
+          <table className="text-sm border-collapse w-full" style={{tableLayout:"auto"}}>
             <thead className="sticky top-0 z-10">
-              <tr><th rowSpan={2} className="border border-gray-200 bg-gray-50 w-10 min-w-[2.5rem] text-center text-xs text-gray-400 font-normal">#</th>{groupSpans.map((g,i)=><th key={`${g.group}-${i}`} colSpan={g.span} className={`border border-gray-200 text-center text-xs font-semibold py-1.5 px-3 whitespace-nowrap ${getGroupBgClass(g.group)}`}>{g.group}</th>)}{!readOnly&&<th rowSpan={2} className="border border-gray-200 bg-gray-50 text-center"><button onClick={()=>setAddingCol(true)} className="px-2 py-1 mx-auto flex items-center justify-center gap-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition text-xs"><IconPlus size={12}/><span>Add column</span></button></th>}<th rowSpan={2} className="border border-gray-200 bg-gray-50 w-10 min-w-[2.5rem]"/></tr>
+              <tr><th rowSpan={2} className="border border-gray-200 bg-gray-50 w-10 min-w-[2.5rem] text-center text-xs text-gray-400 font-normal">#</th>{groupSpans.map((g,i)=><th key={`${g.group}-${i}`} colSpan={g.span} className={`border border-gray-200 text-center text-xs font-semibold py-1.5 px-3 whitespace-nowrap ${getGroupBgClass(g.group)}`}>{g.group}</th>)}{!readOnly&&<th rowSpan={2} className="border border-gray-200 bg-gray-50 text-center whitespace-nowrap"><button onClick={()=>setAddingCol(true)} className="px-2 py-1 mx-auto flex items-center justify-center gap-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition text-xs whitespace-nowrap"><IconPlus size={12}/><span>Add column</span></button></th>}<th rowSpan={2} className="border border-gray-200 bg-gray-50 w-10 min-w-[2.5rem]"/></tr>
               <tr>{allCols.map((col,vi)=>{const isDragging=dragIdx===vi;const isOver=dragOverIdx===vi&&dragIdx!==vi;return <th key={col.key} draggable={!readOnly} onDragStart={e=>onColDragStart(vi,e)} onDragOver={e=>onColDragOver(vi,e)} onDragEnd={onColDragEnd} className={`border border-gray-200 px-2 py-1.5 text-left text-xs font-semibold text-gray-600 whitespace-nowrap group/col transition-all ${getColHeaderBgClass(col.group)} ${isDragging?"opacity-40":""} ${isOver?"border-l-2 !border-l-blue-500":""}`} style={{minWidth:col.minWidth,cursor:readOnly?"default":"grab"}}><div className="flex items-center justify-between gap-1"><div className="flex items-center gap-1">{!readOnly&&<IconGripVertical size={12} className="text-gray-300 flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition"/>}<span>{col.label}</span></div>{!readOnly&&col.isCustom&&<button onClick={()=>deleteCustomCol((col as CustomColDef).fieldKey)} className="opacity-0 group-hover/col:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition"><IconX size={12}/></button>}</div></th>})}</tr>
             </thead>
             <tbody>
               {pageRows.map((row,li)=>{const ri=pageStart+li;const isSel=selectedRowIds.has(row.id);const isDeclined=row.approval_status==="Declined";const isFetching=fetchingRows.has(row.id);const isDup=duplicateRowIds.has(row.id);return(
                 <tr key={row.id} className={`group cursor-pointer transition-colors ${isSel?"bg-blue-100":"hover:bg-gray-50/60"} ${isDeclined?"bg-red-50/30":""} ${isDup?"bg-amber-50/50 opacity-60":""}`} onClick={e=>handleRowSelect(row.id,e)} onDoubleClick={()=>handleRowDoubleClick(row.id)}>
-                  {/* ★ ROW NUMBER with loading spinner */}
                   <td className="border border-gray-200 text-center text-xs text-gray-400 bg-gray-50/40 select-none"><div className="flex items-center justify-center gap-1">{isFetching?<IconLoader2 size={14} className="text-green-600 animate-spin"/>:<>{isSel&&<IconCheck size={12} className="text-blue-600"/>}{ri+1}</>}</div></td>
                   {allCols.map((col,ci)=>renderCell(row,ri,col,ci))}
                   {!readOnly&&<td className="border border-gray-200 bg-gray-50/40"/>}
@@ -762,8 +1038,6 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
       </div>
 
       {!readOnly&&(<div className="flex items-center gap-4 px-1 flex-wrap">{[{keys:["Ctrl","Click"],label:"Multi-select"},{keys:["Shift","Click"],label:"Range select"},{keys:["↑","↓","←","→"],label:"Navigate"},{keys:["Enter"],label:"Edit"},{keys:["Tab"],label:"Next cell"},{keys:["Esc"],label:"Cancel"},{keys:["Del"],label:"Clear"},{keys:["Dbl-click"],label:"View Profile"}].map(({keys,label})=>(<div key={label} className="flex items-center gap-1">{keys.map(k=><kbd key={k} className="inline-flex items-center justify-center px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50 text-[10px] font-mono text-gray-500 shadow-sm leading-none">{k}</kbd>)}<span className="text-[11px] text-gray-400 ml-0.5">{label}</span></div>))}<div className="flex items-center gap-1 ml-2 border-l border-gray-200 pl-3"><IconGripVertical size={12} className="text-gray-400"/><span className="text-[11px] text-gray-400">Drag custom columns to assign groups</span></div></div>)}
-
-      {!readOnly&&addingCol&&(<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e=>{if(e.target===e.currentTarget)setAddingCol(false)}}><div className="bg-white rounded-2xl shadow-xl w-[420px] p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto"><div><h3 className="text-base font-semibold text-gray-900">Add custom column</h3></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Column Name *</label><input ref={newColInputRef} type="text" value={newColName} onChange={e=>setNewColName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmAddCol();if(e.key==="Escape")setAddingCol(false)}} placeholder="e.g., Preferred Contact Time" className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"/></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><input type="text" value={newColDescription} onChange={e=>setNewColDescription(e.target.value)} placeholder="Optional" className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"/></div><div><label className="block text-sm font-medium text-gray-700 mb-1">Field Type</label><select value={newColType} onChange={e=>setNewColType(e.target.value as any)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full bg-white"><option value="text">Text</option><option value="number">Number</option><option value="dropdown">Dropdown</option><option value="multi-select">Multi-select</option><option value="date">Date</option><option value="boolean">Yes/No</option><option value="url">URL</option></select></div>{(newColType==="dropdown"||newColType==="multi-select")&&(<div><label className="block text-sm font-medium text-gray-700 mb-1">Options</label><input type="text" value={newColOpts} onChange={e=>setNewColOpts(e.target.value)} placeholder="A, B, C" className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full"/></div>)}<div><label className="block text-sm font-medium text-gray-700 mb-1">Section</label><select value={newColGroup} onChange={e=>setNewColGroup(e.target.value as any)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-blue-400 w-full bg-white"><option value="Influencer Details">Influencer Details</option><option value="Approval Details">Approval Details</option><option value="Outreach Details">Outreach Details</option></select></div><div className="flex gap-2 pt-1"><button onClick={()=>setAddingCol(false)} className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button><button onClick={confirmAddCol} disabled={!newColName.trim()} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-40 transition">Add Column</button></div></div></div>)}
     </div>
   )
 }

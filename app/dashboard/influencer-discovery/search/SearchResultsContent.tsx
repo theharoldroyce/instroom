@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import {
   SlidersHorizontal, X, Bookmark, Eye, ExternalLink,
   Loader2, CheckCircle2, AlertCircle, Search, RefreshCw,
-  Plus, Users
+  Plus, Users, UserPlus, Check
 } from "lucide-react"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -36,6 +36,123 @@ type Creator = {
 const API_ENDPOINTS = {
   instagram: (u: string) => `https://api.instroom.io/v2/${u}/instagram`,
   tiktok: (u: string) => `https://api.instroom.io/${u}/tiktok`,
+}
+
+// ─── Shared localStorage key for influencer list ────────────────────────────
+const INFLUENCER_LIST_KEY = "instroom_influencer_list"
+
+type StoredInfluencer = {
+  id: string
+  handle: string
+  platform: string
+  full_name: string
+  first_name: string
+  email: string
+  follower_count: string
+  engagement_rate: string
+  location: string
+  social_link: string
+  profile_picture: string
+  contact_info: string
+  niche: string
+  contact_status: string
+  stage: string
+  agreed_rate: string
+  notes: string
+  gender: string
+  approval_status: "Pending" | "Approved" | "Declined"
+  transferred_date: string
+  approval_notes: string
+  decline_reason: string
+  tier: string
+  community_status: string
+  custom: Record<string, string>
+  addedAt: number
+}
+
+function addToInfluencerList(creator: Creator, platformName: string): { success: boolean; message: string } {
+  try {
+    const existing: StoredInfluencer[] = JSON.parse(localStorage.getItem(INFLUENCER_LIST_KEY) || "[]")
+
+    const platformKey = platformName.toLowerCase()
+    const cleanHandle = creator.username.replace(/^@/, "").toLowerCase()
+
+    const isDuplicate = existing.some(
+      (inf) => inf.handle.toLowerCase() === cleanHandle && inf.platform === platformKey
+    )
+
+    if (isDuplicate) {
+      return { success: false, message: `@${cleanHandle} is already in your influencer list` }
+    }
+
+    const newInfluencer: StoredInfluencer = {
+      id: crypto.randomUUID(),
+      handle: cleanHandle,
+      platform: platformKey,
+      full_name: creator.name || "",
+      first_name: creator.name ? creator.name.split(" ")[0] : "",
+      email: creator.email || "",
+      follower_count: String(creator.followersRaw || 0),
+      engagement_rate: creator.engagementRaw ? String(creator.engagementRaw) : "0",
+      location: creator.location || "",
+      social_link: creator.profileUrl || "",
+      profile_picture: creator.avatar || "",
+      contact_info: creator.email || "",
+      niche: creator.category || "",
+      contact_status: "not_contacted",
+      stage: "1",
+      agreed_rate: "",
+      notes: "",
+      gender: "",
+      approval_status: "Pending",
+      transferred_date: "",
+      approval_notes: "",
+      decline_reason: "",
+      tier: "Bronze",
+      community_status: "Pending",
+      custom: {},
+      addedAt: Date.now(),
+    }
+
+    existing.push(newInfluencer)
+    localStorage.setItem(INFLUENCER_LIST_KEY, JSON.stringify(existing))
+
+    return { success: true, message: `@${cleanHandle} added to your influencer list!` }
+  } catch (err) {
+    console.error("Error adding to influencer list:", err)
+    return { success: false, message: "Failed to add to list. Try again." }
+  }
+}
+
+function isInInfluencerList(username: string, platform: string): boolean {
+  try {
+    const existing: StoredInfluencer[] = JSON.parse(localStorage.getItem(INFLUENCER_LIST_KEY) || "[]")
+    const cleanHandle = username.replace(/^@/, "").toLowerCase()
+    const platformKey = platform.toLowerCase()
+    return existing.some(
+      (inf) => inf.handle.toLowerCase() === cleanHandle && inf.platform === platformKey
+    )
+  } catch {
+    return false
+  }
+}
+
+// ─── Toast Component ────────────────────────────────────────────────────────
+function Toast({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3500)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className={`fixed top-4 right-4 z-[999] flex items-center gap-2 px-4 py-3 rounded-xl border shadow-lg ${
+      type === "success" ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"
+    }`}>
+      {type === "success" ? <CheckCircle2 size={16} className="text-green-600" /> : <AlertCircle size={16} className="text-red-600" />}
+      <span className="text-sm font-medium">{message}</span>
+      <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100"><X size={14} /></button>
+    </div>
+  )
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -105,7 +222,6 @@ async function fetchCreatorFromAPI(
 
   const platformKey = platformName.toLowerCase() as "instagram" | "tiktok"
 
-  // Only Instagram & TikTok supported
   if (platformKey !== "instagram" && platformKey !== "tiktok") return null
 
   try {
@@ -140,6 +256,7 @@ async function fetchCreatorFromAPI(
       username: d.username || clean,
       avatar:
         d.profile_pic_url ||
+        d.photo ||
         d.avatar ||
         `https://ui-avatars.com/api/?name=${clean}&background=0F6B3E&color=fff`,
       bio: d.biography || d.bio || "",
@@ -176,7 +293,7 @@ export default function SearchResultsContent() {
 
   const topic = searchParams.get("topic")
   const platform = searchParams.get("platform") || "Instagram"
-  const mode = searchParams.get("mode") // "username" = direct lookup
+  const mode = searchParams.get("mode")
 
   const [creators, setCreators] = useState<Creator[]>([])
   const [loading, setLoading] = useState(true)
@@ -185,19 +302,14 @@ export default function SearchResultsContent() {
   const [excludeSaved, setExcludeSaved] = useState(false)
   const [selectedOperator, setSelectedOperator] = useState("AND")
 
-  // Filter states
   const [minFollowers, setMinFollowers] = useState("")
   const [maxBudget, setMaxBudget] = useState("")
   const [minEngagement, setMinEngagement] = useState("")
 
-  // Saved creators state
   const [savedCreators, setSavedCreators] = useState<Set<string>>(new Set())
-
-  // Peek sidebar state
   const [peekCreator, setPeekCreator] = useState<Creator | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  // Add Influencer modal state
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [addMode, setAddMode] = useState<"single" | "bulk">("single")
   const [singleUsername, setSingleUsername] = useState("")
@@ -209,11 +321,16 @@ export default function SearchResultsContent() {
   }>({ type: null, message: "" })
   const [addedCreators, setAddedCreators] = useState<Creator[]>([])
 
-  // Search state
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
 
-  // ─── Load / persist saved creators ────────────────────────────────────────
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
+
+  // Track which creators have been added to the influencer list
+  const [addedToListSet, setAddedToListSet] = useState<Set<string>>(new Set())
+
+  // ─── Load saved creators & check which are in the influencer list ─────────
   useEffect(() => {
     const saved = localStorage.getItem("savedCreators")
     if (saved) {
@@ -232,6 +349,21 @@ export default function SearchResultsContent() {
     )
   }, [savedCreators])
 
+  // Refresh which creators are already in the influencer list
+  const refreshAddedToList = useCallback(() => {
+    try {
+      const existing: StoredInfluencer[] = JSON.parse(localStorage.getItem(INFLUENCER_LIST_KEY) || "[]")
+      const set = new Set(existing.map((inf) => `${inf.handle.toLowerCase()}:${inf.platform}`))
+      setAddedToListSet(set)
+    } catch {
+      setAddedToListSet(new Set())
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshAddedToList()
+  }, [refreshAddedToList])
+
   const toggleSave = (username: string) => {
     setSavedCreators((prev) => {
       const next = new Set(prev)
@@ -241,7 +373,22 @@ export default function SearchResultsContent() {
     })
   }
 
-  // ─── Initial load — direct username lookup if mode=username ───────────────
+  // ★ Add creator to influencer list
+  const handleAddCreatorToList = (creator: Creator) => {
+    const result = addToInfluencerList(creator, platform)
+    setToast({ message: result.message, type: result.success ? "success" : "error" })
+    if (result.success) {
+      refreshAddedToList()
+    }
+  }
+
+  const isCreatorInList = (creator: Creator): boolean => {
+    const cleanHandle = creator.username.replace(/^@/, "").toLowerCase()
+    const platformKey = platform.toLowerCase()
+    return addedToListSet.has(`${cleanHandle}:${platformKey}`)
+  }
+
+  // ─── Initial load ─────────────────────────────────────────────────────────
   const loadInitialData = useCallback(async () => {
     if (!topic) {
       setLoading(false)
@@ -252,7 +399,6 @@ export default function SearchResultsContent() {
     setSearchError(null)
 
     if (mode === "username") {
-      // Direct username lookup via API
       const creator = await fetchCreatorFromAPI(topic, platform)
       if (creator) {
         setCreators([creator])
@@ -265,8 +411,6 @@ export default function SearchResultsContent() {
       return
     }
 
-    // Topic mode — since API doesn't support topic search,
-    // show empty state with prompt to add influencers by username
     setCreators([])
     setSearchError(null)
     setLoading(false)
@@ -452,6 +596,8 @@ export default function SearchResultsContent() {
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F7F9F8] via-white to-[#F7F9F8]">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back Button */}
         <button
@@ -688,87 +834,110 @@ export default function SearchResultsContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedCreators.map((creator) => (
-                    <tr
-                      key={creator.id}
-                      className="border-t border-gray-100 hover:bg-gray-50 transition"
-                    >
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={creator.avatar}
-                            alt={creator.name}
-                            className="w-10 h-10 rounded-full object-cover border-2 border-gray-100"
-                            onError={(e) => {
-                              ;(e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${creator.username}&background=0F6B3E&color=fff`
-                            }}
-                          />
-                          <span className="font-medium text-gray-900">
-                            {creator.name}
+                  {sortedCreators.map((creator) => {
+                    const inList = isCreatorInList(creator)
+                    return (
+                      <tr
+                        key={creator.id}
+                        className="border-t border-gray-100 hover:bg-gray-50 transition"
+                      >
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={creator.avatar}
+                              alt={creator.name}
+                              className="w-10 h-10 rounded-full object-cover border-2 border-gray-100"
+                              onError={(e) => {
+                                ;(e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${creator.username}&background=0F6B3E&color=fff`
+                              }}
+                            />
+                            <span className="font-medium text-gray-900">
+                              {creator.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-gray-600">
+                          @{creator.username}
+                        </td>
+                        <td className="p-4 font-semibold text-gray-800">
+                          {creator.followers}
+                        </td>
+                        <td className="p-4">
+                          <span className="text-green-600 font-medium">
+                            {creator.engagement}
                           </span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-gray-600">
-                        @{creator.username}
-                      </td>
-                      <td className="p-4 font-semibold text-gray-800">
-                        {creator.followers}
-                      </td>
-                      <td className="p-4">
-                        <span className="text-green-600 font-medium">
-                          {creator.engagement}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className="text-blue-600">{creator.growth}</span>
-                      </td>
-                      <td className="p-4 font-semibold text-[#0F6B3E]">
-                        {creator.fee}
-                      </td>
-                      <td className="p-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => toggleSave(creator.username)}
-                            className="p-2 rounded-xl border border-gray-200 hover:bg-gray-100 transition group"
-                            title={
-                              savedCreators.has(creator.username)
-                                ? "Unsave"
-                                : "Save"
-                            }
-                          >
-                            <Bookmark
-                              size={18}
-                              className={
+                        </td>
+                        <td className="p-4">
+                          <span className="text-blue-600">{creator.growth}</span>
+                        </td>
+                        <td className="p-4 font-semibold text-[#0F6B3E]">
+                          {creator.fee}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex gap-2">
+                            {/* ★ Add to Influencer List button */}
+                            <button
+                              onClick={() => handleAddCreatorToList(creator)}
+                              disabled={inList}
+                              className={`p-2 rounded-xl border transition group ${
+                                inList
+                                  ? "border-green-200 bg-green-50 cursor-default"
+                                  : "border-gray-200 hover:bg-green-50 hover:border-green-300"
+                              }`}
+                              title={inList ? "Already in your influencer list" : "Add to influencer list"}
+                            >
+                              {inList ? (
+                                <Check size={18} className="text-green-600" />
+                              ) : (
+                                <UserPlus
+                                  size={18}
+                                  className="text-gray-400 group-hover:text-green-600"
+                                />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => toggleSave(creator.username)}
+                              className="p-2 rounded-xl border border-gray-200 hover:bg-gray-100 transition group"
+                              title={
                                 savedCreators.has(creator.username)
-                                  ? "fill-[#0F6B3E] text-[#0F6B3E]"
-                                  : "text-gray-400 group-hover:text-[#0F6B3E]"
+                                  ? "Unsave"
+                                  : "Save"
                               }
-                            />
-                          </button>
-                          <button
-                            onClick={() => openPeek(creator)}
-                            className="p-2 rounded-xl border border-gray-200 hover:bg-gray-100 transition group"
-                            title="Quick peek"
-                          >
-                            <Eye
-                              size={18}
-                              className="text-gray-400 group-hover:text-[#0F6B3E]"
-                            />
-                          </button>
-                          <button
-                            onClick={() => openProfile(creator.profileUrl)}
-                            className="p-2 rounded-xl border border-gray-200 hover:bg-gray-100 transition group"
-                            title="View profile"
-                          >
-                            <ExternalLink
-                              size={18}
-                              className="text-gray-400 group-hover:text-[#0F6B3E]"
-                            />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            >
+                              <Bookmark
+                                size={18}
+                                className={
+                                  savedCreators.has(creator.username)
+                                    ? "fill-[#0F6B3E] text-[#0F6B3E]"
+                                    : "text-gray-400 group-hover:text-[#0F6B3E]"
+                                }
+                              />
+                            </button>
+                            <button
+                              onClick={() => openPeek(creator)}
+                              className="p-2 rounded-xl border border-gray-200 hover:bg-gray-100 transition group"
+                              title="Quick peek"
+                            >
+                              <Eye
+                                size={18}
+                                className="text-gray-400 group-hover:text-[#0F6B3E]"
+                              />
+                            </button>
+                            <button
+                              onClick={() => openProfile(creator.profileUrl)}
+                              className="p-2 rounded-xl border border-gray-200 hover:bg-gray-100 transition group"
+                              title="View profile"
+                            >
+                              <ExternalLink
+                                size={18}
+                                className="text-gray-400 group-hover:text-[#0F6B3E]"
+                              />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -925,26 +1094,33 @@ export default function SearchResultsContent() {
 
             <div className="p-6 border-t border-gray-100">
               <div className="flex gap-3">
-                <button
-                  onClick={() => toggleSave(peekCreator.username)}
-                  className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition flex items-center justify-center gap-2 ${
-                    savedCreators.has(peekCreator.username)
-                      ? "bg-[#0F6B3E]/10 text-[#0F6B3E] border border-[#0F6B3E]/20"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  <Bookmark
-                    size={16}
-                    className={
-                      savedCreators.has(peekCreator.username)
-                        ? "fill-[#0F6B3E]"
-                        : ""
-                    }
-                  />
-                  {savedCreators.has(peekCreator.username)
-                    ? "Saved"
-                    : "Save Creator"}
-                </button>
+                {/* ★ Add to List from sidebar */}
+                {(() => {
+                  const inList = isCreatorInList(peekCreator)
+                  return (
+                    <button
+                      onClick={() => handleAddCreatorToList(peekCreator)}
+                      disabled={inList}
+                      className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-sm transition flex items-center justify-center gap-2 ${
+                        inList
+                          ? "bg-green-50 text-green-700 border border-green-200 cursor-default"
+                          : "bg-gray-100 text-gray-700 hover:bg-green-50 hover:text-green-700"
+                      }`}
+                    >
+                      {inList ? (
+                        <>
+                          <Check size={16} />
+                          In List
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus size={16} />
+                          Add to List
+                        </>
+                      )}
+                    </button>
+                  )
+                })()}
                 <button
                   onClick={() => openProfile(peekCreator.profileUrl)}
                   className="flex-1 py-2.5 px-4 bg-gradient-to-r from-[#0F6B3E] to-[#2A9D6E] text-white rounded-xl font-medium text-sm hover:shadow-md transition flex items-center justify-center gap-2"
@@ -1131,29 +1307,53 @@ export default function SearchResultsContent() {
                     Recently Added ({addedCreators.length})
                   </p>
                   <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {addedCreators.slice(0, 5).map((creator) => (
-                      <div
-                        key={creator.id}
-                        className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg"
-                      >
-                        <img
-                          src={creator.avatar}
-                          alt={creator.name}
-                          className="w-8 h-8 rounded-full"
-                          onError={(e) => {
-                            ;(e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${creator.username}&background=0F6B3E&color=fff`
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {creator.name}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            @{creator.username} · {creator.followers}
-                          </p>
+                    {addedCreators.slice(0, 5).map((creator) => {
+                      const inList = isCreatorInList(creator)
+                      return (
+                        <div
+                          key={creator.id}
+                          className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg"
+                        >
+                          <img
+                            src={creator.avatar}
+                            alt={creator.name}
+                            className="w-8 h-8 rounded-full"
+                            onError={(e) => {
+                              ;(e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${creator.username}&background=0F6B3E&color=fff`
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {creator.name}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              @{creator.username} · {creator.followers}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleAddCreatorToList(creator)}
+                            disabled={inList}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 ${
+                              inList
+                                ? "bg-green-100 text-green-700 cursor-default"
+                                : "bg-[#0F6B3E] text-white hover:bg-[#0c5a34]"
+                            }`}
+                          >
+                            {inList ? (
+                              <>
+                                <Check size={12} />
+                                In List
+                              </>
+                            ) : (
+                              <>
+                                <UserPlus size={12} />
+                                Add
+                              </>
+                            )}
+                          </button>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                     {addedCreators.length > 5 && (
                       <p className="text-xs text-gray-500 text-center py-1">
                         And {addedCreators.length - 5} more...
