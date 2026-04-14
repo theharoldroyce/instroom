@@ -1,3 +1,5 @@
+// C:\Users\reyme\Videos\instroom\app\dashboard\closed\page.tsx
+
 "use client"
 
 import { useState } from "react"
