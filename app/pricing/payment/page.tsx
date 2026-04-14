@@ -134,7 +134,7 @@ function PaymentPageInner() {
                 cycle,
               }),
             }).then(() => {
-              window.location.href = '/onboarding';
+              window.location.href = '/dashboard';
             });
           }
         });

@@ -22,20 +22,6 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const subscription = await prisma.userSubscription.findFirst({
-      where: {
-        user_id,
-        status: { in: ["active", "trialing"] },
-      },
-    })
-    if (!subscription) {
-      return NextResponse.json(
-        { error: "No active or trialing subscription. Please subscribe first." },
-        { status: 403 }
-      )
-    }
-
-  
     const onboarding = await prisma.onboarding.upsert({
       where: { user_id },
       update: {

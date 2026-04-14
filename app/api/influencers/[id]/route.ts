@@ -3,6 +3,44 @@ import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 
+export async function GET(
+  req: Request,
+  context: any
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Properly await params which is a Promise in Next.js 13+
+    const params = await context.params
+    const id = params?.id
+
+    if (!id) {
+      return NextResponse.json({ error: "Influencer ID is required" }, { status: 400 })
+    }
+
+    const influencer = await prisma.influencer.findUnique({
+      where: { id },
+    })
+
+    if (!influencer) {
+      return NextResponse.json(
+        { error: "Influencer not found" },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(influencer)
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: "Failed to fetch influencer", details: error?.message || String(error) },
+      { status: 500 }
+    )
+  }
+}
+
 export async function PUT(
   req: Request,
   context: any
@@ -22,6 +60,19 @@ export async function PUT(
     }
 
     const data = await req.json()
+
+    // First, verify the influencer exists
+    const existingInfluencer = await prisma.influencer.findUnique({
+      where: { id },
+    })
+
+    if (!existingInfluencer) {
+      console.error(`Influencer not found for update: ${id}`)
+      return NextResponse.json(
+        { error: "Influencer not found", details: `No influencer record exists with ID: ${id}` },
+        { status: 404 }
+      )
+    }
 
     // Build update object with only provided fields
     const updateData: any = {}

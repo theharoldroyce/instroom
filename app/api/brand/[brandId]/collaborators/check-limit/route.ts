@@ -28,78 +28,27 @@ export async function GET(
       )
     }
 
-    // Get user's subscription
+    // Get user's subscription (optional - no limits applied)
     const subscription = await prisma.userSubscription.findUnique({
       where: { user_id: session.user.id },
       include: { plan: true },
     })
-
-    if (!subscription || subscription.status !== "active") {
-      return NextResponse.json(
-        { error: "No active subscription found" },
-        { status: 400 }
-      )
-    }
 
     // Count current collaborators
     const memberCount = await prisma.brandMember.count({
       where: { brand_id: brandId },
     })
 
-    // Handle unlimited (Agency plan) vs limited plans
-    if (subscription.plan.max_seats === null) {
-      // Agency plan: unlimited, but check if exceeding included seats for upsell
-      const includedSeats = subscription.plan.included_seats
-      const extraSeats = subscription.extra_seats
-      const pricePerSeatNum = subscription.plan.price_per_extra_seat ? parseFloat(subscription.plan.price_per_extra_seat.toString()) : 0
-      
-      const exceededIncluded = memberCount >= includedSeats
-      const canBuyMore = exceededIncluded && pricePerSeatNum > 0
-      
-      return NextResponse.json({
+    // Unlimited collaborators for all users
+    return NextResponse.json(
+      {
         allowed: true,
-        canBuyMore,
         current: memberCount,
         max: null,
-        maxTotalSeats: null,
-        maxSeatsAvailable: 999999,
-        currentExtraSeats: extraSeats,
-        pricePerSeat: pricePerSeatNum,
-        message: canBuyMore
-          ? `You've exceeded your ${includedSeats} included seats. Would you like to purchase extra seats?`
-          : undefined,
-      })
-    }
-
-    // Calculate seat limits for limited plans
-    const includedSeats = subscription.plan.included_seats
-    const maxSeats = subscription.plan.max_seats
-    const extraSeats = subscription.extra_seats
-    const totalAvailable = includedSeats + extraSeats
-    const pricePerSeatNum = subscription.plan.price_per_extra_seat ? parseFloat(subscription.plan.price_per_extra_seat.toString()) : 0
-    const maxSeatsAvailable = maxSeats - (includedSeats + extraSeats)
-
-    const allowed = memberCount < totalAvailable
-    const canBuyMore = 
-      !allowed && 
-      maxSeatsAvailable > 0 && 
-      pricePerSeatNum > 0
-
-    return NextResponse.json({
-      allowed,
-      canBuyMore,
-      current: memberCount,
-      max: totalAvailable,
-      maxTotalSeats: maxSeats,
-      maxSeatsAvailable,
-      currentExtraSeats: extraSeats,
-      pricePerSeat: pricePerSeatNum,
-      message: allowed
-        ? undefined
-        : canBuyMore
-          ? "You've reached your collaborator limit. Would you like to purchase extra seats?"
-          : "You've reached your collaborator limit. Unable to purchase more seats for your plan.",
-    })
+        message: "Unlimited collaborators",
+      },
+      { status: 200 }
+    )
   } catch (error) {
     console.error("Error checking collaborator limit:", error)
     return NextResponse.json(

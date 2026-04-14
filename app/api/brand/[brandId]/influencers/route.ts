@@ -29,20 +29,32 @@ export async function GET(
       return NextResponse.json({ error: "Brand not found or access denied" }, { status: 404 })
     }
 
-    // Fetch all brand influencers with related influencer data
+    // Fetch all BrandInfluencer records
     const brandInfluencers = await prisma.brandInfluencer.findMany({
       where: { brand_id: brandId },
-      include: {
-        influencer: true,
-        campaign: true,
-      },
       orderBy: { created_at: "desc" },
     })
 
-    return NextResponse.json({ influencers: brandInfluencers }, { status: 200 })
+    // Get all associated Influencer records
+    const influencerIds = [...new Set(brandInfluencers.map(bi => bi.influencer_id))]
+    const influencers = await prisma.influencer.findMany({
+      where: { id: { in: influencerIds } },
+    })
+
+    // Combine data and filter out orphaned records
+    const influencerMap = new Map(influencers.map(i => [i.id, i]))
+    const combined = brandInfluencers
+      .map(bi => ({
+        ...bi,
+        influencer: influencerMap.get(bi.influencer_id) || null,
+      }))
+      .filter(bi => bi.influencer)
+
+    return NextResponse.json({ influencers: combined }, { status: 200 })
   } catch (error) {
+    console.error("Error fetching brand influencers:", error instanceof Error ? error.message : String(error))
     return NextResponse.json(
-      { error: "Failed to fetch influencers", details: error instanceof Error ? error.message : String(error) },
+      { error: "Failed to fetch influencers" },
       { status: 500 }
     )
   }

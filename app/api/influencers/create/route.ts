@@ -21,6 +21,22 @@ export async function POST(req: Request) {
       )
     }
 
+    // Check subscription FIRST before checking duplicates
+    if (data.brandId) {
+      const limitCheck = await canAddInfluencer(session.user.id, data.brandId)
+      if (!limitCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: limitCheck.message || "Influencer limit reached",
+            requiresSubscription: true,
+            current: limitCheck.current,
+            max: limitCheck.max,
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     // Check for duplicate handle+platform combination
     const existing = await prisma.influencer.findUnique({
       where: {
@@ -36,21 +52,6 @@ export async function POST(req: Request) {
         { error: "Influencer with this handle and platform already exists" },
         { status: 409 }
       )
-    }
-
-    // If brandId is provided, check influencer limit BEFORE creating the influencer
-    if (data.brandId) {
-      const limitCheck = await canAddInfluencer(session.user.id, data.brandId)
-      if (!limitCheck.allowed) {
-        return NextResponse.json(
-          {
-            error: limitCheck.message || "Influencer limit reached",
-            current: limitCheck.current,
-            max: limitCheck.max,
-          },
-          { status: 403 }
-        )
-      }
     }
 
     // Create influencer

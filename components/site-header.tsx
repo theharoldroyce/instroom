@@ -18,6 +18,7 @@ const titles: Record<string, string> = {
   "/dashboard/analytics": "Analytics",
   "/dashboard/influencer-discovery": "Influencer Discovery",
   "/dashboard/influencer-discovery/search": "Discovery › Search Results",
+  "/dashboard/settings/collaborators": "Team & Collaborators",
 }
 
   const title = titles[pathname] || "Dashboard"

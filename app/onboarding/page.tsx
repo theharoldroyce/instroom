@@ -24,47 +24,14 @@ export default function OnboardingPage() {
   const [isSubscribed, setIsSubscribed] = useState(false)
 
   useEffect(() => {
-    const checkSubscription = async () => {
-      try {
-        if (status === "loading") return;
-        if (!session?.user) {
-          router.replace("/signup");
-          return;
-        }
-        const userId = (session.user as any).id;
-        if (!userId) {
-          router.replace("/signup");
-          return;
-        }
-        console.log("🔍 Checking subscription for user:", userId);
-        const res = await fetch("/api/subscription/check", {
-          method: "POST",
-          body: JSON.stringify({ user_id: userId }),
-          headers: { "Content-Type": "application/json" },
-        });
-        if (!res.ok) {
-          const data = await res.json();
-          console.error("❌ Subscription check failed:", data);
-          setError(data.error || "Failed to check subscription");
-          setSubscriptionChecked(true);
-          return;
-        }
-        const data = await res.json();
-        console.log("✅ Subscription check result:", data);
-        if (!data.active) {
-          console.log("⚠️ User not subscribed, redirecting to pricing");
-          router.replace("/pricing");
-          return;
-        }
-        setIsSubscribed(true);
-        setSubscriptionChecked(true);
-      } catch (err) {
-        console.error("❌ Error checking subscription:", err);
-        setError(err instanceof Error ? err.message : "Failed to check subscription");
-        setSubscriptionChecked(true);
-      }
+    if (status === "loading") return;
+    if (!session?.user) {
+      router.replace("/signup");
+      return;
     }
-    checkSubscription()
+    // User is authenticated, proceed with onboarding
+    setIsSubscribed(true);
+    setSubscriptionChecked(true);
   }, [status, session, router])
 
   const handleSkip = async () => {
@@ -94,7 +61,7 @@ export default function OnboardingPage() {
         const data = await response.json();
         throw new Error(data.error || 'Failed to save onboarding data');
       }
-      router.push('/dashboard');
+      router.push('/pricing');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -178,8 +145,8 @@ export default function OnboardingPage() {
         throw new Error(data.error || 'Failed to save onboarding data')
       }
 
-      // Redirect to dashboard
-      router.push('/dashboard')
+      // Redirect to pricing
+      router.push('/pricing')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -193,23 +160,23 @@ export default function OnboardingPage() {
 
   return (
     <div className="relative min-h-svh overflow-hidden bg-[#F7F9F8] text-[#1E1E1E]">
-      <div className="fixed top-6 left-12 z-50">
+      <div className="fixed top-4 sm:top-6 left-4 sm:left-12 z-50">
         <Image
           src="/images/Instroom Logo 1.png"
           alt="Instroom Logo"
-          width={180}
-          height={180}
+          width={140}
+          height={140}
           priority
           quality={95}
-          className="drop-shadow-sm"
+          className="drop-shadow-sm w-32 sm:w-44 h-auto"
         />
       </div>
 
-      <div className="pointer-events-none fixed top-0 left-0 w-96 h-96 rounded-full bg-[#1FAE5B]/8 blur-3xl -translate-x-1/2 -translate-y-1/2" />
-      <div className="pointer-events-none fixed bottom-0 right-0 w-80 h-80 rounded-full bg-[#0F6B3E]/6 blur-3xl translate-x-1/3 translate-y-1/3" />
-      <div className="pointer-events-none fixed top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
+      <div className="pointer-events-none fixed top-0 left-0 w-64 sm:w-96 h-64 sm:h-96 rounded-full bg-[#1FAE5B]/8 blur-3xl -translate-x-1/2 -translate-y-1/2" />
+      <div className="pointer-events-none fixed bottom-0 right-0 w-56 sm:w-80 h-56 sm:h-80 rounded-full bg-[#0F6B3E]/6 blur-3xl translate-x-1/3 translate-y-1/3" />
+      <div className="pointer-events-none hidden sm:block fixed top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
 
-      <div className="relative mx-auto flex min-h-svh w-full max-w-5xl items-center justify-center px-4 py-10 z-20">
+      <div className="relative mx-auto flex min-h-svh w-full max-w-full sm:max-w-4xl items-center justify-center px-4 py-8 sm:py-10 z-20">
         {error && (
           <div className="fixed right-8 bottom-8 z-50 rounded-lg border border-red-500/50 bg-red-50 p-4 text-sm text-red-600 shadow-lg animate-fade-in">
             {error}
