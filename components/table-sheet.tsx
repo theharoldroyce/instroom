@@ -222,7 +222,7 @@ function ProfilePicture({ src, socialLink, name, size = 28 }: { src?: string; so
 function newEmptyRow(customCols: CustomColumn[]): InfluencerRow {
   const custom: Record<string, string> = {}
   customCols.forEach((c) => { custom[c.field_key] = c.field_type === "boolean" ? "No" : "" })
-  return { id: crypto.randomUUID(), handle: "", platform: "instagram", full_name: "", email: "", follower_count: "", engagement_rate: "", niche: "", contact_status: "not_contacted", stage: "1", agreed_rate: "", notes: "", custom, gender: "", location: "", social_link: "", first_name: "", contact_info: "", approval_status: "Pending", transferred_date: "", approval_notes: "", decline_reason: "", tier: "Bronze", community_status: "Pending", profile_picture: "" }
+  return { id: crypto.randomUUID(), handle: "", platform: "instagram", full_name: "", email: "", follower_count: "", engagement_rate: "", niche: "", contact_status: "not_contacted", stage: "1", agreed_rate: "", notes: "", custom, gender: "", location: "", social_link: "", first_name: "", contact_info: "", approval_status: "Pending", transferred_date: "", approval_notes: "", decline_reason: "", tier: "Bronze", community_status: "Pending", profile_image_url: "" }
 }
 
 const STATUS_STYLE: Record<string, string> = { not_contacted: "bg-gray-100 text-gray-600", contacted: "bg-blue-100 text-blue-700", interested: "bg-yellow-100 text-yellow-700", agreed: "bg-green-100 text-green-700" }
@@ -301,7 +301,7 @@ async function fetchInfluencerFromAPI(handle: string, platform: string): Promise
       location: d.location || d.city || "",
       niche: d.category || d.business_category || "",
       gender: d.gender || "",
-      profile_picture: d.profile_pic_url || d.profile_picture || d.avatar || d.profile_image || d.profile_pic || "",
+      profile_image_url: d.profile_pic_url || d.profile_picture || d.avatar || d.profile_image || d.profile_pic || "",
     }
   } catch (err) { console.error(`API fetch error for ${handle}:`, err); return null }
 }
@@ -551,7 +551,7 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
     <><DeclineConfirmationModal isOpen={showDeclineModal} onClose={()=>setShowDeclineModal(false)} onConfirm={(r)=>{if(editedRow)setEditedRow(handleApprovalChange(editedRow,"Declined",r))}} influencerName={editedRow.full_name||editedRow.handle||"this influencer"}/><div style={S.overlay} onClick={onClose}/><div style={S.panel}>
       <div style={S.header}><div style={{fontSize:15,fontWeight:600,color:"#1e1e1e",marginBottom:12}}>Influencer Profile</div><div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
         <div style={S.avatar}>
-          <ProfilePicture src={editedRow.profile_picture} socialLink={socialLink} name={editedRow.full_name || editedRow.handle} size={52} />
+          <ProfilePicture src={editedRow.profile_image_url} socialLink={editedRow.social_link || getProfileUrl(editedRow.platform, editedRow.handle)} name={editedRow.full_name || editedRow.handle} size={52} />
         </div>
         <div style={{flex:1}}><div style={S.name}>{editedRow.full_name||editedRow.first_name||""}</div><div style={S.handle}>{displayHandle(editedRow.handle, editedRow.platform)}</div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"flex-start"}}><div style={{display:"flex",flexDirection:"column",gap:2}}><span style={{fontSize:10,color:"#888"}}>Pipeline</span><select style={S.pipeSel} value={editedRow.contact_status} onChange={e=>handleFieldChange("contact_status",e.target.value)}><option value="not_contacted">For Outreach</option><option value="contacted">In Conversation</option><option value="interested">Interested</option><option value="agreed">Agreed</option></select></div><div style={{display:"flex",flexDirection:"column",gap:2}}><span style={{fontSize:10,color:"#888"}}>Approval</span><select style={{...S.pipeSel,borderColor:editedRow.approval_status==="Approved"?"#16a34a":editedRow.approval_status==="Declined"?"#dc2626":"#f4b740",background:editedRow.approval_status==="Approved"?"#f0fdf4":editedRow.approval_status==="Declined"?"#fef2f2":"#fffbeb",color:editedRow.approval_status==="Approved"?"#166534":editedRow.approval_status==="Declined"?"#991b1b":"#854f0b"}} value={editedRow.approval_status||"Pending"} onChange={e=>handleFieldChange("approval_status",e.target.value)}><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Declined">Declined</option></select></div><button style={{background:"none",border:"none",fontSize:20,color:"#888",cursor:"pointer",alignSelf:"flex-end",paddingBottom:4}} onClick={onClose}>×</button></div></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button style={S.atagPlat}>{platformLabel}</button><button style={S.atag}>Send Email</button><button style={S.atag}>Send DM</button><button style={S.atag}>Follow up</button></div></div>
       <div style={S.tabBar}>{["Basic","Order","Post","Stats"].map((tab,idx)=><div key={idx} style={S.tab(profileTab===idx)} onClick={()=>setProfileTab(idx)}>{tab}</div>)}</div>
@@ -706,6 +706,7 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
 
   const [fetchingRows, setFetchingRows] = useState<Set<string>>(new Set())
   const [duplicateRowIds, setDuplicateRowIds] = useState<Set<string>>(new Set())
+  const [hydrated, setHydrated] = useState(false)
   const [pendingDuplicateInfo, setPendingDuplicateInfo] = useState<{ rowId: string; handle: string; existingName: string } | null>(null)
   const commitGuardRef = useRef(false)
 
@@ -809,7 +810,7 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
           if (!u.location && data.location) u.location = data.location
           if (!u.niche && data.niche) u.niche = data.niche
           if (!u.gender && data.gender) u.gender = data.gender
-          if (!u.profile_picture && data.profile_picture) u.profile_picture = data.profile_picture
+          if (!u.profile_image_url && data.profile_image_url) u.profile_image_url = data.profile_image_url
           return u
         })
         onRowsChange?.(next); return next
@@ -940,13 +941,13 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
     const isActive=activeCell?.rowIdx===rowIdx&&activeCell?.colIdx===colIdx; const isEditing=editCell?.rowIdx===rowIdx&&editCell?.colIdx===colIdx; const isPopup=popupCell?.rowIdx===rowIdx&&popupCell?.colIdx===colIdx; const value=getCellValue(row,col.key); const ringCls=isActive?"ring-2 ring-inset ring-blue-500 z-[1]":"";
     const isDuplicate = duplicateRowIds.has(row.id);
     const disabled = (row.approval_status==="Declined"&&isOutreachField(col.key)) || isDuplicate;
-    if(disabled) return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed`} style={{minWidth:col.minWidth}}>{col.key==="contact_status"?<StatusBadge value={value}/>:col.key==="approval_status"?<ApprovalBadge value={value}/>:col.key==="handle"?<div className="flex items-center gap-2"><ProfilePicture src={row.profile_picture} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} size={24} /><span className="truncate text-gray-400">{displayHandle(value, row.platform) || "—"}</span></div>:col.key==="follower_count"?<span className="block truncate text-gray-400">{Number(value) ? formatFollowers(Number(value)) : "—"}</span>:col.key==="engagement_rate"?<span className="block truncate text-gray-400">{parseFloat(value) ? `${parseFloat(value)}%` : "—"}</span>:<span className="block truncate text-gray-400">{value||"—"}</span>}</td>
+    if(disabled) return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed`} style={{minWidth:col.minWidth}}>{col.key==="contact_status"?<StatusBadge value={value}/>:col.key==="approval_status"?<ApprovalBadge value={value}/>:col.key==="handle"?<div className="flex items-center gap-2"><ProfilePicture src={row.profile_image_url} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} size={24} /><span className="truncate text-gray-400">{displayHandle(value, row.platform) || "—"}</span></div>:col.key==="follower_count"?<span className="block truncate text-gray-400">{Number(value) ? formatFollowers(Number(value)) : "—"}</span>:col.key==="engagement_rate"?<span className="block truncate text-gray-400">{parseFloat(value) ? `${parseFloat(value)}%` : "—"}</span>:<span className="block truncate text-gray-400">{value||"—"}</span>}</td>
 
     if(col.key==="handle"){
       if(isEditing){
         return <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{minWidth:col.minWidth}}>
           <div className="flex items-center gap-2 px-2">
-            <ProfilePicture src={row.profile_picture} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} size={24} />
+            <ProfilePicture src={row.profile_image_url} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} size={24} />
             <input ref={editInputRef as any} type="text" value={editValue} placeholder="username" onChange={e=>setEditValue(e.target.value)} onBlur={handleEditBlur} onKeyDown={handleEditKeyDown} onMouseDown={e=>e.stopPropagation()} className="flex-1 h-full py-1.5 text-sm outline-none bg-white min-w-0"/>
           </div>
         </td>
@@ -955,7 +956,7 @@ export default function TableSheet({ initialRows = MOCK_ROWS, initialCustomColum
       const tdCls=`border border-gray-200 px-2 py-1.5 text-sm cursor-cell select-none relative hover:bg-blue-50/20 ${ringCls}`;
       return <td key={col.key} className={tdCls} style={{minWidth:col.minWidth}} onClick={()=>startEdit(rowIdx,colIdx)} onFocus={()=>setActiveCell({rowIdx,colIdx})}>
         <div className="flex items-center gap-2">
-          <ProfilePicture src={row.profile_picture} socialLink={socialLink} name={row.full_name} size={24} />
+          <ProfilePicture src={row.profile_image_url} socialLink={socialLink} name={row.full_name} size={24} />
           <span className="truncate text-sm text-gray-800 font-medium">{displayHandle(value, row.platform) || <span className="text-gray-300">Enter username</span>}</span>
         </div>
       </td>
