@@ -1,152 +1,96 @@
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { canAddInfluencer } from "@/lib/subscription-limits"
-import { getServerSession } from "next-auth/next"
+import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { NextRequest, NextResponse } from "next/server"
+import { canAddInfluencer } from "@/lib/subscription-limits"
 
-/**
- * GET /api/brand/[brandId]/influencers
- * Fetch all influencers for a specific brand
- */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ brandId: string }> }
-) {
+export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { brandId } = await params
+    const data = await req.json()
 
-    // Verify user owns this brand
-    const brand = await prisma.brand.findUnique({
-      where: { id: brandId },
-    })
-
-    if (!brand || brand.owner_id !== session.user.id) {
-      return NextResponse.json({ error: "Brand not found or access denied" }, { status: 404 })
-    }
-
-    // Fetch all BrandInfluencer records
-    const brandInfluencers = await prisma.brandInfluencer.findMany({
-      where: { brand_id: brandId },
-      orderBy: { created_at: "desc" },
-    })
-
-    // Get all associated Influencer records
-    const influencerIds = [...new Set(brandInfluencers.map(bi => bi.influencer_id))]
-    const influencers = await prisma.influencer.findMany({
-      where: { id: { in: influencerIds } },
-    })
-
-    // Combine data and filter out orphaned records
-    const influencerMap = new Map(influencers.map(i => [i.id, i]))
-    const combined = brandInfluencers
-      .map(bi => ({
-        ...bi,
-        influencer: influencerMap.get(bi.influencer_id) || null,
-      }))
-      .filter(bi => bi.influencer)
-
-    return NextResponse.json({ influencers: combined }, { status: 200 })
-  } catch (error) {
-    console.error("Error fetching brand influencers:", error instanceof Error ? error.message : String(error))
-    return NextResponse.json(
-      { error: "Failed to fetch influencers" },
-      { status: 500 }
-    )
-  }
-}
-
-/**
- * POST /api/brand/[brandId]/influencers
- * Add an influencer to a brand (with limit enforcement)
- */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ brandId: string }> }
-) {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { brandId } = await params
-    const body = await req.json()
-    const { influencer_id } = body
-
-    if (!influencer_id) {
-      return NextResponse.json({ error: "influencer_id is required" }, { status: 400 })
-    }
-
-    // Verify user owns this brand
-    const brand = await prisma.brand.findUnique({
-      where: { id: brandId },
-    })
-
-    if (!brand || brand.owner_id !== session.user.id) {
-      return NextResponse.json({ error: "Brand not found or access denied" }, { status: 404 })
-    }
-
-    // Check influencer limit
-    const limitCheck = await canAddInfluencer(session.user.id, brandId)
-
-    if (!limitCheck.allowed) {
+    // Validate required fields
+    if (!data.handle || !data.platform) {
       return NextResponse.json(
-        {
-          error: limitCheck.message,
-          current: limitCheck.current,
-          max: limitCheck.max,
-        },
-        { status: 403 }
+        { error: "handle and platform are required" },
+        { status: 400 }
       )
     }
 
-    // Verify influencer exists
-    const influencer = await prisma.influencer.findUnique({
-      where: { id: influencer_id },
-    })
-
-    if (!influencer) {
-      return NextResponse.json({ error: "Influencer not found" }, { status: 404 })
+    // Check subscription FIRST before checking duplicates
+    if (data.brandId) {
+      const limitCheck = await canAddInfluencer(session.user.id, data.brandId)
+      if (!limitCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: limitCheck.message || "Influencer limit reached",
+            requiresSubscription: true,
+            current: limitCheck.current,
+            max: limitCheck.max,
+          },
+          { status: 403 }
+        )
+      }
     }
 
-    // Check if already added to this brand
-    const existing = await prisma.brandInfluencer.findUnique({
+    // Check for duplicate handle+platform combination
+    const existing = await prisma.influencer.findUnique({
       where: {
-        brand_id_influencer_id: {
-          brand_id: brandId,
-          influencer_id,
+        handle_platform: {
+          handle: data.handle,
+          platform: data.platform,
         },
       },
     })
 
     if (existing) {
       return NextResponse.json(
-        { error: "This influencer is already added to your brand" },
+        { error: "Influencer with this handle and platform already exists" },
         { status: 409 }
       )
     }
 
-    // Add influencer to brand
-    const brandInfluencer = await prisma.brandInfluencer.create({
+    // Create influencer
+    const influencer = await prisma.influencer.create({
       data: {
-        brand_id: brandId,
-        influencer_id,
-        contact_status: "not_contacted",
-      },
-      include: {
-        influencer: true,
+        handle: data.handle,
+        platform: data.platform,
+        full_name: data.full_name || null,
+        email: data.email || null,
+        gender: data.gender || null,
+        niche: data.niche || null,
+        location: data.location || null,
+        bio: data.bio || null,
+        profile_image_url: data.profile_image_url || null,
+        social_link: data.social_link || null,
+        follower_count: data.follower_count || 0,
+        engagement_rate: data.engagement_rate || 0,
+        avg_likes: data.avg_likes || 0,
+        avg_comments: data.avg_comments || 0,
+        avg_views: data.avg_views || 0,
       },
     })
 
-    return NextResponse.json({ influencer: brandInfluencer }, { status: 201 })
+    // If brandId is provided, link influencer to brand
+    if (data.brandId) {
+      await prisma.brandInfluencer.create({
+        data: {
+          brand_id: data.brandId,
+          influencer_id: influencer.id,
+          contact_status: "not_contacted",
+          stage: 1,
+        },
+      })
+    }
+
+    return NextResponse.json(influencer, { status: 201 })
   } catch (error) {
     return NextResponse.json(
-      { error: "Failed to add influencer", details: error instanceof Error ? error.message : String(error) },
+      { error: "Failed to create influencer" },
       { status: 500 }
     )
   }

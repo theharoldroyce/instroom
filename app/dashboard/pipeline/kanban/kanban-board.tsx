@@ -1,5 +1,3 @@
-// C:\Users\reyme\Videos\instroom\app\dashboard\pipeline\kanban\kanban-board.tsx
-
 "use client"
 
 import { useState, useEffect, useRef, type ReactNode } from "react"
@@ -22,13 +20,12 @@ import {
   IconFilter,
   IconSearch,
   IconLocation,
-  IconBrandInstagram,
-  IconBrandTiktok,
-  IconBrandYoutube,
   IconBrandTwitter,
   IconX,
   IconLayoutList,
   IconChevronDown,
+  IconLoader2,
+  IconAlertCircle,
 } from "@tabler/icons-react"
 
 import InfluencerProfileSidebar, {
@@ -36,8 +33,8 @@ import InfluencerProfileSidebar, {
   type Campaign,
 } from "@/components/InfluencerProfileSidebar"
 
-// Import the JSON data
-import jsonData from "@/app/dashboard/data.json"
+// ─── Import the data hook instead of JSON ───────────────────────────────────
+import { usePipelineData, type PipelineInfluencer } from "@/hooks/usePipelineData"
 
 // ─── Platform Icons ─────────────────────────────────────────────────────────
 export const PLATFORM_ICONS: Record<string, ReactNode> = {
@@ -58,76 +55,30 @@ export const PLATFORM_ICONS: Record<string, ReactNode> = {
       <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.376.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.376-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
     </svg>
   ),
-  Twitter: (
-    <IconBrandTwitter size={14} className="text-blue-400" />
-  ),
-}
-
-type Influencer = {
-  id: number
-  influencer: string
-  instagramHandle: string
-  followers: string
-  engagementRate: string
-  niche: string
-  pipelineStatus: string
-  platform?: string
-  location?: string
-  lastContact?: string
-  notes?: string
-  priority?: "high" | "medium" | "low"
-  email?: string
-  phone?: string
-  website?: string
-  birthday?: string
-  tier?: string
-  commSt?: string
+  Twitter: <IconBrandTwitter size={14} className="text-blue-400" />,
 }
 
 // ─── Filter constants ───────────────────────────────────────────────────────
 const NICHES = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech", "Fashion", "Travel"]
 const LOCATIONS = [
-  "Philippines",
-  "Singapore",
-  "United States",
-  "Australia",
-  "United Kingdom",
-  "Malaysia",
-  "Indonesia",
-  "Thailand",
-  "Vietnam",
+  "Philippines", "Singapore", "United States", "Australia",
+  "United Kingdom", "Malaysia", "Indonesia", "Thailand", "Vietnam",
 ]
 
-// ─── Helpers: map Influencer → Partner ──────────────────────────────────────
+// ─── Helpers: map PipelineInfluencer → Partner (for sidebar) ────────────────
 const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
 
-function parseFollowers(raw: string): number {
-  if (!raw) return 0
-  const cleaned = raw.replace(/,/g, "").trim()
-  const lower = cleaned.toLowerCase()
-  if (lower.endsWith("m")) return parseFloat(lower) * 1_000_000
-  if (lower.endsWith("k")) return parseFloat(lower) * 1_000
-  return parseInt(cleaned, 10) || 0
-}
-
-function parseEngagement(raw: string): number {
-  if (!raw) return 0
-  return parseFloat(raw.replace("%", "").trim()) || 0
-}
-
-function influencerToPartner(inf: Influencer): Partner {
+function influencerToPartner(inf: PipelineInfluencer): Partner {
   const nameParts = inf.influencer?.split(" ") || [""]
-  const firstName = nameParts[0] || inf.instagramHandle?.replace("@", "").slice(0, 6) || ""
+  const firstName = nameParts[0] || inf.handle?.slice(0, 6) || ""
   const lastName = nameParts.slice(1).join(" ") || ""
-  const fol = parseFollowers(inf.followers)
-  const eng = parseEngagement(inf.engagementRate)
 
   return {
-    id: inf.id,
-    handle: inf.instagramHandle || "",
+    id: inf.id as any,
+    handle: inf.handle || "",
     firstName,
     lastName,
-    birthday: inf.birthday || "",
+    birthday: "",
     plat: inf.platform || "Instagram",
     niche: inf.niche || "",
     gend: "",
@@ -143,16 +94,16 @@ function influencerToPartner(inf: Influencer): Partner {
     sales: 0,
     aov: 0,
     rev: 0,
-    fol,
-    eng,
+    fol: inf.followerCount,
+    eng: parseFloat(inf.engagementRate) || 0,
     avgV: 0,
     gmv: 0,
-    added: inf.lastContact ? new Date(inf.lastContact) : new Date(),
+    added: inf.createdAt ? new Date(inf.createdAt) : new Date(),
     prods: [],
     prodCost: 0,
-    feesPaid: 0,
+    feesPaid: inf.agreedRate || 0,
     commPaid: 0,
-    totalSpend: 0,
+    totalSpend: inf.agreedRate || 0,
     roi_val: 0,
     roas_val: 0,
     monthly: MONTHS.map((m) => ({ month: m, posts: 0, clicks: 0, rev: 0, eng: 0, sales: 0 })),
@@ -184,7 +135,6 @@ const getStatusFromColumnKey = (key: string): string => {
   return column ? column.status : key
 }
 
-// ─── Helper to get status color for table dropdown ──────────────────────────
 const getStatusColor = (status: string) => {
   const column = columns.find((c) => c.status === status)
   if (!column) return "bg-gray-100 text-gray-700 border-gray-300"
@@ -208,24 +158,21 @@ const getOptionDotColor = (status: string) => {
   return column ? column.color : "bg-gray-400"
 }
 
-// ─── Platform helpers ───────────────────────────────────────────────────────
 const getPlatformIcon = (platform?: string): ReactNode => {
   if (!platform) return PLATFORM_ICONS.Instagram
   return PLATFORM_ICONS[platform] || PLATFORM_ICONS.Instagram
 }
 
-// ─── Avatar color generator based on name ──────────────────────────────────
 const getAvatarColor = (name: string) => {
   const colors = [
-    "bg-pink-500", "bg-purple-500", "bg-indigo-500", "bg-blue-500", 
+    "bg-pink-500", "bg-purple-500", "bg-indigo-500", "bg-blue-500",
     "bg-cyan-500", "bg-teal-500", "bg-green-500", "bg-yellow-500",
-    "bg-orange-500", "bg-red-500", "bg-rose-500"
+    "bg-orange-500", "bg-red-500", "bg-rose-500",
   ]
-  const index = name.charCodeAt(0) % colors.length
-  return colors[index]
+  return colors[name.charCodeAt(0) % colors.length]
 }
 
-// ─── Custom Status Dropdown Component ──────────────────────────────────────
+// ─── Status Dropdown ────────────────────────────────────────────────────────
 function StatusDropdown({
   currentStatus,
   onStatusChange,
@@ -281,7 +228,7 @@ function DroppableColumn({ id, children }: { id: string; children: React.ReactNo
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col gap-3 w-[280px] flex-shrink-0 transition-colors ${
+      className={`flex flex-col gap-3 w-[200px] flex-shrink-0 transition-colors ${
         isOver ? "bg-gray-50 rounded-lg" : ""
       }`}
     >
@@ -312,9 +259,12 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
 }
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
-export default function PipelinePage() {
+interface PipelinePageProps {
+  brandId?: string
+}
+
+export default function PipelinePage({ brandId }: PipelinePageProps) {
   const [view, setView] = useState<"kanban" | "list">("kanban")
-  const [data, setData] = useState<Influencer[]>([])
   const [search, setSearch] = useState("")
   const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -326,7 +276,7 @@ export default function PipelinePage() {
   // Column filter state for list view
   const [selectedColumnStatus, setSelectedColumnStatus] = useState<string | null>(null)
 
-  // ── Filter panel state (Influencer, Handle, Location, Niche) ─────────────
+  // Filter panel state
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [filters, setFilters] = useState({
     influencer: "",
@@ -335,91 +285,58 @@ export default function PipelinePage() {
     niche: "all",
   })
 
-  // ── Unsaved changes tracking ──────────────────────────────────────────────
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-
-  // ── Follow-up count ───────────────────────────────────────────────────────
-  const [followUpCount] = useState(0)
+  // ─── Fetch data from API ──────────────────────────────────────────────────
+  const { data, isLoading, error, updateStatus, refetch } = usePipelineData(brandId)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   )
-
-  // Load data from JSON
-  useEffect(() => {
-    if (jsonData && Array.isArray(jsonData)) {
-      const transformedData = jsonData.map((item: any) => ({
-        ...item,
-        platform: item.platform || "Instagram",
-        location: item.location || "USA",
-        lastContact: item.lastContact || undefined,
-        notes: item.notes || "",
-        priority: item.priority || "medium",
-        email: item.email || "",
-        phone: item.phone || "",
-        website: item.website || "",
-        birthday: item.birthday || "",
-        tier: item.tier || "",
-        commSt: item.commSt || "Pending",
-        pipelineStatus:
-          item.pipelineStatus && columns.some((col) => col.status === item.pipelineStatus)
-            ? item.pipelineStatus
-            : "For Outreach",
-      }))
-      setData(transformedData)
-    }
-  }, [])
 
   // ── Drag handlers ─────────────────────────────────────────────────────────
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string)
   }
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     setActiveId(null)
     if (!over) return
 
     const draggedId = active.id as string
     const destinationKey = over.id as string
-    const draggedInfluencer = data.find((item) => item.id.toString() === draggedId)
+    const draggedInfluencer = data.find((item) => item.id === draggedId)
     if (!draggedInfluencer) return
 
     const newStatus = getStatusFromColumnKey(destinationKey)
     if (draggedInfluencer.pipelineStatus === newStatus) return
 
-    setData((prev) =>
-      prev.map((item) =>
-        item.id === draggedInfluencer.id ? { ...item, pipelineStatus: newStatus } : item
-      )
-    )
+    // Optimistic update + API call via the hook
+    const success = await updateStatus(draggedId, newStatus)
 
     const columnTitle = columns.find((col) => col.key === destinationKey)?.title
-    setShowSuccessMessage(`${draggedInfluencer.influencer} moved to ${columnTitle}`)
+    if (success) {
+      setShowSuccessMessage(`${draggedInfluencer.influencer} moved to ${columnTitle}`)
+    } else {
+      setShowSuccessMessage(`Failed to move ${draggedInfluencer.influencer}`)
+    }
     setTimeout(() => setShowSuccessMessage(null), 3000)
-    setHasUnsavedChanges(true)
-  }
-
-  // ── Save button handler ───────────────────────────────────────────────────
-  const handleSave = () => {
-    setHasUnsavedChanges(false)
-    setShowSuccessMessage("All changes saved!")
-    setTimeout(() => setShowSuccessMessage(null), 2000)
   }
 
   // ── Status update (from list view dropdown) ───────────────────────────────
-  const handleStatusUpdate = (id: number, newStatus: string) => {
-    setData((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, pipelineStatus: newStatus } : item))
-    )
+  const handleStatusUpdate = async (id: string, newStatus: string) => {
     const influencer = data.find((i) => i.id === id)
-    setShowSuccessMessage(`${influencer?.influencer} status updated to ${newStatus}`)
+    const success = await updateStatus(id, newStatus)
+
+    if (success) {
+      setShowSuccessMessage(`${influencer?.influencer} status updated to ${newStatus}`)
+    } else {
+      setShowSuccessMessage(`Failed to update ${influencer?.influencer}`)
+    }
     setTimeout(() => setShowSuccessMessage(null), 2000)
-    setHasUnsavedChanges(true)
   }
 
   // ── Open sidebar ──────────────────────────────────────────────────────────
-  const openSidebar = (inf: Influencer) => {
+  const openSidebar = (inf: PipelineInfluencer) => {
     setSelectedPartner(influencerToPartner(inf))
     setSidebarOpen(true)
   }
@@ -447,13 +364,12 @@ export default function PipelinePage() {
     )
     .filter((d) => (selectedColumnStatus ? d.pipelineStatus === selectedColumnStatus : true))
 
-  // Apply filter panel filters
   if (filters.influencer)
-    filteredData = filteredData.filter((p) => 
+    filteredData = filteredData.filter((p) =>
       p.influencer.toLowerCase().includes(filters.influencer.toLowerCase())
     )
   if (filters.handle)
-    filteredData = filteredData.filter((p) => 
+    filteredData = filteredData.filter((p) =>
       p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase())
     )
   if (filters.location !== "all")
@@ -474,30 +390,58 @@ export default function PipelinePage() {
     search !== "" ||
     selectedColumnStatus !== null
 
-  const activeInfluencer = activeId ? data.find((item) => item.id.toString() === activeId) : null
+  const activeInfluencer = activeId ? data.find((item) => item.id === activeId) : null
 
   const selectedColumnInfo = selectedColumnStatus
     ? columns.find((col) => col.status === selectedColumnStatus)
     : null
 
-  // ─── Render Card Content (Clean design matching Closed page) ──────────────
-  const renderCardContent = (inf: Influencer) => (
+  // ─── Card content ─────────────────────────────────────────────────────────
+  const renderCardContent = (inf: PipelineInfluencer) => (
     <div className="flex items-center gap-3">
-      {/* Avatar with first letter */}
-      <div className={`w-9 h-9 rounded-full ${getAvatarColor(inf.influencer)}/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-sm`}>
-        {inf.influencer.charAt(0)}
-      </div>
-      <div className="flex flex-col text-sm flex-1 min-w-0">
-        <span className="font-medium truncate">{inf.influencer}</span>
-        <span className="text-xs text-gray-500 truncate">
-          {inf.instagramHandle}
-        </span>
-        <span className="text-xs text-gray-400">
-          👥 {inf.followers}
-        </span>
+      {inf.profileImageUrl ? (
+        <img
+          src={inf.profileImageUrl}
+          alt={inf.influencer}
+          className="w-9 h-9 rounded-full object-cover"
+        />
+      ) : (
+        <div className="w-9 h-9 rounded-full bg-[#1FAE5B]/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-sm">
+          {inf.influencer.charAt(0)}
+        </div>
+      )}
+      <div className="flex flex-col text-sm">
+        <span className="font-medium">{inf.influencer}</span>
+        <span className="text-xs text-gray-500">{inf.instagramHandle}</span>
       </div>
     </div>
   )
+
+  // ─── Loading state ────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-12 text-gray-500">
+        <IconLoader2 size={32} className="animate-spin text-[#1FAE5B]" />
+        <span className="text-sm">Loading pipeline data...</span>
+      </div>
+    )
+  }
+
+  // ─── Error state ──────────────────────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-12">
+        <IconAlertCircle size={32} className="text-red-500" />
+        <span className="text-sm text-red-600">{error}</span>
+        <button
+          onClick={() => refetch()}
+          className="px-4 py-2 bg-[#1FAE5B] text-white rounded-lg text-sm hover:bg-[#178a48] transition"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -509,7 +453,7 @@ export default function PipelinePage() {
         </div>
       )}
 
-      {/* ── Influencer Profile Sidebar ── */}
+      {/* Influencer Profile Sidebar */}
       {sidebarOpen && selectedPartner && (
         <InfluencerProfileSidebar
           partner={selectedPartner}
@@ -519,13 +463,10 @@ export default function PipelinePage() {
         />
       )}
 
-      {/* ── SEARCH BAR + SAVE ── */}
+      {/* SEARCH BAR */}
       <div className="flex items-center gap-3">
         <div className="relative w-full max-w-md">
-          <IconSearch
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
+          <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -534,27 +475,22 @@ export default function PipelinePage() {
           />
         </div>
 
-        {/* Save button — appears only when there are unsaved changes */}
-        {hasUnsavedChanges && (
-          <button
-            onClick={handleSave}
-            className="ml-auto px-5 py-2 bg-green-50 text-[#1FAE5B] border border-[#1FAE5B] rounded-lg text-sm font-semibold hover:bg-green-100 transition whitespace-nowrap"
-          >
-            Save
-          </button>
-        )}
+        {/* Total count */}
+        <span className="text-sm text-gray-500 whitespace-nowrap">
+          {data.length} influencer{data.length !== 1 ? "s" : ""}
+        </span>
       </div>
 
-      {/* ── Follow-up counter + filter/view toggles ── */}
+      {/* Filter/view toggles */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           <div className="bg-gray-100 text-gray-700 px-4 py-1.5 rounded-full text-sm font-medium">
-            Follow up {followUpCount}
+            Follow up 0
           </div>
         </div>
 
         <div className="flex gap-2">
-          {/* Filter toggle button + dropdown */}
+          {/* Filter toggle */}
           <div className="relative">
             <button
               onClick={() => setShowFilterPanel(!showFilterPanel)}
@@ -566,13 +502,10 @@ export default function PipelinePage() {
               Filters
             </button>
 
-            {/* Floating filter dropdown - Influencer, Handle, Location, Niche */}
             {showFilterPanel && (
               <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[340px] p-5">
                 <div className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Filter by</div>
-
                 <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                  {/* Influencer Name */}
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-500">Influencer</label>
                     <input
@@ -583,8 +516,6 @@ export default function PipelinePage() {
                       className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]"
                     />
                   </div>
-
-                  {/* Handle */}
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-500">Handle</label>
                     <input
@@ -595,8 +526,6 @@ export default function PipelinePage() {
                       className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]"
                     />
                   </div>
-
-                  {/* Location */}
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-500">Location</label>
                     <select
@@ -605,13 +534,9 @@ export default function PipelinePage() {
                       className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"
                     >
                       <option value="all">All Locations</option>
-                      {LOCATIONS.map((l) => (
-                        <option key={l}>{l}</option>
-                      ))}
+                      {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
                     </select>
                   </div>
-
-                  {/* Niche */}
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-500">Niche</label>
                     <select
@@ -620,24 +545,14 @@ export default function PipelinePage() {
                       className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"
                     >
                       <option value="all">All Niches</option>
-                      {NICHES.map((n) => (
-                        <option key={n}>{n}</option>
-                      ))}
+                      {NICHES.map((n) => <option key={n}>{n}</option>)}
                     </select>
                   </div>
                 </div>
-
                 <div className="flex items-center justify-end gap-3 mt-5">
                   <button
                     className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition"
-                    onClick={() =>
-                      setFilters({
-                        influencer: "",
-                        handle: "",
-                        location: "all",
-                        niche: "all",
-                      })
-                    }
+                    onClick={() => setFilters({ influencer: "", handle: "", location: "all", niche: "all" })}
                   >
                     Clear all
                   </button>
@@ -659,8 +574,7 @@ export default function PipelinePage() {
                 view === "kanban" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"
               }`}
             >
-              <IconLayoutKanban size={16} />
-              Kanban
+              <IconLayoutKanban size={16} /> Kanban
             </button>
             <button
               onClick={() => { setView("list"); setSelectedColumnStatus(null) }}
@@ -668,14 +582,13 @@ export default function PipelinePage() {
                 view === "list" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"
               }`}
             >
-              <IconList size={16} />
-              List
+              <IconList size={16} /> List
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── KANBAN VIEW ── */}
+      {/* KANBAN VIEW */}
       {view === "kanban" && (
         <DndContext
           sensors={sensors}
@@ -683,13 +596,12 @@ export default function PipelinePage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4 overflow-x-auto">
+          <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
             <div className="flex gap-4 min-w-max">
               {columns.map((col) => {
                 const items = getItemsByColumn(col.key)
                 return (
                   <DroppableColumn key={col.key} id={col.key}>
-                    {/* Column header */}
                     <div
                       onClick={() => handleColumnClick(col)}
                       className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center cursor-pointer hover:opacity-90 transition-opacity`}
@@ -697,16 +609,14 @@ export default function PipelinePage() {
                       <span>{items.length} {col.title}</span>
                     </div>
 
-                    {/* Cards - Clean design matching Closed page */}
                     {items.map((inf) => (
-                      <DraggableCard key={inf.id} id={inf.id.toString()}>
+                      <DraggableCard key={inf.id} id={inf.id}>
                         <div onClick={() => openSidebar(inf)} className="cursor-pointer">
                           {renderCardContent(inf)}
                         </div>
                       </DraggableCard>
                     ))}
 
-                    {/* Drop zone */}
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center text-sm text-gray-500 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition">
                       <span>Drop Here</span>
                       <IconPlus size={16} />
@@ -720,24 +630,14 @@ export default function PipelinePage() {
           <DragOverlay>
             {activeInfluencer ? (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 shadow-lg rotate-2 w-[220px]">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-full ${getAvatarColor(activeInfluencer.influencer)}/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-sm`}>
-                    {activeInfluencer.influencer.charAt(0)}
-                  </div>
-                  <div className="flex flex-col text-sm">
-                    <span className="font-medium">{activeInfluencer.influencer}</span>
-                    <span className="text-xs text-gray-500">
-                      {activeInfluencer.instagramHandle}
-                    </span>
-                  </div>
-                </div>
+                {renderCardContent(activeInfluencer)}
               </div>
             ) : null}
           </DragOverlay>
         </DndContext>
       )}
 
-      {/* ── LIST VIEW ── */}
+      {/* LIST VIEW */}
       {view === "list" && (
         <div className="bg-white border rounded-xl overflow-hidden">
           {selectedColumnStatus && selectedColumnInfo && (
@@ -748,8 +648,7 @@ export default function PipelinePage() {
                 <span className="text-sm bg-white/20 px-2 py-1 rounded">{filteredData.length} influencers</span>
               </div>
               <button onClick={clearColumnFilter} className="text-white hover:bg-white/20 px-2 py-1 rounded transition flex items-center gap-1">
-                <IconX size={16} />
-                Clear filter
+                <IconX size={16} /> Clear filter
               </button>
             </div>
           )}
@@ -765,8 +664,6 @@ export default function PipelinePage() {
                   <th className="px-4 py-3 text-left">Engagement</th>
                   <th className="px-4 py-3 text-left">Niche</th>
                   <th className="px-4 py-3 text-left">Status</th>
-                  {/* Last Contact - Commented out, uncomment when needed */}
-                  {/* <th className="px-4 py-3 text-left">Last Contact</th> */}
                 </tr>
               </thead>
               <tbody>
@@ -785,9 +682,13 @@ export default function PipelinePage() {
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full ${getAvatarColor(inf.influencer)}/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-xs`}>
-                            {inf.influencer.charAt(0)}
-                          </div>
+                          {inf.profileImageUrl ? (
+                            <img src={inf.profileImageUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                          ) : (
+                            <div className={`w-8 h-8 rounded-full ${getAvatarColor(inf.influencer)}/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-xs`}>
+                              {inf.influencer.charAt(0)}
+                            </div>
+                          )}
                           <span className="font-medium">{inf.influencer}</span>
                         </div>
                       </td>
@@ -815,10 +716,6 @@ export default function PipelinePage() {
                           onStatusChange={(newStatus) => handleStatusUpdate(inf.id, newStatus)}
                         />
                       </td>
-                      {/* Last Contact - Commented out, uncomment when needed */}
-                      {/* <td className="px-4 py-3 text-gray-500 text-xs">
-                        {inf.lastContact ? new Date(inf.lastContact).toLocaleDateString() : "Never"}
-                      </td> */}
                     </tr>
                   ))
                 )}
