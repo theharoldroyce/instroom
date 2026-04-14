@@ -284,25 +284,29 @@ async function fetchInfluencerFromAPI(handle: string, platform: string): Promise
     const json = await res.json()
     const d = json.data || json.user || json
     if (!d || typeof d !== "object") return null
-    const followerCount = Number(d.follower_count || d.followers || 0)
-    const avgLikes = Number(d.avg_likes || d.average_likes || 0)
-    const avgComments = Number(d.avg_comments || d.average_comments || 0)
-    let engRate = 0
-    if (followerCount > 0) { const raw = ((avgLikes + avgComments) / followerCount) * 100; engRate = isNaN(raw) || !isFinite(raw) ? 0 : parseFloat(raw.toFixed(2)) }
-    const profileUrl = platform === "tiktok" ? `https://tiktok.com/@${clean}` : `https://instagram.com/${clean}`
-    return {
-      full_name: d.full_name || d.name || "",
-      first_name: (d.full_name || d.name || "").split(" ")[0] || "",
-      follower_count: String(followerCount),
-      engagement_rate: String(engRate),
-      email: d.business_email || d.email || "",
-      contact_info: d.business_email || d.email || "",
-      social_link: d.profile_url || profileUrl,
-      location: d.location || d.city || "",
-      niche: d.category || d.business_category || "",
-      gender: d.gender || "",
-      profile_image_url: d.profile_pic_url || d.profile_picture || d.avatar || d.profile_image || d.profile_pic || "",
-    }
+      const followerCount = Number(d.followers || d.follower_count || 0)
+      // API returns engagement_rate directly as a string e.g. "1.25"
+      const engRate = parseFloat(d.engagement_rate || "0") || 0
+      const profileUrl = platform === "tiktok" ? `https://tiktok.com/@${clean}` : `https://instagram.com/${clean}`
+      // Instagram returns "photo", TikTok returns "avatar"
+      const profilePic = d.photo || d.avatar || ""
+      const email = d.email && d.email !== "Not Available" ? d.email : ""
+      return {
+        full_name: d.full_name || d.name || "",
+        first_name: (d.full_name || d.name || "").split(" ")[0] || "",
+        follower_count: String(followerCount),
+        engagement_rate: String(engRate),
+        email: email,
+        contact_info: email,
+        social_link: profileUrl,
+        location: d.location || d.country || "",
+        niche: d.category || d.business_category || "",
+        gender: d.gender || "",
+        profile_image_url: profilePic,
+        avg_likes: d.avg_likes || d.avg_hearts || "",
+        avg_comments: d.avg_comments || "",
+        avg_views: d.avg_video_views || d.avg_views || "",
+      }
   } catch (err) { console.error(`API fetch error for ${handle}:`, err); return null }
 }
 
