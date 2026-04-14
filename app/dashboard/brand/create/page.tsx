@@ -153,7 +153,7 @@ export default function CreateBrandPage() {
                 disabled={loading || !formData.name}
                 className="flex-1 bg-[#1FAE5B] hover:bg-[#0F6B3E] text-white font-medium"
               >
-                {loading ? "Creating..." : "Create Brand"}
+                {loading ? "Creating..." : "Create Workspace"}
               </Button>
               <Button
                 type="button"

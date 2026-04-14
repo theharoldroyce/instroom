@@ -31,9 +31,8 @@ export async function PUT(
     const data = await req.json()
 
     // Separate fields by table
+    // NOTE: handle and platform are IMMUTABLE - they have a unique constraint and cannot be updated
     const influencerUpdateData: any = {}
-    if (data.handle !== undefined) influencerUpdateData.handle = data.handle
-    if (data.platform !== undefined) influencerUpdateData.platform = data.platform
     if (data.full_name !== undefined) influencerUpdateData.full_name = data.full_name
     if (data.email !== undefined) influencerUpdateData.email = data.email
     if (data.gender !== undefined) influencerUpdateData.gender = data.gender
@@ -109,9 +108,33 @@ export async function PUT(
     })
   } catch (error) {
     console.error("Error updating brand influencer:", error)
+    
+    // Detailed error logging to help debug
+    if (error instanceof Error) {
+      console.error(`Error message: ${error.message}`)
+      console.error(`Error stack: ${error.stack}`)
+    }
+
+    // Check for common Prisma errors
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const isConnectionError = errorMessage.includes("ECONNREFUSED") || errorMessage.includes("connection")
+    const isValidationError = errorMessage.includes("validation")
+    
+    let statusCode = 500
+    let detailedError = errorMessage
+
+    if (isConnectionError) {
+      statusCode = 503
+      detailedError = "Database connection error. Please try again."
+    }
+
     return NextResponse.json(
-      { error: "Failed to update influencer", details: error instanceof Error ? error.message : String(error) },
-      { status: 500 }
+      { 
+        error: "Failed to update influencer", 
+        details: detailedError,
+        type: isConnectionError ? "CONNECTION_ERROR" : "UPDATE_ERROR"
+      },
+      { status: statusCode }
     )
   }
 }

@@ -22,7 +22,7 @@ export async function canAddBrand(userId: string): Promise<{
       },
     })
 
-    // Freemium: allow 1 brand without subscription
+    // Freemium: allow 1 workspace without subscription
     if (!subscription || subscription.status !== "active") {
       return {
         allowed: brandCount < 1,
@@ -30,7 +30,7 @@ export async function canAddBrand(userId: string): Promise<{
         max: 1,
         message:
           brandCount >= 1
-            ? "Free plan allows 1 brand only. Subscribe to add more brands."
+            ? "Free plan allows 1 workspace only. Subscribe to add more workspaces."
             : undefined,
       }
     }
@@ -55,8 +55,8 @@ export async function canAddBrand(userId: string): Promise<{
       message:
         brandCount >= maxBrands
           ? subscription.plan.name === "solo"
-            ? "Solo plan only includes 1 brand. Upgrade to Team or Agency plan to add more."
-            : `You've reached your brand limit (${maxBrands}). Upgrade your plan or purchase extra brands.`
+            ? "Solo plan only includes 1 workspace. Upgrade to Team or Agency plan to add more."
+            : `You've reached your workspace limit (${maxBrands}). Upgrade your plan or purchase extra workspaces.`
           : undefined,
     }
   } catch (error) {
@@ -92,7 +92,7 @@ export async function canAddCollaborator(
         allowed: false,
         current: 0,
         max: 0,
-        message: "Brand not found or you don't have permission",
+        message: "Workspace not found or you don't have permission",
       }
     }
 
@@ -211,7 +211,7 @@ export async function canCreateCampaign(
         allowed: false,
         current: 0,
         max: 0,
-        message: "Brand not found or you don't have permission",
+        message: "Workspace not found or you don't have permission",
       }
     }
 
@@ -240,7 +240,7 @@ export async function canCreateCampaign(
       }
     }
 
-    // Count TOTAL active campaigns across ALL brands for this user
+    // Count TOTAL active campaigns across ALL workspaces for this user
     const activeCampaignCount = await prisma.campaign.count({
       where: {
         brand: {

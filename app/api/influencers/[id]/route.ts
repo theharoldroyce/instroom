@@ -75,10 +75,9 @@ export async function PUT(
     }
 
     // Build update object with only provided fields
+    // NOTE: handle and platform are immutable - they have a unique constraint
     const updateData: any = {}
     
-    if (data.handle !== undefined) updateData.handle = data.handle
-    if (data.platform !== undefined) updateData.platform = data.platform
     if (data.full_name !== undefined) updateData.full_name = data.full_name
     if (data.email !== undefined) updateData.email = data.email
     if (data.gender !== undefined) updateData.gender = data.gender

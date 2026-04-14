@@ -94,7 +94,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
                 <p><strong>Next Step: Choose Your Plan</strong></p>
                 <p>To get started, please select a plan that best fits your needs. We offer flexible pricing to support teams of all sizes:</p>
                 <ul>
-                  <li><strong>Solo</strong> - Perfect for individual creators and small brands</li>
+                  <li><strong>Solo</strong> - Perfect for individual creators and small workspaces</li>
                   <li><strong>Team</strong> - Collaborate with your team members</li>
                   <li><strong>Agency</strong> - Scale your influencer marketing operations</li>
                 </ul>

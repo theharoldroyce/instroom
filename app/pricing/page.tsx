@@ -9,13 +9,13 @@ import { prisma } from  "@/lib/prisma";
 
 function getPlanSummary(plan: any) {
   if (plan.name === "solo") {
-    return "1 brand (cannot add more), 0 seats (buy up to 5)";
+    return "1 workspace (cannot add more)";
   }
   if (plan.name === "team") {
-    return "3 brands included (can buy more), 10 seats (buy up to 25)";
+    return "3 workspaces included (can buy more)";
   }
   if (plan.name === "agency") {
-    return "10 brands included (can buy more), 30 seats (unlimited extra)";
+    return "10 workspaces included (can buy more)";
   }
   return "";
 }
@@ -23,13 +23,18 @@ function getPlanSummary(plan: any) {
 export default async function PricingPage({ searchParams }: { searchParams?: { cycle?: string } }) {
   const session = await getServerSession(authOptions);
   if (session?.user?.id) {
-    const userSub = await prisma.userSubscription.findFirst({
-      where: {
-        user_id: session.user.id,
-      },
-    });
-    if (userSub && userSub.status === "active") {
-      redirect("/dashboard");
+    try {
+      const userSub = await prisma.userSubscription.findFirst({
+        where: {
+          user_id: session.user.id,
+        },
+      });
+      if (userSub && userSub.status === "active") {
+        redirect("/dashboard");
+      }
+    } catch (error) {
+      // Gracefully handle database connection errors
+      console.error("Error checking subscription:", error);
     }
   }
   const allPlans = await getActivePlans();
@@ -147,7 +152,7 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
                     <li className="flex items-start gap-3">
                       <span className="text-[#1FAE5B] font-bold mt-0.5">✓</span>
                       <span className="text-[#1E1E1E]">
-                        <b className="font-semibold">{plan.included_brands} brands</b>
+                        <b className="font-semibold">{plan.included_brands} workspaces</b>
                         {plan.max_brands ? ` (up to ${plan.max_brands})` : ""}
                       </span>
                     </li>
@@ -167,18 +172,7 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
                         </span>
                       </li>
                     )}
-                    <li className="flex items-start gap-3">
-                      <span className={plan.can_use_api ? "text-[#1FAE5B] font-bold mt-0.5" : "text-[#ccc] font-bold mt-0.5"}>{plan.can_use_api ? "✓" : "✕"}</span>
-                      <span className={plan.can_use_api ? "text-[#1E1E1E]" : "text-[#999]"}>API Access</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className={plan.custom_branding ? "text-[#1FAE5B] font-bold mt-0.5" : "text-[#ccc] font-bold mt-0.5"}>{plan.custom_branding ? "✓" : "✕"}</span>
-                      <span className={plan.custom_branding ? "text-[#1E1E1E]" : "text-[#999]"}>Custom Branding</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className={plan.priority_support ? "text-[#1FAE5B] font-bold mt-0.5" : "text-[#ccc] font-bold mt-0.5"}>{plan.priority_support ? "✓" : "✕"}</span>
-                      <span className={plan.priority_support ? "text-[#1E1E1E]" : "text-[#999]"}>Priority Support</span>
-                    </li>
+
                   </ul>
 
                   <Link
