@@ -2,9 +2,8 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
-import Script from "next/script";
 import Image from "next/image";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 const planSummaries: Record<string, string> = {
   solo: "1 workspace (cannot add more)",
@@ -15,8 +14,8 @@ const planSummaries: Record<string, string> = {
 const plans = {
   solo: {
     display_name: "Solo",
-    price_monthly: 29,
-    price_yearly: 290,
+    price_monthly: 19,
+    price_yearly: 15,
     included_seats: 0,
     max_seats: 5,
     included_brands: 1,
@@ -29,8 +28,8 @@ const plans = {
   },
   team: {
     display_name: "Team",
-    price_monthly: 79,
-    price_yearly: 790,
+    price_monthly: 49,
+    price_yearly: 39,
     included_seats: 10,
     max_seats: 25,
     included_brands: 3,
@@ -57,26 +56,16 @@ const plans = {
   },
 };
 
-const paypalPlanIds: Record<string, Record<string, string>> = {
+const lemonSqueezyVariants: Record<string, Record<string, string>> = {
   solo: {
-    monthly: "P-63P34771UM342062VNHFUESI",
-    yearly: "P-6G718963T9494763UNHFV53Q", 
+    monthly: process.env.NEXT_PUBLIC_LEMON_SQUEEZY_SOLO_MONTHLY || "1532578",
+    yearly: process.env.NEXT_PUBLIC_LEMON_SQUEEZY_SOLO_YEARLY || "1532542",
   },
   team: {
-    monthly: "P-45T35817BC411342UNHFUHAA",
-    yearly: "P-00X123422A829354VNHFV6IY", 
-  },
-  agency: {
-    monthly: "P-6D9298534V9299530NHFUIMQ",
-    yearly: "P-7X6695370D0386640NHFV6VI", 
+    monthly: process.env.NEXT_PUBLIC_LEMON_SQUEEZY_TEAM_MONTHLY || "1532585",
+    yearly: process.env.NEXT_PUBLIC_LEMON_SQUEEZY_TEAM_YEARLY || "1532588",
   },
 };
-
-declare global {
-  interface Window {
-    paypal?: any;
-  }
-}
 
 function PaymentPageInner() {
   const searchParams = useSearchParams();
@@ -85,75 +74,52 @@ function PaymentPageInner() {
   const cycle = (searchParams.get("cycle") === "yearly") ? "yearly" : "monthly";
   const plan = plans[planKey] || plans.team;
   const [loading, setLoading] = useState(false);
-  const [paypalLoaded, setPaypalLoaded] = useState(false);
 
   const { data: session } = useSession();
   const userId = session?.user?.id;
 
   const price = cycle === "yearly" ? plan.price_yearly : plan.price_monthly;
 
-  const paypalRef = useRef<HTMLDivElement>(null);
-  const buttonRenderedRef = useRef(false);
+  const handleCheckout = async () => {
+    if (!userId) {
+      router.push("/login")
+      return
+    }
 
-  useEffect(() => {
-    // Check if PayPal is available either from loaded state or from previous load
-    const isPaypalReady = paypalLoaded || (typeof window !== "undefined" && !!window.paypal);
-    
-    if (!isPaypalReady || !paypalRef.current || buttonRenderedRef.current) return;
-
-    const planId = paypalPlanIds[planKey]?.[cycle];
-    if (!planId) return;
-
-    // Delay rendering to ensure DOM is fully stable
-    const timeoutId = setTimeout(() => {
-      if (!paypalRef.current || !window.paypal || !document.body.contains(paypalRef.current)) {
-        buttonRenderedRef.current = false;
-        return;
+    try {
+      setLoading(true)
+      
+      const variantId = lemonSqueezyVariants[planKey]?.[cycle]
+      if (!variantId) {
+        return
       }
 
-      try {
-        // Clear only if not already rendered
-        if (paypalRef.current.children.length === 0) {
-          const button = window.paypal.Buttons({
-            style: {
-              shape: 'pill',
-              color: 'silver',
-              layout: 'vertical',
-              label: 'subscribe'
-            },
-            createSubscription: function(data: any, actions: any) {
-              return actions.subscription.create({
-                plan_id: planId
-              });
-            },
-            onApprove: function(data: any, actions: any) {
-              fetch('/api/subscription/activate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  subscriptionID: data.subscriptionID,
-                  userId,
-                  plan: planKey,
-                  cycle,
-                }),
-              }).then(() => {
-                window.location.href = '/dashboard';
-              });
-            }
-          });
-          button.render(paypalRef.current);
-          buttonRenderedRef.current = true;
-        }
-      } catch (error) {
-        console.error("Error rendering PayPal button:", error);
-        buttonRenderedRef.current = false;
-      }
-    }, 50);
+      const response = await fetch("/api/lemon-squeezy/create-checkout-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          variantId,
+          planKey,
+          cycle,
+          userId,
+        }),
+      })
 
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [planKey, cycle, userId, paypalLoaded]);
+      const data = await response.json()
+
+      if (!response.ok) {
+        return
+      }
+
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (error) {
+      void error
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="relative min-h-screen bg-[#F7F9F8] text-[#1E1E1E] overflow-hidden">
@@ -175,7 +141,6 @@ function PaymentPageInner() {
       
       <div className="relative min-h-screen flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-4xl bg-white border border-[#0F6B3E]/15 rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden">
-        {/* Plan Summary */}
         <div className="md:w-1/2 p-8 flex flex-col justify-center bg-gradient-to-br from-[#1FAE5B]/5 to-[#0F6B3E]/5 border-b md:border-b-0 md:border-r-0">
           <h2 className="text-2xl font-bold mb-1 text-center md:text-left text-[#1E1E1E]">Your Plan</h2>
           <h3 className="text-lg font-semibold mb-1 text-[#1E1E1E]">{plan.display_name}</h3>
@@ -200,7 +165,6 @@ function PaymentPageInner() {
                 <b>Active campaigns:</b> {plan.max_campaigns}
               </li>
             )}
-
           </ul>
           <button
             className="w-full text-sm text-[#0F6B3E] hover:underline mt-auto"
@@ -210,22 +174,24 @@ function PaymentPageInner() {
             &larr; Choose a different plan
           </button>
         </div>
-        {/* Divider */}
         <div className="hidden md:flex items-center">
           <div className="h-96 w-1 bg-gradient-to-b from-[#1FAE5B]/40 via-[#1E1E1E]/10 to-[#0F6B3E]/40 rounded-full mx-6" />
         </div>
-        {/* Payment Info */}
         <div className="md:w-1/2 p-8 flex flex-col justify-center">
           <h2 className="text-2xl font-bold mb-2 text-center md:text-left text-[#1E1E1E]">Payment Information</h2>
           <p className="text-[#666666] text-center md:text-left mb-8">
-            Click the PayPal button below to complete your subscription.
+            Click the button below to securely complete your subscription.
           </p>
-          <Script
-            src={`https://www.paypal.com/sdk/js?client-id=${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID}&vault=true&intent=subscription`}
-            strategy="afterInteractive"
-            onLoad={() => setPaypalLoaded(true)}
-          />
-          <div ref={paypalRef}></div>
+          <button
+            onClick={handleCheckout}
+            disabled={loading}
+            className="w-full rounded-lg py-3 px-6 text-center text-base font-semibold transition-all duration-150 bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] text-white shadow-lg shadow-[#1FAE5B]/25 hover:shadow-xl hover:shadow-[#1FAE5B]/35 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? "Processing..." : "Proceed to Checkout"}
+          </button>
+          <p className="text-xs text-[#999999] text-center mt-4">
+            Powered by Lemon Squeezy
+          </p>
         </div>
       </div>
       </div>
