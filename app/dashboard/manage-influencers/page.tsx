@@ -16,6 +16,7 @@ function InfluencersContent({ brandId: initialBrandId }: { brandId?: string }) {
   const [influencers, setInfluencers] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [createdInfluencers, setCreatedInfluencers] = useState<Set<string>>(new Set())
+  const [databaseInfluencerIds, setDatabaseInfluencerIds] = useState<Set<string>>(new Set())
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout>(undefined)
 
@@ -73,16 +74,21 @@ function InfluencersContent({ brandId: initialBrandId }: { brandId?: string }) {
                 tier: "Bronze",
                 community_status: "Pending",
                 custom: {},
+                _isFromDatabase: true,
               }
             })
           setInfluencers(transformed)
+          // Track which influencer IDs are from the database
+          setDatabaseInfluencerIds(new Set(transformed.map((r: any) => r.id)))
         } else {
           // If endpoint doesn't exist or fails, just use empty array
           setInfluencers([])
+          setDatabaseInfluencerIds(new Set())
         }
       } catch (error) {
         console.error("Failed to fetch influencers:", error)
         setInfluencers([])
+        setDatabaseInfluencerIds(new Set())
       } finally {
         setIsLoading(false)
       }
@@ -98,10 +104,11 @@ function InfluencersContent({ brandId: initialBrandId }: { brandId?: string }) {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i]
         
-        // Only require handle and platform to create
-        const hasRequiredFields = row.handle && row.handle !== "" && row.handle !== "@" && row.platform
+        // Only require handle, platform, and first name to create
+        const hasRequiredFields = row.handle && row.handle !== "" && row.handle !== "@" && row.platform && row.first_name && row.first_name !== ""
         
-        if (!hasRequiredFields) continue
+        // Skip if already in database (don't recreate existing influencers)
+        if (!hasRequiredFields || databaseInfluencerIds.has(row.id)) continue
 
         const rowKey = `${row.handle}@${row.platform}`
         
@@ -112,9 +119,9 @@ function InfluencersContent({ brandId: initialBrandId }: { brandId?: string }) {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                handle: row.handle,
+                handle: row.handle.startsWith("@") ? row.handle : `@${row.handle}`,
                 platform: row.platform,
-                full_name: row.full_name || null,
+                full_name: row.first_name || row.full_name || null,
                 email: row.email || null,
                 gender: row.gender || null,
                 niche: row.niche || null,
@@ -139,6 +146,7 @@ function InfluencersContent({ brandId: initialBrandId }: { brandId?: string }) {
               rows[i] = row
               
               setCreatedInfluencers(prev => new Set([...prev, rowKey]))
+              setDatabaseInfluencerIds(prev => new Set([...prev, createdInfluencer.id]))
               toast.success(`"${row.handle}" created successfully`)
             } else if (response.status === 409) {
               setCreatedInfluencers(prev => new Set([...prev, rowKey]))

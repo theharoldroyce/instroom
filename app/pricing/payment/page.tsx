@@ -7,9 +7,9 @@ import Image from "next/image";
 import { useEffect, useRef } from "react";
 
 const planSummaries: Record<string, string> = {
-  solo: "1 brand (cannot add more), 0 seats (buy up to 5)",
-  team: "3 brands included (can buy more), 10 seats (buy up to 25)",
-  agency: "10 brands included (can buy more), 30 seats (unlimited extra)",
+  solo: "1 workspace (cannot add more)",
+  team: "3 workspaces included (can buy more)",
+  agency: "10 workspaces included (can buy more)",
 };
 
 const plans = {
@@ -93,54 +93,60 @@ function PaymentPageInner() {
   const price = cycle === "yearly" ? plan.price_yearly : plan.price_monthly;
 
   const paypalRef = useRef<HTMLDivElement>(null);
+  const buttonRenderedRef = useRef(false);
 
   useEffect(() => {
     // Check if PayPal is available either from loaded state or from previous load
     const isPaypalReady = paypalLoaded || (typeof window !== "undefined" && !!window.paypal);
     
-    if (!isPaypalReady || !paypalRef.current) return;
+    if (!isPaypalReady || !paypalRef.current || buttonRenderedRef.current) return;
 
     const planId = paypalPlanIds[planKey]?.[cycle];
     if (!planId) return;
 
-    // Clear previous button
-    paypalRef.current.innerHTML = "";
-
-    // Delay rendering to ensure DOM is fully cleared
+    // Delay rendering to ensure DOM is fully stable
     const timeoutId = setTimeout(() => {
-      if (!paypalRef.current || !window.paypal) return;
+      if (!paypalRef.current || !window.paypal || !document.body.contains(paypalRef.current)) {
+        buttonRenderedRef.current = false;
+        return;
+      }
 
       try {
-        const button = window.paypal.Buttons({
-          style: {
-            shape: 'pill',
-            color: 'silver',
-            layout: 'vertical',
-            label: 'subscribe'
-          },
-          createSubscription: function(data: any, actions: any) {
-            return actions.subscription.create({
-              plan_id: planId
-            });
-          },
-          onApprove: function(data: any, actions: any) {
-            fetch('/api/subscription/activate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                subscriptionID: data.subscriptionID,
-                userId,
-                plan: planKey,
-                cycle,
-              }),
-            }).then(() => {
-              window.location.href = '/dashboard';
-            });
-          }
-        });
-        button.render(paypalRef.current);
+        // Clear only if not already rendered
+        if (paypalRef.current.children.length === 0) {
+          const button = window.paypal.Buttons({
+            style: {
+              shape: 'pill',
+              color: 'silver',
+              layout: 'vertical',
+              label: 'subscribe'
+            },
+            createSubscription: function(data: any, actions: any) {
+              return actions.subscription.create({
+                plan_id: planId
+              });
+            },
+            onApprove: function(data: any, actions: any) {
+              fetch('/api/subscription/activate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  subscriptionID: data.subscriptionID,
+                  userId,
+                  plan: planKey,
+                  cycle,
+                }),
+              }).then(() => {
+                window.location.href = '/dashboard';
+              });
+            }
+          });
+          button.render(paypalRef.current);
+          buttonRenderedRef.current = true;
+        }
       } catch (error) {
         console.error("Error rendering PayPal button:", error);
+        buttonRenderedRef.current = false;
       }
     }, 50);
 
@@ -171,21 +177,17 @@ function PaymentPageInner() {
       <div className="w-full max-w-4xl bg-white border border-[#0F6B3E]/15 rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden">
         {/* Plan Summary */}
         <div className="md:w-1/2 p-8 flex flex-col justify-center bg-gradient-to-br from-[#1FAE5B]/5 to-[#0F6B3E]/5 border-b md:border-b-0 md:border-r-0">
-          <h2 className="text-2xl font-bold mb-2 text-center md:text-left text-[#1E1E1E]">Your Plan</h2>
+          <h2 className="text-2xl font-bold mb-1 text-center md:text-left text-[#1E1E1E]">Your Plan</h2>
           <h3 className="text-lg font-semibold mb-1 text-[#1E1E1E]">{plan.display_name}</h3>
           <div className="text-3xl font-bold mb-2 text-[#1E1E1E]">
             {cycle === "yearly"
               ? `$${plan.price_yearly}/yr`
               : `$${plan.price_monthly}/mo`}
           </div>
-          <p className="mb-2 text-xs text-[#0F6B3E] font-semibold">{planSummaries[planKey]}</p>
-          <ul className="space-y-2 text-sm text-[#1E1E1E] mb-6">
+          <p className="mb-6 text-xs text-[#0F6B3E] font-semibold">{planSummaries[planKey]}</p>
+          <ul className="space-y-3 text-sm text-[#1E1E1E] mb-6">
             <li>
-              <b>Seats:</b> {plan.included_seats}
-              {plan.max_seats ? ` (up to ${plan.max_seats})` : ""}
-            </li>
-            <li>
-              <b>Brands:</b> {plan.included_brands}
+              <b>Workspaces:</b> {plan.included_brands}
               {plan.max_brands ? ` (up to ${plan.max_brands})` : ""}
             </li>
             {plan.max_influencers && (
@@ -198,15 +200,7 @@ function PaymentPageInner() {
                 <b>Active campaigns:</b> {plan.max_campaigns}
               </li>
             )}
-            <li>
-              <b>API Access:</b> {plan.can_use_api ? "Yes" : "No"}
-            </li>
-            <li>
-              <b>Custom Branding:</b> {plan.custom_branding ? "Yes" : "No"}
-            </li>
-            <li>
-              <b>Priority Support:</b> {plan.priority_support ? "Yes" : "No"}
-            </li>
+
           </ul>
           <button
             className="w-full text-sm text-[#0F6B3E] hover:underline mt-auto"

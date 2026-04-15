@@ -225,7 +225,7 @@ export function BrandSelector() {
   }, [buyBrandsModal.isOpen, buyBrandsModal.pricePerBrand, paypalLoaded])
 
   if (!mounted || loading) {
-    return <div className="text-sm text-muted-foreground">Loading brands...</div>
+    return <div className="text-sm text-muted-foreground">Loading workspaces...</div>
   }
 
   if (brands.length === 0) {
@@ -237,7 +237,7 @@ export function BrandSelector() {
         className="gap-2"
       >
         <Plus className="h-4 w-4" />
-        Create Brand
+        Create Workspace
       </Button>
     )
   }
@@ -277,7 +277,7 @@ export function BrandSelector() {
             <SelectItem value="create-new">
               <div className="flex items-center gap-2 text-primary">
                 <Plus className="h-4 w-4" />
-                Create New Brand
+                Create New Workspace
               </div>
             </SelectItem>
           </SelectContent>
@@ -291,10 +291,10 @@ export function BrandSelector() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Zap className="h-5 w-5 text-[#1FAE5B]" />
-                Buy Extra Brands
+                Buy Extra Workspaces
               </CardTitle>
               <CardDescription>
-                You've reached your brand limit. Purchase extra brands to continue.
+                You've reached your workspace limit. Purchase extra workspaces to continue.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -310,7 +310,7 @@ export function BrandSelector() {
                 <p className="text-sm text-muted-foreground">Current Subscription</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 p-3 rounded">
-                    <p className="text-xs text-muted-foreground">Extra Brands Purchased</p>
+                    <p className="text-xs text-muted-foreground">Extra Workspaces Purchased</p>
                     <p className="text-2xl font-bold text-gray-900">{buyBrandsModal.currentExtraBrands}</p>
                   </div>
                   <div className="bg-gray-50 p-3 rounded">
@@ -322,7 +322,7 @@ export function BrandSelector() {
 
               {/* Quantity Selector */}
               <div className="space-y-3">
-                <Label htmlFor="brands">Number of Brands</Label>
+                <Label htmlFor="brands">Number of Workspaces</Label>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -352,14 +352,14 @@ export function BrandSelector() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  You can purchase up to {buyBrandsModal.maxBrandsAvailable} more brand(s)
+                  You can purchase up to {buyBrandsModal.maxBrandsAvailable} more workspace(s)
                 </p>
               </div>
 
               {/* Price Summary */}
               <div className="border-t pt-4 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Price per brand:</span>
+                  <span className="text-muted-foreground">Price per workspace:</span>
                   <span className="font-medium">${buyBrandsModal.pricePerBrand.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
