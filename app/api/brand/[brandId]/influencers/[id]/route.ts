@@ -78,10 +78,10 @@ export async function PUT(
     // Execute both updates in parallel to reduce connection pool usage
     const updates: Promise<any>[] = []
     if (Object.keys(inf).length > 0) {
-      updates.push(prisma.influencer.update({ where: { id }, data: inf }))
+      updates.push(prisma.influencer.update({ where: { id: influencerId }, data: inf }))
     }
     if (Object.keys(bi).length > 0) {
-      updates.push(prisma.brandInfluencer.update({ where: { brand_id_influencer_id: { brand_id: brandId, influencer_id: id } }, data: bi }))
+      updates.push(prisma.brandInfluencer.update({ where: { brand_id_influencer_id: { brand_id: brandId, influencer_id: influencerId } }, data: bi }))
     }
     
     if (updates.length > 0) {
