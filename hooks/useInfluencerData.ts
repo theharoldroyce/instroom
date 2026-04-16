@@ -45,17 +45,28 @@ export function useInfluencerData(brandId: string | null): UseInfluencerDataRetu
       const data = await res.json()
 
       // API returns { influencers: BrandInfluencer[] with nested influencer, customFields: [] }
-      const apiRows: InfluencerRow[] = (data.influencers ?? [])
+      // Sort by created_at ascending so oldest entries stay at the top
+      const sortedInfluencers = [...(data.influencers ?? [])].sort((a: any, b: any) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0
+        return dateA - dateB
+      })
+
+      const apiRows: InfluencerRow[] = sortedInfluencers
         .filter((item: any) => item.influencer?.id)
         .map((item: any) => {
           const inf = item.influencer ?? {}
+          // Derive first_name from full_name stored in DB
+          const fullName: string = inf.full_name ?? ""
+          const firstName = fullName ? fullName.split(" ")[0] : ""
+
           return {
             // Core identity — use BrandInfluencer.id as the row ID so updates
             // hit the right record. The actual Influencer.id is inf.id.
             id: inf.id,
             handle: (inf.handle ?? "").replace(/^@/, ""), // strip @ — stored inconsistently in older records
             platform: inf.platform ?? "instagram",
-            full_name: inf.full_name ?? "",
+            full_name: fullName,
             email: inf.email ?? "",
             follower_count: String(inf.follower_count ?? ""),
             engagement_rate: String(inf.engagement_rate ?? ""),
@@ -84,7 +95,9 @@ export function useInfluencerData(brandId: string | null): UseInfluencerDataRetu
               : "",
 
             // Derived / UI-only fields
-            first_name: inf.full_name ? inf.full_name.split(" ")[0] : "",
+            // Always derive first_name fresh from full_name so edits to first_name
+            // in the sidebar are reflected correctly after a refetch
+            first_name: firstName,
             contact_info: inf.email ?? "",
             decline_reason: "",
             tier: "Bronze",
