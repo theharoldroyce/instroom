@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertCircle, CheckCircle, Loader2 } from "lucide-react"
 
-export default function AcceptInvitationPage() {
+function AcceptInvitationContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
@@ -196,5 +196,19 @@ export default function AcceptInvitationPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function AcceptInvitationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 p-4">
+          <Loader2 className="h-12 w-12 text-[#1FAE5B] animate-spin" />
+        </div>
+      }
+    >
+      <AcceptInvitationContent />
+    </Suspense>
   )
 }
