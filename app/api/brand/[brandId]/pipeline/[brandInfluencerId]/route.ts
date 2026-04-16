@@ -1,4 +1,4 @@
-// app/api/brands/[brandId]/pipeline/[brandInfluencerId]/route.ts
+// app/api/brand/[brandId]/pipeline/[brandInfluencerId]/route.ts
 // PATCH — updates contact_status + stage on a BrandInfluencer record.
 // Called by drag-and-drop and the status dropdown in the pipeline view.
 
@@ -93,7 +93,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, data: updated })
   } catch (error: any) {
-    console.error("PATCH /api/brands/[brandId]/pipeline/[brandInfluencerId] error:", error)
+    console.error("PATCH /api/brand/[brandId]/pipeline/[brandInfluencerId] error:", error)
     if (error.code === "P2025") {
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }

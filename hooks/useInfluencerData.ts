@@ -1,6 +1,7 @@
 // ─── hooks/useInfluencerData.ts ──────────────────────────────────────────────
 // Fetches influencer rows + custom field definitions from the API.
 // Returns data shaped exactly for the TableSheet component.
+// NO localStorage — all state lives in React and is persisted to the DB.
 
 "use client"
 
@@ -43,44 +44,61 @@ export function useInfluencerData(brandId: string | null): UseInfluencerDataRetu
 
       const data = await res.json()
 
-      // The API returns { influencers: [...], customFields: [...] }
-      const apiRows: InfluencerRow[] = (data.influencers ?? []).map(
-        (item: any) => ({
-          id: item.id,
-          handle: item.handle ?? "",
-          platform: item.platform ?? "instagram",
-          full_name: item.full_name ?? "",
-          email: item.email ?? "",
-          follower_count: item.follower_count ?? "",
-          engagement_rate: item.engagement_rate ?? "",
-          niche: item.niche ?? "",
-          contact_status: item.contact_status ?? "not_contacted",
-          stage: item.stage ?? "1",
-          agreed_rate: item.agreed_rate ?? "",
-          notes: item.notes ?? "",
-          custom: item.custom ?? {},
+      // API returns { influencers: BrandInfluencer[] with nested influencer, customFields: [] }
+      const apiRows: InfluencerRow[] = (data.influencers ?? [])
+        .filter((item: any) => item.influencer?.id)
+        .map((item: any) => {
+          const inf = item.influencer ?? {}
+          return {
+            // Core identity — use BrandInfluencer.id as the row ID so updates
+            // hit the right record. The actual Influencer.id is inf.id.
+            id: inf.id,
+            handle: (inf.handle ?? "").replace(/^@/, ""), // strip @ — stored inconsistently in older records
+            platform: inf.platform ?? "instagram",
+            full_name: inf.full_name ?? "",
+            email: inf.email ?? "",
+            follower_count: String(inf.follower_count ?? ""),
+            engagement_rate: String(inf.engagement_rate ?? ""),
+            niche: inf.niche ?? "",
+            gender: inf.gender ?? "",
+            location: inf.location ?? "",
+            social_link: inf.social_link ?? "",
+            bio: inf.bio ?? "",
+            profile_image_url: inf.profile_image_url ?? "",
+            avg_likes: inf.avg_likes ?? "",
+            avg_comments: inf.avg_comments ?? "",
+            avg_views: inf.avg_views ?? "",
 
-          // Extended fields
-          gender: item.gender ?? "",
-          location: item.location ?? "",
-          social_link: item.social_link ?? "",
-          first_name: item.full_name
-            ? item.full_name.split(" ")[0]
-            : "",
-          contact_info: item.email ?? "",
-          approval_status: item.approval_status ?? "Pending",
-          transferred_date: item.transferred_date ?? "",
-          approval_notes: item.approval_notes ?? "",
-          decline_reason: "",
-          tier: "Bronze",
-          community_status: "Pending",
-          bio: item.bio ?? "",
-          profile_image_url: item.profile_image_url ?? "",
-          avg_likes: item.avg_likes ?? "",
-          avg_comments: item.avg_comments ?? "",
-          avg_views: item.avg_views ?? "",
+            // BrandInfluencer relationship fields
+            contact_status: item.contact_status ?? "not_contacted",
+            stage: String(item.stage ?? "1"),
+            agreed_rate: item.agreed_rate ?? "",
+            notes: item.notes ?? "",
+            approval_status: (item.approval_status ?? "Pending") as
+              | "Approved"
+              | "Declined"
+              | "Pending",
+            approval_notes: item.approval_notes ?? "",
+            transferred_date: item.transferred_date
+              ? new Date(item.transferred_date).toISOString().split("T")[0]
+              : "",
+
+            // Derived / UI-only fields
+            first_name: inf.full_name ? inf.full_name.split(" ")[0] : "",
+            contact_info: inf.email ?? "",
+            decline_reason: "",
+            tier: "Bronze",
+            community_status: "Pending",
+
+            // Custom field values — keyed by field_key
+            custom: Object.fromEntries(
+              (item.customValues ?? []).map((cv: any) => [
+                cv.custom_field?.field_key ?? cv.custom_field_id,
+                cv.value ?? "",
+              ])
+            ),
+          }
         })
-      )
 
       const apiCustomCols: CustomColumn[] = (data.customFields ?? []).map(
         (cf: any) => ({
@@ -89,7 +107,10 @@ export function useInfluencerData(brandId: string | null): UseInfluencerDataRetu
           field_name: cf.field_name,
           field_type: cf.field_type ?? "text",
           field_options: cf.field_options ?? [],
-          assignedGroup: cf.assignedGroup ?? "Influencer Details",
+          assignedGroup:
+            cf.assignedGroup ??
+            cf.assigned_group ??
+            "Influencer Details",
           description: cf.description,
         })
       )

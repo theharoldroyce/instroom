@@ -1,27 +1,25 @@
 // ─── hooks/usePipelineData.ts ────────────────────────────────────────────────
-// Custom hook that fetches pipeline data from the API and provides
-// mutation helpers for status updates (drag-and-drop, dropdown changes).
 
 import { useState, useEffect, useCallback } from "react"
 
 export interface PipelineInfluencer {
-  id: string                    // BrandInfluencer ID
+  id: string
   influencerId: string
   campaignId: string | null
   campaignName: string | null
-  influencer: string            // Display name
-  instagramHandle: string       // "@handle"
+  influencer: string
+  instagramHandle: string
   handle: string
-  platform: string              // "Instagram", "TikTok", etc.
-  followers: string             // "45.0K"
+  platform: string
+  followers: string
   followerCount: number
-  engagementRate: string        // "3.2%"
+  engagementRate: string
   niche: string
   location: string
   email: string
   profileImageUrl: string | null
   bio: string
-  pipelineStatus: string        // Derived kanban column status
+  pipelineStatus: string
   contactStatus: string
   stage: number
   orderStatus: string | null
@@ -69,7 +67,8 @@ export function usePipelineData(brandId: string | undefined): UsePipelineDataRet
       setIsLoading(true)
       setError(null)
 
-      const res = await fetch(`/api/brands/${brandId}/pipeline`)
+      // ← singular "brand" to match your route folder
+      const res = await fetch(`/api/brand/${brandId}/pipeline`)
 
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}))
@@ -94,7 +93,6 @@ export function usePipelineData(brandId: string | undefined): UsePipelineDataRet
     async (brandInfluencerId: string, newStatus: string): Promise<boolean> => {
       if (!brandId) return false
 
-      // Optimistic update
       setData((prev) =>
         prev.map((item) =>
           item.id === brandInfluencerId
@@ -104,8 +102,9 @@ export function usePipelineData(brandId: string | undefined): UsePipelineDataRet
       )
 
       try {
+        // ← singular "brand" to match your route folder
         const res = await fetch(
-          `/api/brands/${brandId}/pipeline/${brandInfluencerId}`,
+          `/api/brand/${brandId}/pipeline/${brandInfluencerId}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -114,7 +113,6 @@ export function usePipelineData(brandId: string | undefined): UsePipelineDataRet
         )
 
         if (!res.ok) {
-          // Revert on failure
           await fetchData()
           const errBody = await res.json().catch(() => ({}))
           throw new Error(errBody.error || "Update failed")
