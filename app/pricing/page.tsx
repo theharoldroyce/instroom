@@ -3,9 +3,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { getActivePlans } from "@/prisma/plans";
 import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from  "@/lib/prisma";
+import { PricingPlanButton } from "@/components/pricing-plan-button";
 
 function getPlanSummary(plan: any) {
   if (plan.name === "solo") {
@@ -20,23 +20,36 @@ function getPlanSummary(plan: any) {
   return "";
 }
 
+const planHierarchy: { [key: string]: number } = {
+  solo: 1,
+  team: 2,
+  agency: 3,
+};
+
 export default async function PricingPage({ searchParams }: { searchParams?: { cycle?: string } }) {
   const session = await getServerSession(authOptions);
+  let currentPlanName: string | null = null;
+  let userSubscription: any = null;
+
   if (session?.user?.id) {
     try {
-      const userSub = await prisma.userSubscription.findFirst({
+      userSubscription = await prisma.userSubscription.findFirst({
         where: {
           user_id: session.user.id,
         },
+        include: {
+          plan: true,
+        },
       });
-      if (userSub && userSub.status === "active") {
-        redirect("/dashboard");
+      
+      if (userSubscription) {
+        currentPlanName = userSubscription.plan.name;
       }
     } catch (error) {
-      // Gracefully handle database connection errors
-      console.error("Error checking subscription:", error);
+      // Silently ignore database errors and show pricing page
     }
   }
+
   const allPlans = await getActivePlans();
   const plans = allPlans.filter((plan: any) => plan.name !== "agency");
   const params = await searchParams;
@@ -175,16 +188,18 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
 
                   </ul>
 
-                  <Link
-                    href={`/pricing/payment?plan=${plan.name}&cycle=${cycle}`}
-                    className={`w-full block rounded-lg py-3 text-center text-base font-semibold transition-all duration-150 ${
-                      idx === 1
-                        ? "bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] text-white shadow-lg shadow-[#1FAE5B]/25 hover:shadow-xl hover:shadow-[#1FAE5B]/35"
-                        : "border-2 border-[#0F6B3E]/30 bg-white text-[#1E1E1E] hover:border-[#1FAE5B]/60 hover:bg-[#1FAE5B]/5"
-                    }`}
-                  >
-                    Get Started
-                  </Link>
+                  <PricingPlanButton
+                    planName={plan.name}
+                    cycle={cycle}
+                    isCurrentPlan={currentPlanName === plan.name}
+                    isPopular={idx === 1}
+                    currentPlanName={currentPlanName}
+                    isPlanHigher={
+                      currentPlanName
+                        ? (planHierarchy[plan.name] || 0) > (planHierarchy[currentPlanName] || 0)
+                        : false
+                    }
+                  />
                 </div>
               </div>
             );

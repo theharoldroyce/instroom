@@ -102,6 +102,15 @@ export async function POST(req: Request) {
         where: { user_id: userId },
       })
 
+      // Calculate subscription period end date based on cycle
+      // Lemon Squeezy typically provides renews_at date, but we calculate from creation
+      const currentPeriodEnd = new Date()
+      if (cycle === "monthly") {
+        currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1)
+      } else if (cycle === "yearly") {
+        currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 1)
+      }
+
       let subscription
       if (existingSubscription) {
         subscription = await prisma.userSubscription.update({
@@ -111,6 +120,8 @@ export async function POST(req: Request) {
             status: "active",
             billing_cycle: cycle as "monthly" | "yearly",
             payment_subscription_id: jsonBody.data.attributes.subscription_id?.toString(),
+            current_period_start: new Date(),
+            current_period_end: currentPeriodEnd,
           },
         })
       } else {
@@ -122,6 +133,8 @@ export async function POST(req: Request) {
             billing_cycle: cycle as "monthly" | "yearly",
             extra_brands: 0,
             payment_subscription_id: jsonBody.data.attributes.subscription_id?.toString(),
+            current_period_start: new Date(),
+            current_period_end: currentPeriodEnd,
           },
         })
       }
@@ -143,7 +156,10 @@ export async function POST(req: Request) {
     if (eventName === "subscription:cancelled" || eventName === "subscription_cancelled") {
       await prisma.userSubscription.updateMany({
         where: { user_id: userId },
-        data: { status: "cancelled" },
+        data: { 
+          status: "cancelled",
+          ended_at: new Date(),
+        },
       })
       return NextResponse.json({ success: true })
     }
@@ -151,7 +167,10 @@ export async function POST(req: Request) {
     if (eventName === "subscription:paused" || eventName === "subscription_paused") {
       await prisma.userSubscription.updateMany({
         where: { user_id: userId },
-        data: { status: "paused" },
+        data: { 
+          status: "paused",
+          ended_at: new Date(),
+        },
       })
       return NextResponse.json({ success: true })
     }

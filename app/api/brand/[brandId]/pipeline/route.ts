@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { userHasActiveSubscription } from "@/lib/subscription-limits"
 
 function derivePipelineStatus(
   contactStatus: string,
@@ -64,8 +65,16 @@ export async function GET(
       return NextResponse.json({ error: "Brand not found or access denied" }, { status: 403 })
     }
 
-    // Fetch ALL Approved influencers — including those marked not_interested
-    // (they stay Approved so they remain visible in the pipeline's NI column)
+    // Check if brand owner has active subscription
+    const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
+    if (!ownerHasActiveSubscription) {
+      return NextResponse.json(
+        { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
+        { status: 403 }
+      )
+    }
+
+    // Only fetch Approved influencers for the pipeline
     const brandInfluencers = await prisma.brandInfluencer.findMany({
       where: {
         brand_id: brandId,

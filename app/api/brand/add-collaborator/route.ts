@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { canAddCollaborator } from "@/lib/subscription-limits"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { sendBrandInvitationEmail } from "@/lib/email"
 import crypto from "crypto"
 
 export async function POST(req: Request) {
@@ -66,8 +67,8 @@ export async function POST(req: Request) {
         },
       })
 
-      // Log activity
-      await prisma.activityLog.create({
+      // Log activity in parallel with member creation (fire-and-forget)
+      prisma.activityLog.create({
         data: {
           brand_id: brandId,
           user_id: session.user.id,
@@ -76,6 +77,8 @@ export async function POST(req: Request) {
           entity_id: member.id,
           details: `Added ${existingUser.email} as ${role}`,
         },
+      }).catch((err) => {
+        console.error("Failed to log brand member activity:", err)
       })
 
       return NextResponse.json({
@@ -100,8 +103,8 @@ export async function POST(req: Request) {
         },
       })
 
-      // Log activity
-      await prisma.activityLog.create({
+      // Log activity in parallel with invitation (fire-and-forget)
+      prisma.activityLog.create({
         data: {
           brand_id: brandId,
           user_id: session.user.id,
@@ -110,9 +113,40 @@ export async function POST(req: Request) {
           entity_id: invitation.id,
           details: `Sent invitation to ${email}`,
         },
+      }).catch((err) => {
+        console.error("Failed to log brand invitation activity:", err)
       })
 
-      // TODO: Send invitation email here
+      // Send invitation email
+      try {
+        // Get brand name
+        const brand = await prisma.brand.findUnique({
+          where: { id: brandId },
+          select: { name: true },
+        })
+
+        if (!brand) {
+          console.error("Brand not found for invitation email")
+        } else {
+          // Build invitation link
+          const invitationLink = `${process.env.NEXTAUTH_URL}/auth/accept-invitation?token=${token}`
+          
+          console.log("📧 Sending invitation email to:", email)
+          console.log("🔗 Invitation link:", invitationLink)
+          console.log("⚙️  NEXTAUTH_URL:", process.env.NEXTAUTH_URL)
+          
+          // Get inviter name from session
+          const inviterName = session.user.name || session.user.email || "A team member"
+
+          // Send email
+          const emailSent = await sendBrandInvitationEmail(email, brand.name, inviterName, invitationLink, role)
+          console.log("✅ Email sent result:", emailSent)
+        }
+      } catch (emailError) {
+        console.error("❌ Failed to send invitation email:", emailError instanceof Error ? emailError.message : String(emailError))
+        console.error("📋 Full error:", emailError)
+        // Don't fail the entire request if email fails - invitation was created
+      }
 
       return NextResponse.json({
         success: true,

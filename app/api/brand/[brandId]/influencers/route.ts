@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { canAddInfluencer } from "@/lib/subscription-limits"
+import { userHasActiveSubscription } from "@/lib/subscription-limits"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { NextRequest, NextResponse } from "next/server"
@@ -22,6 +23,7 @@ export async function GET(
     if (!brand) {
       return NextResponse.json({ error: "Brand not found" }, { status: 404 })
     }
+
     // Allow owner OR any brand member
     const isOwner = brand.owner_id === session.user.id
     const isMember = isOwner ? true : !!(await prisma.brandMember.findFirst({
@@ -29,6 +31,15 @@ export async function GET(
     }))
     if (!isMember) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    }
+
+    // Check if brand owner has active subscription
+    const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
+    if (!ownerHasActiveSubscription) {
+      return NextResponse.json(
+        { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
+        { status: 403 }
+      )
     }
 
     // Fetch BrandInfluencer rows without include to avoid Prisma throwing

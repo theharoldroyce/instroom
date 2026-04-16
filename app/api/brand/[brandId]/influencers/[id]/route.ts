@@ -73,31 +73,21 @@ export async function PUT(
     }
     if (data.notes          !== undefined) bi.notes          = data.notes          || null
     if (data.approval_notes !== undefined) bi.approval_notes = data.approval_notes || null
-    if (data.approval_status !== undefined) {
-      bi.approval_status = ["Pending", "Approved", "Declined"].includes(data.approval_status)
-        ? data.approval_status : null
-    }
-    if (data.transferred_date !== undefined) {
-      bi.transferred_date = data.transferred_date ? new Date(data.transferred_date) : null
-    }
-
-    // ── Run sequentially to use only 1 connection at a time ──────────────────
+    if (data.transferred_date !== undefined) bi.transferred_date = data.transferred_date ? new Date(data.transferred_date) : null
+    
+    // Execute both updates in parallel to reduce connection pool usage
+    const updates: Promise<any>[] = []
     if (Object.keys(inf).length > 0) {
-      await prisma.influencer.update({
-        where: { id: influencerId },
-        data: inf,
-      })
+      updates.push(prisma.influencer.update({ where: { id }, data: inf }))
     }
-
     if (Object.keys(bi).length > 0) {
-      await prisma.brandInfluencer.update({
-        where: {
-          brand_id_influencer_id: { brand_id: brandId, influencer_id: influencerId },
-        },
-        data: bi,
-      })
+      updates.push(prisma.brandInfluencer.update({ where: { brand_id_influencer_id: { brand_id: brandId, influencer_id: id } }, data: bi }))
     }
-
+    
+    if (updates.length > 0) {
+      await Promise.all(updates)
+    }
+    
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string; meta?: unknown }

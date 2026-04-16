@@ -2,6 +2,7 @@
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
+import { SubscriptionStatusProvider } from "@/components/subscription-status-provider"
 import InstroomChatbot from "@/components/instroom-chatbot"
 
 import {
@@ -28,11 +29,13 @@ export default function DashboardLayout({
       <SidebarInset>
         <SiteHeader />
 
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            {children}
+        <SubscriptionStatusProvider>
+          <div className="flex flex-1 flex-col">
+            <div className="@container/main flex flex-1 flex-col gap-2">
+              {children}
+            </div>
           </div>
-        </div>
+        </SubscriptionStatusProvider>
       </SidebarInset>
 
       {/* Instroom Chatbot */}

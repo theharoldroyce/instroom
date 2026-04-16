@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Plus, Zap, AlertCircle, Check, ChevronDown } from "lucide-react"
+import { WorkspaceUnavailableModal } from "@/components/workspace-unavailable-modal"
 
 interface Brand {
   id: string
@@ -24,6 +25,7 @@ interface Brand {
   slug: string
   logo_url: string | null
   isOwner: boolean
+  subscriptionActive: boolean
 }
 
 interface BuyBrandsModalState {
@@ -58,6 +60,10 @@ export function BrandSelector() {
   const [buyingBrands, setBuyingBrands] = useState(false)
   const [paypalLoaded, setPaypalLoaded] = useState(false)
   const paypalRef = useRef<HTMLDivElement>(null)
+  
+  // Workspace unavailable modal state
+  const [unavailableModalOpen, setUnavailableModalOpen] = useState(false)
+  const [unavailableBrand, setUnavailableBrand] = useState<Brand | null>(null)
 
   // Read brandId from URL on client side after mount
   useEffect(() => {
@@ -128,7 +134,6 @@ export function BrandSelector() {
 
       if (!res.ok) {
         setError(data.error || "Failed to check brand limit")
-        console.error("Brand limit check failed:", data)
         return
       }
 
@@ -148,12 +153,10 @@ export function BrandSelector() {
         router.push("/dashboard/brand/create")
       } else {
         setError(data.message || "You've reached your brand limit and cannot purchase more.")
-        console.warn("Cannot buy more brands:", data)
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "An error occurred"
       setError(errorMsg)
-      console.error("Brand limit check error:", err)
     }
   }
 
@@ -316,34 +319,57 @@ export function BrandSelector() {
 
             {/* Brands List */}
             <div className="max-h-64 overflow-y-auto">
-              {brands.map((brand) => (
+              {ownedBrands.map((brand) => (
                 <button
                   key={brand.id}
                   onClick={() => {
+                    // If subscription is inactive and user is not owner, show modal
+                    if (!brand.subscriptionActive && !brand.isOwner) {
+                      setUnavailableBrand(brand)
+                      setUnavailableModalOpen(true)
+                      return
+                    }
+                    
                     setSelectedBrandId(brand.id)
                     const params = new URLSearchParams()
                     params.set("brandId", brand.id)
                     router.push(`${pathname}?${params.toString()}`)
                     setDropdownOpen(false)
                   }}
-                  className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0"
+                  disabled={!brand.subscriptionActive && !brand.isOwner}
+                  className={`w-full px-5 py-3 flex items-center gap-3 border-b border-gray-50 last:border-b-0 transition-colors ${
+                    !brand.subscriptionActive && !brand.isOwner
+                      ? "opacity-60 cursor-not-allowed bg-gray-50"
+                      : "hover:bg-gray-50"
+                  }`}
                 >
                   {brand.logo_url ? (
                     <img
                       src={brand.logo_url}
                       alt={brand.name}
-                      className="h-10 w-10 rounded flex-shrink-0"
+                      className={`h-10 w-10 rounded flex-shrink-0 ${
+                        !brand.subscriptionActive && !brand.isOwner ? "grayscale" : ""
+                      }`}
                     />
                   ) : (
-                    <Avatar className="h-10 w-10 flex-shrink-0">
+                    <Avatar className={`h-10 w-10 flex-shrink-0 ${
+                      !brand.subscriptionActive && !brand.isOwner ? "grayscale opacity-60" : ""
+                    }`}>
                       <AvatarFallback className="text-sm font-semibold">{getInitials(brand.name)}</AvatarFallback>
                     </Avatar>
                   )}
                   <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-gray-900">{brand.name}</p>
-                    {brand.isOwner && (
-                      <p className="text-xs text-gray-500">Owner</p>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {brand.isOwner && (
+                        <p className="text-xs text-gray-500">Owner</p>
+                      )}
+                      {!brand.subscriptionActive && !brand.isOwner && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 font-medium">
+                          ⚠️ Unavailable
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {brand.id === selectedBrandId && (
                     <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
@@ -364,27 +390,48 @@ export function BrandSelector() {
                     <button
                       key={brand.id}
                       onClick={() => {
+                        // If subscription is inactive, show modal
+                        if (!brand.subscriptionActive) {
+                          setUnavailableBrand(brand)
+                          setUnavailableModalOpen(true)
+                          return
+                        }
+                        
                         setSelectedBrandId(brand.id)
                         const params = new URLSearchParams()
                         params.set("brandId", brand.id)
                         router.push(`${pathname}?${params.toString()}`)
                         setDropdownOpen(false)
                       }}
-                      className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0"
+                      disabled={!brand.subscriptionActive}
+                      className={`w-full px-5 py-3 flex items-center gap-3 border-b border-gray-50 last:border-b-0 transition-colors ${
+                        !brand.subscriptionActive
+                          ? "opacity-60 cursor-not-allowed bg-gray-50"
+                          : "hover:bg-gray-50"
+                      }`}
                     >
                       {brand.logo_url ? (
                         <img
                           src={brand.logo_url}
                           alt={brand.name}
-                          className="h-10 w-10 rounded flex-shrink-0"
+                          className={`h-10 w-10 rounded flex-shrink-0 ${
+                            !brand.subscriptionActive ? "grayscale" : ""
+                          }`}
                         />
                       ) : (
-                        <Avatar className="h-10 w-10 flex-shrink-0">
+                        <Avatar className={`h-10 w-10 flex-shrink-0 ${
+                          !brand.subscriptionActive ? "grayscale opacity-60" : ""
+                        }`}>
                           <AvatarFallback className="text-sm font-semibold">{getInitials(brand.name)}</AvatarFallback>
                         </Avatar>
                       )}
                       <div className="flex-1 text-left">
                         <p className="text-sm font-medium text-gray-900">{brand.name}</p>
+                        {!brand.subscriptionActive && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 font-medium">
+                            ⚠️ Unavailable
+                          </span>
+                        )}
                       </div>
                       {brand.id === selectedBrandId && (
                         <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
@@ -529,6 +576,13 @@ export function BrandSelector() {
           </Card>
         </div>
       )}
+
+      {/* Workspace Unavailable Modal */}
+      <WorkspaceUnavailableModal
+        open={unavailableModalOpen}
+        onOpenChange={setUnavailableModalOpen}
+        workspaceName={unavailableBrand?.name || ""}
+      />
     </>
   )
 }

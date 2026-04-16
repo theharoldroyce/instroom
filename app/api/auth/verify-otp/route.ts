@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
+import { sendWelcomeEmail } from "@/lib/email"
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,6 +59,9 @@ export async function POST(req: NextRequest) {
         is_active: true,
       },
     })
+
+    // Send welcome email
+    await sendWelcomeEmail(user.email, user.name || "User")
 
     // Clean up OTP and signup verification tokens
     await prisma.verificationToken.deleteMany({

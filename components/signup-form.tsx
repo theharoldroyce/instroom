@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -47,6 +47,9 @@ const getPasswordStrengthLevel = (requirements: ReturnType<typeof checkPasswordS
 
 export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const invitationToken = searchParams.get("invitationToken")
+  
   const [step, setStep] = useState<'form' | 'otp'>('form')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -77,6 +80,14 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       return () => clearTimeout(timer)
     }
   }, [resendTimer])
+
+  // Pre-fill email if provided in URL (from invitation)
+  useEffect(() => {
+    const email = searchParams.get("email")
+    if (email) {
+      setFormData(prev => ({ ...prev, email: decodeURIComponent(email) }))
+    }
+  }, [searchParams])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target
@@ -223,6 +234,26 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       if (signInResult?.error) {
         setError("Account created, but login failed. Please try signing in.")
         return
+      }
+
+      // If invitation token exists, accept the invitation
+      if (invitationToken) {
+        try {
+          const inviteResponse = await fetch("/api/auth/accept-invitation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: invitationToken }),
+          })
+
+          const inviteData = await inviteResponse.json()
+
+          if (inviteResponse.ok && inviteData.brandId) {
+            router.push(`/dashboard?brandId=${inviteData.brandId}`)
+            return
+          }
+        } catch (inviteError) {
+          // Continue to onboarding if invitation acceptance fails
+        }
       }
 
       router.push("/onboarding")

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { canAddCollaborator } from "@/lib/subscription-limits"
+import { sendBrandInvitationEmail } from "@/lib/email"
 import { NextResponse } from "next/server"
 import crypto from "crypto"
 
@@ -103,7 +104,14 @@ export async function POST(
       },
     })
 
-    // TODO: Send invitation email
+    // Send invitation email
+    try {
+      const invitationLink = `${process.env.NEXTAUTH_URL}/auth/accept-invitation?token=${token}`
+      const inviterName = session.user.name || session.user.email || "A team member"
+      await sendBrandInvitationEmail(email, brand.name, inviterName, invitationLink, role)
+    } catch (emailError) {
+      // Don't fail the request if email fails - invitation was created
+    }
 
     return NextResponse.json({
       success: true,
