@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { SignupForm } from "@/components/signup-form"
 import Image from "next/image"
 
@@ -21,7 +22,9 @@ export default function SignupPage() {
       <div className="hidden sm:block absolute top-1/3 right-1/4 w-64 h-64 rounded-full bg-[#2C8EC4]/5 blur-3xl" />
 
       <div className="min-h-svh flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-0 gap-4 sm:gap-0 relative z-20">
-        <SignupForm className="rounded-2xl shadow-lg p-6 sm:p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden" />
+        <Suspense fallback={null}>
+          <SignupForm className="rounded-2xl shadow-lg p-6 sm:p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden" />
+        </Suspense>
       </div>
     </div>
   )
