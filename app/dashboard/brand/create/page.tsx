@@ -52,8 +52,8 @@ export default function CreateBrandPage() {
         return
       }
 
-      // Redirect to dashboard with new brand ID
-      router.push(`/dashboard/pipeline?brandId=${data.brand.id}`)
+      // Redirect to manage influencers page with new brand ID
+      router.push(`/dashboard/manage-influencers?brandId=${data.brand.id}`)
     } catch (err) {
       setError("An error occurred. Please try again.")
     } finally {

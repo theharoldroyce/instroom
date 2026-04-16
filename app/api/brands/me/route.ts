@@ -10,6 +10,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { userHasActiveSubscription } from "@/lib/subscription-limits"
 
 export async function GET() {
   try {
@@ -56,16 +57,22 @@ export async function GET() {
       },
     })
 
-    const memberBrands = memberships
-      .filter((m) => m.brand.is_active && m.brand.owner_id !== userId)
-      .map((m) => ({
-        id: m.brand.id,
-        name: m.brand.name,
-        slug: m.brand.slug,
-        logo_url: m.brand.logo_url,
-        description: m.brand.description,
-        role: m.role,
-      }))
+    // Filter member brands where owner has active subscription
+    const memberBrands = []
+    for (const m of memberships) {
+      if (m.brand.is_active && m.brand.owner_id !== userId) {
+        const ownerHasActiveSubscription = await userHasActiveSubscription(m.brand.owner_id)
+        memberBrands.push({
+          id: m.brand.id,
+          name: m.brand.name,
+          slug: m.brand.slug,
+          logo_url: m.brand.logo_url,
+          description: m.brand.description,
+          role: m.role,
+          subscriptionActive: ownerHasActiveSubscription,
+        })
+      }
+    }
 
     // Combine: owned brands first, then member brands
     const allBrands = [

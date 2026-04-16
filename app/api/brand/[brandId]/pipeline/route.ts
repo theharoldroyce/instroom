@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { userHasActiveSubscription } from "@/lib/subscription-limits"
 
 // ─── contact_status + stage → kanban column label ────────────────────────────
 // Only Approved influencers reach the pipeline. Their position in the kanban
@@ -73,6 +74,15 @@ export async function GET(
 
     if (!brand) {
       return NextResponse.json({ error: "Brand not found or access denied" }, { status: 403 })
+    }
+
+    // Check if brand owner has active subscription
+    const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
+    if (!ownerHasActiveSubscription) {
+      return NextResponse.json(
+        { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
+        { status: 403 }
+      )
     }
 
     // Only fetch Approved influencers for the pipeline

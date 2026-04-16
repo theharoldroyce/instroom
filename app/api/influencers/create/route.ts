@@ -75,20 +75,39 @@ export async function POST(req: Request) {
       },
     })
 
-    // If brandId is provided, link influencer to brand
+    // If brandId is provided, link influencer to brand with proper error handling
     if (data.brandId) {
-      await prisma.brandInfluencer.create({
-        data: {
-          brand_id: data.brandId,
-          influencer_id: influencer.id,
-          contact_status: "not_contacted",
-          stage: 1,
-        },
-      })
+      try {
+        await prisma.brandInfluencer.create({
+          data: {
+            brand_id: data.brandId,
+            influencer_id: influencer.id,
+            contact_status: "not_contacted",
+            stage: 1,
+          },
+        })
+      } catch (brandLinkError) {
+        // Log the error but don't fail the entire request
+        // The influencer was created successfully, just the brand link failed
+        console.error(
+          `Failed to link influencer ${influencer.id} to brand ${data.brandId}:`,
+          brandLinkError
+        )
+        // Return success but notify that brand linking failed
+        return NextResponse.json(
+          {
+            ...influencer,
+            warning:
+              "Influencer created but brand linking failed. Please try linking manually.",
+          },
+          { status: 201 }
+        )
+      }
     }
 
     return NextResponse.json(influencer, { status: 201 })
   } catch (error) {
+    console.error("Error in POST /api/influencers/create:", error)
     return NextResponse.json(
       { error: "Failed to create influencer" },
       { status: 500 }

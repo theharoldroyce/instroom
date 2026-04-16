@@ -10,24 +10,32 @@ export const prisma =
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
+// ─── Graceful Shutdown Handlers ──────────────────────────────────────────────
+// Ensures Prisma Client disconnects properly when the Node process exits,
+// preventing orphaned connections that could exhaust the connection pool.
 
-// // ─── lib/prisma.ts ──────────────────────────────────────────────────────────
-// // Prisma client singleton for Next.js
-// // Prevents multiple Prisma Client instances in development (hot reload)
+async function disconnectPrisma() {
+  try {
+    await prisma.$disconnect()
+    console.log('Prisma Client disconnected gracefully')
+  } catch (error) {
+    console.error('Error disconnecting Prisma Client:', error)
+  }
+}
 
-// import { PrismaClient } from "@prisma/client"
+// Handle normal process exit
+process.on('beforeExit', disconnectPrisma)
 
-// const globalForPrisma = globalThis as unknown as {
-//   prisma: PrismaClient | undefined
-// }
+// Handle uncaught exceptions
+process.on('uncaughtException', async (error) => {
+  console.error('Uncaught Exception:', error)
+  await disconnectPrisma()
+  process.exit(1)
+})
 
-// export const prisma =
-//   globalForPrisma.prisma ??
-//   new PrismaClient({
-//     log:
-//       process.env.NODE_ENV === "development"
-//         ? ["query", "error", "warn"]
-//         : ["error"],
-//   })
-
-// if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
+// Handle unhandled promise rejections
+process.on('unhandledRejection', async (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+  await disconnectPrisma()
+  process.exit(1)
+})

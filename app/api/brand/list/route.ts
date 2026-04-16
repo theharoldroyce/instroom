@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { userHasActiveSubscription } from "@/lib/subscription-limits"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -30,13 +31,27 @@ export async function GET() {
     orderBy: { created_at: "desc" },
   })
 
+  // Get subscription status for each brand owner
+  const accessibleBrands = []
+  for (const brand of brands) {
+    const isCurrentUserOwner = brand.owner_id === session.user.id
+    const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
+    
+    // Include all brands, but mark subscription status
+    accessibleBrands.push({
+      ...brand,
+      subscriptionActive: ownerHasActiveSubscription,
+    })
+  }
+
   return Response.json({
-    brands: brands.map((brand) => ({
+    brands: accessibleBrands.map((brand) => ({
       id: brand.id,
       name: brand.name,
       slug: brand.slug,
       logo_url: brand.logo_url,
       isOwner: brand.owner_id === session.user.id,
+      subscriptionActive: brand.subscriptionActive,
     })),
   })
 }

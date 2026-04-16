@@ -348,3 +348,20 @@ export async function getSubscriptionDetails(userId: string) {
     },
   })
 }
+
+/**
+ * Check if a user has an active subscription
+ */
+export async function userHasActiveSubscription(userId: string): Promise<boolean> {
+  try {
+    const subscription = await prisma.userSubscription.findFirst({
+      where: {
+        user_id: userId,
+        status: { in: ["active", "trialing"] },
+      },
+    })
+    return !!subscription
+  } catch (error) {
+    return false
+  }
+}

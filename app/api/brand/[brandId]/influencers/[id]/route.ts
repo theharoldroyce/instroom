@@ -36,8 +36,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ bran
     if (data.approval_status !== undefined) bi.approval_status = VALID_APPROVAL_STATUSES.has(data.approval_status) ? data.approval_status : null
     if (data.approval_notes !== undefined) bi.approval_notes = data.approval_notes || null
     if (data.transferred_date !== undefined) bi.transferred_date = data.transferred_date ? new Date(data.transferred_date) : null
-    if (Object.keys(inf).length > 0) await prisma.influencer.update({ where: { id }, data: inf })
-    if (Object.keys(bi).length > 0) await prisma.brandInfluencer.update({ where: { brand_id_influencer_id: { brand_id: brandId, influencer_id: id } }, data: bi })
+    
+    // Execute both updates in parallel to reduce connection pool usage
+    const updates: Promise<any>[] = []
+    if (Object.keys(inf).length > 0) {
+      updates.push(prisma.influencer.update({ where: { id }, data: inf }))
+    }
+    if (Object.keys(bi).length > 0) {
+      updates.push(prisma.brandInfluencer.update({ where: { brand_id_influencer_id: { brand_id: brandId, influencer_id: id } }, data: bi }))
+    }
+    
+    if (updates.length > 0) {
+      await Promise.all(updates)
+    }
+    
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error("PUT /influencers/[id]:", err?.code, err?.message)
