@@ -1,5 +1,6 @@
 "use client"
 
+import ReactDOM from "react-dom"
 import React, {
   useState,
   useRef,
@@ -131,14 +132,11 @@ function cleanHandle(raw: string): string {
 function displayHandle(handle: string, platform: string): string {
   const clean = cleanHandle(handle)
   if (!clean) return ""
-  // No @ prefix in table for any platform — cleaner display
-  // Profile links still use correct URL format (tiktok.com/@handle)
   return clean
 }
 
 function ProfilePicture({ src, socialLink, name, size = 28, onExpired }: { src?: string; socialLink?: string; name?: string; size?: number; onExpired?: () => void }) {
   const [imgError, setImgError] = useState(false)
-  // Proxy Instagram/TikTok CDN images through our API to avoid CORS/hotlink blocks
   const needsProxy = src && (
     src.includes("cdninstagram.com") ||
     src.includes("scontent-") ||
@@ -158,7 +156,6 @@ function ProfilePicture({ src, socialLink, name, size = 28, onExpired }: { src?:
 
   const handleError = () => {
     setImgError(true)
-    // If this was a CDN image (likely expired), trigger a re-fetch
     if (needsProxy && onExpired) {
       onExpired()
     }
@@ -288,14 +285,14 @@ async function fetchInfluencerFromAPI(handle: string, platform: string): Promise
     const d = json.data || json.user || json
     if (!d || typeof d !== "object") return null
     const followerCount = Number(d.followers || d.follower_count || 0)
-    // engagement_rate from API is a string like "3.25" — keep as string
     const engRate = parseFloat(String(d.engagement_rate || "0")) || 0
     const profileUrl = platform === "tiktok" ? `https://tiktok.com/@${clean}` : `https://instagram.com/${clean}`
     const profilePic = d.photo || d.avatar || ""
     const email = d.email && d.email !== "Not Available" ? d.email : ""
+    const fullName = d.full_name || d.name || ""
     return {
-      full_name: d.full_name || d.name || "",
-      first_name: (d.full_name || d.name || "").split(" ")[0] || "",
+      full_name: fullName,
+      first_name: fullName.split(" ")[0] || "",
       follower_count: String(followerCount),
       engagement_rate: String(engRate),
       email,
@@ -381,44 +378,55 @@ function MultiSelectDisplay({ value }: { value: string }) {
   return <div className="flex flex-wrap gap-1">{tags.map(t => <span key={t} className="inline-flex items-center px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[11px] font-medium leading-none">{t}</span>)}</div>
 }
 
-function FloatingPopup({ children, onClose, anchorRef }: { children: ReactNode; onClose: () => void; anchorRef?: React.RefObject<HTMLElement | null> }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [style, setStyle] = React.useState<React.CSSProperties>({ position: "fixed", top: 0, left: 0, zIndex: 9999, opacity: 0 })
+function FloatingPopup({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const [style, setStyle] = React.useState<React.CSSProperties>({ position: "fixed", top: -9999, left: -9999, zIndex: 9999, opacity: 0 })
+  const [mounted, setMounted] = React.useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
-    // Find the anchor — either the passed ref or the parent TD
-    const anchor = anchorRef?.current ?? ref.current?.closest("td") ?? ref.current?.parentElement
-    if (!anchor) return
+    if (!mounted) return
+    const anchor = triggerRef.current?.closest("td") ?? triggerRef.current?.parentElement
+    if (!anchor || !popupRef.current) return
     const rect = anchor.getBoundingClientRect()
-    const popupH = 280 // estimated max height
+    const popupH = popupRef.current.offsetHeight || 300
+    const popupW = popupRef.current.offsetWidth || 220
     const spaceBelow = window.innerHeight - rect.bottom
-    const top = spaceBelow > popupH ? rect.bottom + 2 : rect.top - popupH - 2
-    setStyle({
-      position: "fixed",
-      top: Math.max(8, top),
-      left: Math.min(rect.left, window.innerWidth - 220),
-      zIndex: 9999,
-      opacity: 1,
-    })
-    ref.current?.focus()
-  }, [])
+    const top = spaceBelow >= popupH + 8 ? rect.bottom + 2 : rect.top - popupH - 2
+    const left = Math.min(rect.left, window.innerWidth - popupW - 8)
+    setStyle({ position: "fixed", top: Math.max(8, top), left: Math.max(8, left), zIndex: 9999, opacity: 1 })
+    popupRef.current?.focus()
+  }, [mounted])
 
-  // Close on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      if (popupRef.current && !popupRef.current.contains(e.target as Node) &&
+          triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
+        onClose()
+      }
     }
     document.addEventListener("mousedown", h)
     return () => document.removeEventListener("mousedown", h)
   }, [onClose])
 
-  return (
-    <div ref={ref} tabIndex={0}
+  const popup = (
+    <div ref={popupRef} tabIndex={0}
       style={style}
       onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); onClose() } }}
       onMouseDown={e => e.stopPropagation()}
       className="bg-white border border-gray-200 rounded-lg shadow-xl"
     >{children}</div>
+  )
+
+  return (
+    <>
+      <span ref={triggerRef} style={{ display: "none" }} />
+      {mounted && typeof document !== "undefined"
+        ? ReactDOM.createPortal(popup, document.body)
+        : null}
+    </>
   )
 }
 
@@ -757,15 +765,25 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
   const [editedRow, setEditedRow] = useState<InfluencerRow|null>(row?{...row}:null)
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [orderData, setOrderData] = useState({ productName: "", orderNumber: "", productCost: "", discountCode: row ? "CODE" + (row.first_name||row.handle).toUpperCase().replace(/[^A-Z]/g,"") : "", affiliateLink: row ? "https://instroom.io/ref/" + (row.first_name||row.handle).toLowerCase().replace(/[^a-z]/g,"") : "", shippingAddress: "", trackingLink: "" })
+  const [orderData, setOrderData] = useState({
+    productName: "", orderNumber: "", productCost: "", discountCode: row ? "CODE" + (row.first_name||row.handle).toUpperCase().replace(/[^A-Z]/g,"") : "",
+    affiliateLink: row ? "https://instroom.io/ref/" + (row.first_name||row.handle).toLowerCase().replace(/[^a-z]/g,"") : "",
+    shippingAddress: "", trackingLink: ""
+  })
   const [postData, setPostData] = useState({ postLink: "", likes: "", sales: "", driveLink: "", comments: "", amount: "", usageRights: "", views: "", clicks: "" })
+
   useEffect(() => {
     if(row){
       setEditedRow({...row}); setProfileTab(0)
-      setOrderData(d => ({...d, discountCode: "CODE" + (row.first_name||row.handle).toUpperCase().replace(/[^A-Z]/g,""), affiliateLink: "https://instroom.io/ref/" + (row.first_name||row.handle).toLowerCase().replace(/[^a-z]/g,"")}))
+      setOrderData(d => ({
+        ...d,
+        discountCode: "CODE" + (row.first_name||row.handle).toUpperCase().replace(/[^A-Z]/g,""),
+        affiliateLink: "https://instroom.io/ref/" + (row.first_name||row.handle).toLowerCase().replace(/[^a-z]/g,"")
+      }))
       setPostData({ postLink:"",likes:"",sales:"",driveLink:"",comments:"",amount:"",usageRights:"",views:"",clicks:"" })
     }
   }, [row])
+
   if (!row || !editedRow) return null
 
   const platformLabel = platforms.find(p=>p.value===editedRow.platform)?.name || editedRow.platform
@@ -792,6 +810,7 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
     }
   }
 
+  // ── FIX: handleSave — properly rebuilds full_name from first_name ──────────
   const handleSave = async () => {
     if (!editedRow || !row?.id) return
     if (row.id.trim() === "") {
@@ -803,11 +822,24 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
       const url = brandId
         ? `/api/brand/${brandId}/influencers/${row.id}`
         : `/api/influencers/${row.id}`
+
+      // Rebuild full_name from edited first_name + any existing last name parts
+      // so that editing first_name in the sidebar actually persists to the DB
+      const existingLastName = editedRow.full_name
+        ? editedRow.full_name.split(" ").slice(1).join(" ")
+        : ""
+      const rebuiltFullName = editedRow.first_name
+        ? existingLastName
+          ? `${editedRow.first_name} ${existingLastName}`
+          : editedRow.first_name
+        : editedRow.full_name || null
+
       const payload = {
         handle: editedRow.handle,
         platform: editedRow.platform,
-        full_name: editedRow.full_name || null,
-        email: editedRow.email || null,
+        full_name: rebuiltFullName,
+        // Use contact_info as primary email — Order tab writes here
+        email: editedRow.contact_info || editedRow.email || null,
         gender: editedRow.gender || null,
         niche: editedRow.niche || null,
         location: editedRow.location || null,
@@ -816,6 +848,10 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
         social_link: editedRow.social_link || null,
         follower_count: parseInt(String(editedRow.follower_count)) || 0,
         engagement_rate: parseFloat(String(editedRow.engagement_rate)) || 0,
+        // Persist API-fetched metrics so they survive page reload
+        avg_likes: parseInt(String(editedRow.avg_likes)) || 0,
+        avg_comments: parseInt(String(editedRow.avg_comments)) || 0,
+        avg_views: parseInt(String(editedRow.avg_views)) || 0,
         approval_status: editedRow.approval_status,
         approval_notes: editedRow.approval_notes || null,
         contact_status: editedRow.contact_status,
@@ -824,13 +860,20 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
         stage: editedRow.stage,
         transferred_date: editedRow.transferred_date || null,
       }
+
       const response = await fetch(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
       if (response.ok) {
-        onUpdate(editedRow)
+        // Sync the rebuilt full_name back into editedRow so the UI stays consistent
+        const synced = {
+          ...editedRow,
+          full_name: rebuiltFullName || editedRow.full_name,
+        }
+        setEditedRow(synced)
+        onUpdate(synced)
         onToast?.("success", "Saved successfully")
       } else if (response.status === 404) {
         onToast?.("error", "Influencer not found. Try refreshing.")
@@ -960,15 +1003,45 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
           )}
           {profileTab===1&&(
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>First name</div><input style={S.formInput} value={editedRow.first_name||""} onChange={e=>handleFieldChange("first_name",e.target.value)}/></div><div style={S.formGroup}><div style={S.formLabel}>Last name</div><input style={S.formInput} value={editedRow.full_name?.split(" ").slice(1).join(" ")||""} readOnly/></div></div>
-              <div style={S.formGroup}><div style={S.formLabel}>Email</div><input style={S.formInput} value={editedRow.contact_info||""} onChange={e=>handleFieldChange("contact_info",e.target.value)}/></div>
+              {/* ── FIX: first_name and email write directly to editedRow via handleFieldChange ── */}
+              <div style={S.formRow}>
+                <div style={S.formGroup}>
+                  <div style={S.formLabel}>First name</div>
+                  <input
+                    style={S.formInput}
+                    value={editedRow.first_name||""}
+                    onChange={e=>handleFieldChange("first_name",e.target.value)}
+                  />
+                </div>
+                <div style={S.formGroup}>
+                  <div style={S.formLabel}>Last name</div>
+                  <input
+                    style={{...S.formInput,background:"#f7f9f8",color:"#888"}}
+                    value={editedRow.full_name?.split(" ").slice(1).join(" ")||""}
+                    readOnly
+                  />
+                </div>
+              </div>
+              <div style={S.formGroup}>
+                <div style={S.formLabel}>Email</div>
+                <input
+                  style={S.formInput}
+                  value={editedRow.contact_info||editedRow.email||""}
+                  onChange={e=>handleFieldChange("contact_info",e.target.value)}
+                />
+              </div>
               <div style={S.formGroup}><div style={S.formLabel}>Product Name</div><input style={S.formInput} value={orderData.productName} onChange={e=>setOrderData(d=>({...d,productName:e.target.value}))}/></div>
               <div style={S.formGroup}><div style={S.formLabel}>Order Number</div><input style={S.formInput} value={orderData.orderNumber} onChange={e=>setOrderData(d=>({...d,orderNumber:e.target.value}))}/></div>
-              <div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>Product Cost</div><input style={S.formInput} value={orderData.productCost} onChange={e=>setOrderData(d=>({...d,productCost:e.target.value}))}/></div><div style={S.formGroup}><div style={S.formLabel}>Discount Code</div><input style={S.formInput} value={orderData.discountCode} onChange={e=>setOrderData(d=>({...d,discountCode:e.target.value}))}/></div></div>
+              <div style={S.formRow}>
+                <div style={S.formGroup}><div style={S.formLabel}>Product Cost</div><input style={S.formInput} value={orderData.productCost} onChange={e=>setOrderData(d=>({...d,productCost:e.target.value}))}/></div>
+                <div style={S.formGroup}><div style={S.formLabel}>Discount Code</div><input style={S.formInput} value={orderData.discountCode} onChange={e=>setOrderData(d=>({...d,discountCode:e.target.value}))}/></div>
+              </div>
               <div style={S.formGroup}><div style={S.formLabel}>Affiliate Link</div><input style={S.formInput} value={orderData.affiliateLink} onChange={e=>setOrderData(d=>({...d,affiliateLink:e.target.value}))}/></div>
               <div style={S.formGroup}><div style={S.formLabel}>Shipping Address</div><input style={S.formInput} value={orderData.shippingAddress} onChange={e=>setOrderData(d=>({...d,shippingAddress:e.target.value}))}/></div>
               <div style={S.formGroup}><div style={S.formLabel}>Tracking Link</div><input style={S.formInput} value={orderData.trackingLink} onChange={e=>setOrderData(d=>({...d,trackingLink:e.target.value}))}/></div>
-              <div style={{display:"flex",justifyContent:"flex-end"}}><button style={{...S.saveBtn,opacity:isSaving?0.6:1,cursor:isSaving?"not-allowed":"pointer"}} onClick={handleSave} disabled={isSaving}>{isSaving?"Saving...":"Save"}</button></div>
+              <div style={{display:"flex",justifyContent:"flex-end"}}>
+                <button style={{...S.saveBtn,opacity:isSaving?0.6:1,cursor:isSaving?"not-allowed":"pointer"}} onClick={handleSave} disabled={isSaving}>{isSaving?"Saving...":"Save"}</button>
+              </div>
             </div>
           )}
           {profileTab===2&&(
@@ -988,6 +1061,12 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
                 <div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:16,fontWeight:600,color:"#1e1e1e"}}>{formatFollowers(Number(editedRow.follower_count)||0)}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Followers</div></div>
                 <div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:16,fontWeight:600,color:"#2c8ec4"}}>{editedRow.engagement_rate||0}%</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Eng. Rate</div></div>
                 <div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:16,fontWeight:600,color:"#1fae5b"}}>{editedRow.agreed_rate?"$"+Number(editedRow.agreed_rate).toLocaleString():"—"}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Agreed Rate</div></div>
+              </div>
+              <div style={S.sectionTitle}>Avg Metrics</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
+                <div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:15,fontWeight:600,color:"#1e1e1e"}}>{editedRow.avg_likes ? formatFollowers(Number(editedRow.avg_likes)) : "—"}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Avg Likes</div></div>
+                <div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:15,fontWeight:600,color:"#1e1e1e"}}>{editedRow.avg_comments ? formatFollowers(Number(editedRow.avg_comments)) : "—"}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Avg Comments</div></div>
+                <div style={{background:"#f7f9f8",borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:15,fontWeight:600,color:"#1e1e1e"}}>{editedRow.avg_views ? formatFollowers(Number(editedRow.avg_views)) : "—"}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>Avg Views</div></div>
               </div>
               <div style={S.sectionTitle}>Status</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
@@ -1120,24 +1199,15 @@ export default function TableSheet({
   readOnly?: boolean
   brandId?: string
 }) {
-  // ── State ──────────────────────────────────────────────────────────────────
-  // Note: rows/customCols are initialised from props. The parent is responsible
-  // for persistence — this component is stateful for UI responsiveness but
-  // always calls onRowsChange so the parent can sync to the DB.
   const [rows, setRows] = useState<InfluencerRow[]>(initialRows)
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
 
-  // Register the id-swap callback with the parent so it can update our
-  // internal row ids after a successful create without triggering a re-render
   useEffect(() => {
     onRegisterIdSwap?.((tempId, realId) => {
       setRows(prev => prev.map(r => r.id === tempId ? { ...r, id: realId } : r))
     })
   }, [onRegisterIdSwap])
 
-  // Only sync from parent when initialRows reference changes due to a real
-  // refetch — NOT when the parent calls setRows() for ID swaps.
-  // We track the last initialRows length+ids to detect genuine DB reloads.
   const lastInitialKey = useRef("")
   useEffect(() => {
     const key = initialRows.map(r => r.id).join(",")
@@ -1195,7 +1265,6 @@ export default function TableSheet({
   const importExportRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Column definitions ─────────────────────────────────────────────────────
   const getEffectiveGroup = useCallback((cc: CustomColumn) => cc.assignedGroup, [])
   const STATIC_COLS = getStaticCols(nicheOptions, locationOptions)
   const rawCols: AnyColDef[] = [
@@ -1212,7 +1281,6 @@ export default function TableSheet({
   const allCols = order.map(i=>rawCols[i])
   const totalCols = allCols.length
 
-  // ── Close import/export menu on outside click ──────────────────────────────
   useEffect(() => {
     if (!showImportExportMenu) return
     const h = (e: MouseEvent) => {
@@ -1222,7 +1290,6 @@ export default function TableSheet({
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h)
   }, [showImportExportMenu])
 
-  // ── Filtering ──────────────────────────────────────────────────────────────
   const filteredRows = rows.filter(row => {
     if (searchQuery.trim()) {
       const q=searchQuery.toLowerCase()
@@ -1241,7 +1308,6 @@ export default function TableSheet({
   useEffect(() => { const mx=Math.max(1,Math.ceil(filteredRows.length/rowsPerPage)); if(currentPage>mx)setCurrentPage(mx) }, [filteredRows.length,rowsPerPage,currentPage])
   const sidebarRow = rows.find(r=>r.id===sidebarRowId)||null
 
-  // ── Row selection ──────────────────────────────────────────────────────────
   const handleRowSelect = (id: string, e?: React.MouseEvent) => {
     if (e?.ctrlKey||e?.metaKey) { setSelectedRowIds(prev=>{const n=new Set(prev);if(n.has(id))n.delete(id);else n.add(id);return n}); setSelectedRowId(id) }
     else if (e?.shiftKey&&selectedRowId) { const ci=filteredRows.findIndex(r=>r.id===selectedRowId); const ti=filteredRows.findIndex(r=>r.id===id); if(ci!==-1&&ti!==-1){const s=Math.min(ci,ti);const e2=Math.max(ci,ti);setSelectedRowIds(new Set(filteredRows.slice(s,e2+1).map(r=>r.id)))}; setSelectedRowId(id) }
@@ -1254,13 +1320,11 @@ export default function TableSheet({
   const handleApplyFilters = (nf: FilterState) => { setFilters(nf); setCurrentPage(1) }
   const handleClearFilters = () => { setFilters({platform:"all",niche:"all",location:"all",gender:"all"}); setCurrentPage(1) }
 
-  // ── Auto-fetch from Instroom API ───────────────────────────────────────────
   const autoFetchInfluencer = useCallback(async (rowId: string, handle: string, platform: string) => {
     const clean = handle.trim().replace(/^@/, "").toLowerCase()
     if (!clean || clean.length < 2) return
     if (platform !== "instagram" && platform !== "tiktok") return
 
-    // Duplicate = same handle on same platform (TikTok @user ≠ Instagram user)
     const duplicate = rows.find(r =>
       r.id !== rowId &&
       cleanHandle(r.handle).toLowerCase() === clean &&
@@ -1282,9 +1346,6 @@ export default function TableSheet({
           if (row.id !== rowId) return row
           const u = { ...row }
           if (!u.full_name && data.full_name) u.full_name = data.full_name
-          if (!u.first_name && data.first_name) u.first_name = data.first_name
-          if (!u.follower_count && data.follower_count && data.follower_count !== "0") u.follower_count = data.follower_count
-          if (!u.engagement_rate && data.engagement_rate && data.engagement_rate !== "0") u.engagement_rate = data.engagement_rate
           if (!u.email && data.email) u.email = data.email
           if (!u.contact_info && data.contact_info) u.contact_info = data.contact_info
           if (!u.social_link && data.social_link) u.social_link = data.social_link
@@ -1292,11 +1353,15 @@ export default function TableSheet({
           if (!u.niche && data.niche) u.niche = data.niche
           if (!u.gender && data.gender) u.gender = data.gender
           if (!u.profile_image_url && data.profile_image_url) u.profile_image_url = data.profile_image_url
+          if (data.first_name) u.first_name = data.first_name
+          if (data.follower_count && data.follower_count !== "0") u.follower_count = data.follower_count
+          if (data.engagement_rate && data.engagement_rate !== "0") u.engagement_rate = data.engagement_rate
+          if (data.avg_likes !== undefined) u.avg_likes = data.avg_likes
+          if (data.avg_comments !== undefined) u.avg_comments = data.avg_comments
+          if (data.avg_views !== undefined) u.avg_views = data.avg_views
           return u
         })
         onRowsChange?.(next)
-        // Notify parent specifically about the fetched row so it can save
-        // API data to the DB even if the row is brand new (temp UUID)
         const updatedRow = next.find(r => r.id === rowId)
         if (updatedRow) {
           setTimeout(() => onFetchComplete?.(updatedRow), 0)
@@ -1307,7 +1372,6 @@ export default function TableSheet({
     finally { setFetchingRows(prev => { const n = new Set(prev); n.delete(rowId); return n }) }
   }, [onRowsChange, onFetchComplete, rows, addToast])
 
-  // ── Row CRUD ───────────────────────────────────────────────────────────────
   const handleAddMultipleRows = (count: number) => {
     const nr:InfluencerRow[]=[];for(let i=0;i<count;i++)nr.push(newEmptyRow(customCols))
     setRows(prev=>{
@@ -1333,7 +1397,6 @@ export default function TableSheet({
       if(selectedRowId===id)setSelectedRowId(null)
       if(sidebarRowId===id)setSidebarRowId(null)
       setSelectedRowIds(prev=>{const n=new Set(prev);n.delete(id);return n})
-      // Notify parent to DELETE from DB
       onDeleteRow?.(id)
     },variant:"danger"})
   }
@@ -1345,7 +1408,6 @@ export default function TableSheet({
       setRows(prev=>{const n=prev.filter(r=>!idsToDelete.has(r.id));onRowsChange?.(n);return n})
       setSelectedRowId(null);setSelectedRowIds(new Set())
       if(sidebarRowId&&idsToDelete.has(sidebarRowId))setSidebarRowId(null)
-      // Notify parent to DELETE each from DB
       idsToDelete.forEach(id => onDeleteRow?.(id))
     },variant:"danger"})
   }
@@ -1356,7 +1418,6 @@ export default function TableSheet({
     r.readAsText(f); e.target.value=""; setShowImportExportMenu(false)
   }
 
-  // ── Column drag ────────────────────────────────────────────────────────────
   const onColDragStart=(vi:number,e:DragEvent)=>{setDragIdx(vi);e.dataTransfer.effectAllowed="move";e.dataTransfer.setDragImage(e.currentTarget as HTMLElement,40,18)}
   const onColDragOver=(vi:number,e:DragEvent)=>{e.preventDefault();e.dataTransfer.dropEffect="move";setDragOverIdx(vi);const tc=allCols[vi];if(tc&&(tc.group==="Influencer Details"||tc.group==="Approval Details"||tc.group==="Outreach Details"))setDragOverGroup(tc.group);else setDragOverGroup(null)}
   const onColDragEnd=()=>{
@@ -1371,7 +1432,6 @@ export default function TableSheet({
     setDragIdx(null);setDragOverIdx(null);setDragOverGroup(null)
   }
 
-  // ── Cell editing ───────────────────────────────────────────────────────────
   const getCellValue = useCallback((row: InfluencerRow, key: string): string => {
     if(key.startsWith("custom."))return row.custom[key.slice(7)]??""
     return String((row as Record<string,unknown>)[key]??"")
@@ -1407,6 +1467,14 @@ export default function TableSheet({
       else if(colKey.startsWith("custom.")) { row.custom={...row.custom,[colKey.slice(7)]:cleanedValue} }
       else { (row as Record<string,unknown>)[colKey]=cleanedValue }
 
+      // ── FIX: when first_name is edited in table cell, also update full_name ──
+      if (colKey === "first_name") {
+        const lastName = row.full_name ? row.full_name.split(" ").slice(1).join(" ") : ""
+        row.full_name = cleanedValue
+          ? lastName ? `${cleanedValue} ${lastName}` : cleanedValue
+          : lastName
+      }
+
       if(colKey==="handle"||colKey==="platform"){
         const nH=colKey==="handle"?cleanedValue:row.handle; const nP=colKey==="platform"?cleanedValue:row.platform
         const oU=getProfileUrl(colKey==="platform"?prev[actualRowIdx].platform:row.platform,colKey==="handle"?prev[actualRowIdx].handle:row.handle)
@@ -1432,7 +1500,6 @@ export default function TableSheet({
     if(row.approval_status==="Declined"&&isOutreachField(col.key))return
     if(col.type==="boolean"){applyCellValue(ri,col.key,getCellValue(row,col.key)==="Yes"?"No":"Yes");setActiveCell({rowIdx:ri,colIdx:ci});return}
     if(col.key==="platform"||col.key==="niche"||col.key==="location"||col.key==="approval_status"||col.key==="contact_status"||col.key==="gender"||col.type==="dropdown"||col.type==="multi-select"||col.type==="date"||col.type==="select"){setActiveCell({rowIdx:ri,colIdx:ci});setEditCell(null);setPopupCell({rowIdx:ri,colIdx:ci});return}
-    // For handle column: strip @ from the edit value so users see/edit the clean handle
     const rawVal = getCellValue(row, col.key)
     const editVal = col.key === "handle" ? cleanHandle(rawVal) : rawVal
     setActiveCell({rowIdx:ri,colIdx:ci});setPopupCell(null);setEditCell({rowIdx:ri,colIdx:ci});setEditValue(editVal)
@@ -1473,7 +1540,6 @@ export default function TableSheet({
     }
   }
 
-  // ── Column management ──────────────────────────────────────────────────────
   const confirmAddCol = (name: string, description: string, type: CustomColumn["field_type"], group: "Influencer Details"|"Approval Details"|"Outreach Details", options: string) => {
     const fk = name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
     const ho = type === "dropdown" || type === "multi-select"
@@ -1497,7 +1563,6 @@ export default function TableSheet({
     },variant:"danger"})
   }
 
-  // ── Style helpers ──────────────────────────────────────────────────────────
   const getGroupBgClass = (g: string) => {
     switch(g){case"Influencer Details":return"bg-blue-50 text-blue-700";case"Approval Details":return"bg-purple-50 text-purple-700";case"Outreach Details":return"bg-emerald-50 text-emerald-700";default:return"bg-gray-50 text-gray-500 border-dashed"}
   }
@@ -1507,7 +1572,6 @@ export default function TableSheet({
   const groupSpans:{group:string;span:number}[]=[]; allCols.forEach(col=>{const l=groupSpans[groupSpans.length-1];if(l&&l.group===col.group)l.span++;else groupSpans.push({group:col.group,span:1})})
   const hasActiveFilters = filters.platform!=="all"||filters.niche!=="all"||filters.location!=="all"||filters.gender!=="all"
 
-  // ── Cell renderer ──────────────────────────────────────────────────────────
   const renderCell = (row: InfluencerRow, rowIdx: number, col: AnyColDef, colIdx: number) => {
     const isActive=activeCell?.rowIdx===rowIdx&&activeCell?.colIdx===colIdx
     const isEditing=editCell?.rowIdx===rowIdx&&editCell?.colIdx===colIdx
@@ -1537,8 +1601,6 @@ export default function TableSheet({
         <div className="flex items-center gap-2">
           <ProfilePicture src={row.profile_image_url} socialLink={socialLink} name={row.full_name} size={24}
             onExpired={() => {
-              // CDN URL expired — clear it from local state so fallback shows,
-              // then trigger API re-fetch to get a fresh URL
               setRows(prev => prev.map(r => r.id === row.id ? { ...r, profile_image_url: "" } : r))
               if (row.handle && (row.platform === "instagram" || row.platform === "tiktok")) {
                 autoFetchInfluencer(row.id, row.handle, row.platform)
@@ -1586,7 +1648,6 @@ export default function TableSheet({
 
   const declineModalName = pendingDeclineRowIdx!==null ? filteredRows[pendingDeclineRowIdx]?.full_name||filteredRows[pendingDeclineRowIdx]?.handle||"this influencer" : "this influencer"
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-4">
       <style>{`
@@ -1670,7 +1731,6 @@ export default function TableSheet({
         </div>
       </div>
 
-      {/* Active filter pills */}
       {hasActiveFilters&&(
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-500">Active filters:</span>
@@ -1768,7 +1828,6 @@ export default function TableSheet({
           </table>
         </div>
 
-        {/* Pagination */}
         {totalRows>0&&(
           <div className="flex items-center justify-between gap-4 text-sm text-gray-600 px-1 mt-3 flex-wrap">
             <div className="flex items-center gap-2">
@@ -1792,7 +1851,6 @@ export default function TableSheet({
         )}
       </div>
 
-      {/* Keyboard shortcuts legend */}
       {!readOnly&&(
         <div className="flex items-center gap-4 px-1 flex-wrap">
           {[{keys:["Ctrl","Click"],label:"Multi-select"},{keys:["Shift","Click"],label:"Range select"},{keys:["↑","↓","←","→"],label:"Navigate"},{keys:["Enter"],label:"Edit"},{keys:["Tab"],label:"Next cell"},{keys:["Esc"],label:"Cancel"},{keys:["Del"],label:"Clear"},{keys:["Dbl-click"],label:"View Profile"}].map(({keys,label})=>(

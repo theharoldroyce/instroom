@@ -1,19 +1,19 @@
-import { PrismaClient } from '@prisma/client'
+// import { PrismaClient } from '@prisma/client'
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient }
+// const globalForPrisma = global as unknown as { prisma: PrismaClient }
 
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log: process.env.NODE_ENV === 'production' ? [] : ['error', 'warn'],
-  })
+// export const prisma =
+//   globalForPrisma.prisma ||
+//   new PrismaClient({
+//     log: ['query'],
+//   })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+// if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 
-// // ─── lib/prisma.ts ──────────────────────────────────────────────────────────
-// // Prisma client singleton for Next.js
-// // Prevents multiple Prisma Client instances in development (hot reload)
+// ─── lib/prisma.ts ──────────────────────────────────────────────────────────
+// Prisma client singleton for Next.js
+// Prevents multiple Prisma Client instances in development (hot reload)
 
 // import { PrismaClient } from "@prisma/client"
 
@@ -31,3 +31,25 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 //   })
 
 // if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
+
+// lib/prisma.ts — Singleton pattern para hindi mag-create ng bagong connection per request
+
+ 
+import { PrismaClient } from "@prisma/client"
+ 
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
+ 
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
+  })
+ 
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma

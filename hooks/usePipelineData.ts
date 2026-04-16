@@ -1,4 +1,4 @@
-// ─── hooks/usePipelineData.ts ────────────────────────────────────────────────
+// hooks/usePipelineData.ts
 
 import { useState, useEffect, useCallback } from "react"
 
@@ -38,7 +38,7 @@ export interface PipelineInfluencer {
   shippedAt: string | null
   deliveredAt: string | null
   productDetails: string | null
-  notes: string
+  notes: string       // outreach notes — should NEVER contain NI reason
   internalRating: number | null
   lastContact: string
   createdAt: string
@@ -48,11 +48,15 @@ interface UsePipelineDataReturn {
   data: PipelineInfluencer[]
   isLoading: boolean
   error: string | null
-  updateStatus: (brandInfluencerId: string, newStatus: string) => Promise<boolean>
-  refetch: () => Promise<void>
+  updateStatus: (
+    id: string,
+    newStatus: string,
+    extra?: { niReason?: string }
+  ) => Promise<boolean>
+  refetch: () => void
 }
 
-export function usePipelineData(brandId: string | undefined): UsePipelineDataReturn {
+export function usePipelineData(brandId?: string): UsePipelineDataReturn {
   const [data, setData] = useState<PipelineInfluencer[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -62,24 +66,19 @@ export function usePipelineData(brandId: string | undefined): UsePipelineDataRet
       setIsLoading(false)
       return
     }
-
     try {
       setIsLoading(true)
       setError(null)
-
-      // ← singular "brand" to match your route folder
       const res = await fetch(`/api/brand/${brandId}/pipeline`)
-
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}))
-        throw new Error(errBody.error || `HTTP ${res.status}`)
+        const err = await res.json()
+        throw new Error(err.error || "Failed to fetch pipeline data")
       }
-
       const json = await res.json()
       setData(json.data)
-    } catch (err: any) {
-      console.error("Failed to fetch pipeline data:", err)
-      setError(err.message || "Failed to load pipeline data")
+    } catch (err: unknown) {
+      const e = err as { message?: string }
+      setError(e?.message || "Something went wrong")
     } finally {
       setIsLoading(false)
     }
@@ -90,38 +89,54 @@ export function usePipelineData(brandId: string | undefined): UsePipelineDataRet
   }, [fetchData])
 
   const updateStatus = useCallback(
-    async (brandInfluencerId: string, newStatus: string): Promise<boolean> => {
+    async (
+      id: string,
+      newStatus: string,
+      extra?: { niReason?: string }
+    ): Promise<boolean> => {
       if (!brandId) return false
 
+      // ── Optimistic update ────────────────────────────────────────────────────
+      // Move card to the new column immediately in the UI.
+      // For "Not Interested":
+      //   - approvalStatus  → "Declined" (so table shows Declined badge)
+      //   - approvalNotes   → the NI reason (shows in Approval Details Notes column)
+      //   - notes           → NOT touched (outreach notes stay clean)
+      // ─────────────────────────────────────────────────────────────────────────
       setData((prev) =>
-        prev.map((item) =>
-          item.id === brandInfluencerId
-            ? { ...item, pipelineStatus: newStatus }
-            : item
-        )
+        prev.map((item) => {
+          if (item.id !== id) return item
+          if (newStatus === "Not Interested") {
+            return {
+              ...item,
+              pipelineStatus: newStatus,
+              approvalStatus: "Declined",
+              approvalNotes:  extra?.niReason || "Not interested",
+              // notes intentionally NOT changed
+            }
+          }
+          return { ...item, pipelineStatus: newStatus }
+        })
       )
 
       try {
-        // ← singular "brand" to match your route folder
-        const res = await fetch(
-          `/api/brand/${brandId}/pipeline/${brandInfluencerId}`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ pipelineStatus: newStatus }),
-          }
-        )
+        const res = await fetch(`/api/brand/${brandId}/pipeline/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipelineStatus: newStatus,
+            ...(extra?.niReason ? { niReason: extra.niReason } : {}),
+          }),
+        })
 
         if (!res.ok) {
-          await fetchData()
-          const errBody = await res.json().catch(() => ({}))
-          throw new Error(errBody.error || "Update failed")
+          await fetchData() // revert on failure
+          return false
         }
 
         return true
-      } catch (err: any) {
-        console.error("Failed to update status:", err)
-        setError(err.message)
+      } catch {
+        await fetchData()
         return false
       }
     },

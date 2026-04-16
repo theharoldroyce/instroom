@@ -1,7 +1,7 @@
 // app/dashboard/manage-influencers/page.tsx
 "use client"
 
-import { useState, useRef, Suspense, useCallback } from "react"
+import { useState, useRef, Suspense, useCallback, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
@@ -22,12 +22,11 @@ function rowHasHandle(row: InfluencerRow): boolean {
 }
 
 function buildCreatePayload(row: InfluencerRow, brandId: string) {
-  const handle = row.handle.trim().replace(/^@/, "")
   return {
-    handle,                                              // store WITHOUT @
+    handle: row.handle.trim().replace(/^@/, ""),
     platform: row.platform,
     full_name: row.full_name || row.first_name || null,
-    email: row.contact_info || row.email || null,  // contact_info is the editable email field in table
+    email: row.contact_info || row.email || null,
     gender: row.gender || null,
     niche: row.niche || null,
     location: row.location || null,
@@ -44,9 +43,17 @@ function buildCreatePayload(row: InfluencerRow, brandId: string) {
 }
 
 function buildUpdatePayload(row: InfluencerRow) {
+  const existingLastName = row.full_name
+    ? row.full_name.split(" ").slice(1).join(" ")
+    : ""
+  const rebuiltFullName = row.first_name
+    ? existingLastName
+      ? `${row.first_name} ${existingLastName}`
+      : row.first_name
+    : row.full_name || null
+
   return {
-    // Influencer (global) fields
-    full_name: row.full_name || null,
+    full_name: rebuiltFullName,
     email: row.contact_info || row.email || null,
     gender: row.gender || null,
     niche: row.niche || null,
@@ -59,7 +66,6 @@ function buildUpdatePayload(row: InfluencerRow) {
     avg_likes: parseInt(String(row.avg_likes)) || 0,
     avg_comments: parseInt(String(row.avg_comments)) || 0,
     avg_views: parseInt(String(row.avg_views)) || 0,
-    // BrandInfluencer (relationship) fields
     contact_status: row.contact_status,
     stage: parseInt(String(row.stage)) || 1,
     agreed_rate: row.agreed_rate || null,
@@ -71,33 +77,99 @@ function buildUpdatePayload(row: InfluencerRow) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Serial PUT queue — ensures only ONE request runs at a time
+// This is the key fix for the connection limit problem.
+// Instead of firing 8 PUT requests simultaneously, we process them one-by-one.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type QueueItem = {
+  url: string
+  payload: string
+  onError?: (status: number) => void
+}
+
+function createPutQueue() {
+  const queue: QueueItem[] = []
+  let running = false
+
+  async function run() {
+    if (running) return
+    running = true
+    while (queue.length > 0) {
+      const item = queue.shift()!
+      try {
+        const res = await fetch(item.url, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: item.payload,
+        })
+        if (!res.ok) {
+          item.onError?.(res.status)
+        }
+      } catch {
+        // Network error — silent, will be retried on next edit
+      }
+    }
+    running = false
+  }
+
+  return {
+    // Enqueue a PUT — if same URL already queued, replace payload (latest wins)
+    enqueue(item: QueueItem) {
+      const existing = queue.findIndex((q) => q.url === item.url)
+      if (existing >= 0) {
+        queue[existing] = item // replace with latest
+      } else {
+        queue.push(item)
+      }
+      run()
+    },
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function InfluencersContent() {
   const searchParams = useSearchParams()
-  const brandId = searchParams.get("brandId")
+  const rawBrandId = searchParams.get("brandId")
+  const brandId = rawBrandId?.trim() || null
 
   const { rows, customColumns, isLoading, error, setCustomColumns } =
     useInfluencerData(brandId)
 
-  // IDs of rows that exist in the DB
+  // ── dbIds: Influencer.ids that exist in DB for this brand ─────────────────
   const dbIds = useRef<Set<string>>(new Set())
-  // handle (no @) + platform keys already sent to create
-  const createdHandles = useRef<Set<string>>(new Set())
+  const seededForBrand = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!isLoading && rows.length > 0 && brandId && seededForBrand.current !== brandId) {
+      seededForBrand.current = brandId
+      rows.forEach((r) => dbIds.current.add(r.id))
+    }
+  }, [isLoading, rows, brandId])
+
+  // ── Prevent PUT storm on mount ────────────────────────────────────────────
+  // TableSheet fires onRowsChange on mount. We block PUTs for the first 800ms.
+  const readyToSave = useRef(false)
+  useEffect(() => {
+    if (!isLoading && rows.length > 0) {
+      const t = setTimeout(() => { readyToSave.current = true }, 800)
+      return () => clearTimeout(t)
+    }
+  }, [isLoading, rows.length])
+
+  // ── Serial PUT queue (one request at a time) ──────────────────────────────
+  const putQueue = useRef(createPutQueue())
+
   // per-row debounce timers
   const updateTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
-  // callback to swap temp UUID → real DB id in TableSheet's internal state
-  const idSwapCallback = useRef<((tempId: string, realId: string) => void) | null>(null)
-  const seeded = useRef(false)
+
+  const createdHandles  = useRef<Set<string>>(new Set())
+  const idSwapCallback  = useRef<((tempId: string, realId: string) => void) | null>(null)
 
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false)
 
-  // Seed dbIds synchronously during render so it's ready before any callback fires
-  if (!isLoading && rows.length > 0 && !seeded.current) {
-    seeded.current = true
-    rows.forEach((r) => dbIds.current.add(r.id))
-  }
-
-  // ── UPDATE existing DB row (debounced 1.2s) ───────────────────────────────
+  // ── Schedule PUT for one row (debounced 1.5s, then queued serially) ───────
   const scheduleUpdate = useCallback(
     (row: InfluencerRow) => {
       if (!brandId || !dbIds.current.has(row.id)) return
@@ -106,28 +178,26 @@ function InfluencersContent() {
       if (existing) clearTimeout(existing)
 
       const payload = JSON.stringify(buildUpdatePayload(row))
+      const url = `/api/brand/${brandId}/influencers/${row.id}`
+      const handle = row.handle
 
-      const timer = setTimeout(async () => {
+      const timer = setTimeout(() => {
         updateTimers.current.delete(row.id)
-        if (!dbIds.current.has(row.id)) return // deleted while timer pending
+        if (!dbIds.current.has(row.id)) return
 
-        try {
-          const res = await fetch(`/api/brand/${brandId}/influencers/${row.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: payload,
-          })
-          const body = await res.json().catch(() => ({}))
-          if (!res.ok) {
-            console.error("PUT failed:", res.status, body)
-            toast.error(body.error || body.details || `Save failed (${res.status})`)
-          } else {
-            console.log("PUT ok:", res.status, row.id)
-          }
-        } catch (err) {
-          console.error("PUT network error:", err)
-        }
-      }, 1200)
+        putQueue.current.enqueue({
+          url,
+          payload,
+          onError(status) {
+            if (status === 404) {
+              dbIds.current.delete(row.id)
+              toast.error(`Could not save @${handle} — not found. Try refreshing.`)
+            } else if (status !== 503) {
+              toast.error(`Save failed (${status})`)
+            }
+          },
+        })
+      }, 1500)
 
       updateTimers.current.set(row.id, timer)
     },
@@ -153,16 +223,15 @@ function InfluencersContent() {
 
         if (res.ok) {
           const created = await res.json()
-          dbIds.current.add(created.id)
-          idSwapCallback.current?.(row.id, created.id)
-          toast.success(`@${handle} saved`)
+          const realId: string = created.id || created.influencer_id
+          dbIds.current.add(realId)
+          idSwapCallback.current?.(row.id, realId)
+          toast.success(`@${handle} added`)
         } else if (res.status === 409) {
           const body = await res.json().catch(() => ({}))
-          if (body?.id) {
-            dbIds.current.add(body.id)
-            idSwapCallback.current?.(row.id, body.id)
-          }
-          // Not an error — just already exists
+          const existingId: string = body.id || body.influencer_id || row.id
+          dbIds.current.add(existingId)
+          if (existingId !== row.id) idSwapCallback.current?.(row.id, existingId)
         } else if (res.status === 403) {
           const body = await res.json().catch(() => ({}))
           if (body.requiresSubscription) setShowSubscriptionDialog(true)
@@ -181,48 +250,40 @@ function InfluencersContent() {
     [brandId]
   )
 
-  // ── onFetchComplete — Instroom API finished ────────────────────────────────
-  // Row now has full data (followers, location, profile pic, etc.)
-  // If it's a new row: create it now with complete data
-  // If it's an existing row: update it immediately (no debounce)
+  // ── onFetchComplete — Instroom API enriched a row ─────────────────────────
   const handleFetchComplete = useCallback(
     (row: InfluencerRow) => {
       if (!brandId || !rowHasHandle(row)) return
 
       if (dbIds.current.has(row.id)) {
-        // Existing row — save API data immediately (bypass debounce)
+        // Existing row — push to queue (serialized)
         const existing = updateTimers.current.get(row.id)
         if (existing) clearTimeout(existing)
-        fetch(`/api/brand/${brandId}/influencers/${row.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildUpdatePayload(row)),
-        }).catch(() => {})
+        putQueue.current.enqueue({
+          url: `/api/brand/${brandId}/influencers/${row.id}`,
+          payload: JSON.stringify(buildUpdatePayload(row)),
+        })
       } else {
-        // New row — create with full API data
         createRow(row)
       }
     },
     [brandId, createRow]
   )
 
-  // ── onRowsChange — every table mutation ───────────────────────────────────
+  // ── onRowsChange — user edited something in the table ─────────────────────
   const handleRowsChange = useCallback(
     (updatedRows: InfluencerRow[]) => {
+      // Block PUTs during initial load burst
+      if (!readyToSave.current) return
+
       updatedRows.forEach((row) => {
         if (!rowHasHandle(row)) return
 
         if (dbIds.current.has(row.id)) {
-          // Existing DB row — debounced update
           scheduleUpdate(row)
         } else {
-          // New row:
-          // - Instagram/TikTok: wait for onFetchComplete (API will enrich first)
-          // - YouTube/Twitter/other: create immediately (no API fetch happens)
           const isApiPlatform = row.platform === "instagram" || row.platform === "tiktok"
-          if (!isApiPlatform) {
-            createRow(row)
-          }
+          if (!isApiPlatform) createRow(row)
         }
       })
     },
@@ -232,16 +293,15 @@ function InfluencersContent() {
   // ── DELETE ─────────────────────────────────────────────────────────────────
   const handleDeleteRow = useCallback(
     async (rowId: string) => {
-      if (!brandId) return
-      if (!dbIds.current.has(rowId)) return
+      if (!brandId || !dbIds.current.has(rowId)) return
 
       try {
         const res = await fetch(`/api/brand/${brandId}/influencers/${rowId}`, {
           method: "DELETE",
         })
-        if (res.ok) {
+        if (res.ok || res.status === 404) {
           dbIds.current.delete(rowId)
-          toast.success("Influencer removed")
+          if (res.ok) toast.success("Influencer removed")
         } else {
           const body = await res.json().catch(() => ({}))
           toast.error(body.error || "Failed to delete")
@@ -273,7 +333,7 @@ function InfluencersContent() {
             }),
           })
         } catch (err) {
-          console.error("Failed to persist custom column:", err)
+          console.error("[custom-fields] error:", err)
         }
       }
     },
@@ -286,8 +346,11 @@ function InfluencersContent() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <p className="text-gray-600 mb-2">No brand selected</p>
-          <p className="text-sm text-gray-500">Please select a brand to manage influencers</p>
+          <p className="text-gray-600 mb-2 font-medium">No brand selected</p>
+          <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500">Please select a brand to manage influencers</p>
+            {/* Add <code className="bg-gray-100 px-1 rounded text-xs">?brandId=your-brand-id</code> to the URL */}
+          </p>
         </div>
       </div>
     )

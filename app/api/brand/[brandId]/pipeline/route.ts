@@ -1,50 +1,40 @@
 // app/api/brand/[brandId]/pipeline/route.ts
-// GET — returns all Approved influencers for the pipeline kanban/list view.
-// Maps BrandInfluencer contact_status + stage → pipelineStatus column.
 
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// ─── contact_status + stage → kanban column label ────────────────────────────
-// Only Approved influencers reach the pipeline. Their position in the kanban
-// is determined by contact_status first, then stage for shipping/content steps.
 function derivePipelineStatus(
   contactStatus: string,
   stage: number,
   orderStatus: string | null,
   contentPosted: boolean
 ): string {
-  // Stage 5 = content posted
   if (contentPosted || stage >= 5) return "Posted"
-
-  // Stage 4 = product delivered
   if (orderStatus === "delivered" || stage >= 4) return "Delivered"
+  if (orderStatus === "shipped"   || stage >= 3) return "In-Transit"
+  if (stage >= 2 || contactStatus === "agreed")  return "For Order Creation"
 
-  // Stage 3 = product shipped
-  if (orderStatus === "shipped" || stage >= 3) return "In-Transit"
-
-  // Stage 2 = agreed / product pending
-  if (contactStatus === "agreed" || stage >= 2) {
-    if (orderStatus === "pending") return "For Order Creation"
-    return "For Order Creation"
-  }
-
-  // contact_status mappings for stage 1
   switch (contactStatus) {
-    case "not_contacted": return "For Outreach"
-    case "contacted":     return "Contacted"
-    case "interested":    return "Replied"
-    case "agreed":        return "For Order Creation"
-    default:              return "For Outreach"
+    case "pending":          return "For Outreach"
+    case "contacted":        return "Contacted"
+    case "responded":
+    case "replied":          return "Replied"
+    case "negotiating":
+    case "paid_collab":      return "In-Progress"
+    case "not_interested":   return "Not Interested"   // ← stays in pipeline, just in NI column
+    case "no_response":
+    case "email_error":      return "Contacted"
+    case "agreed":           return "For Order Creation"
+    default:                 return "For Outreach"
   }
 }
 
 function formatFollowers(n: number): string {
   if (!n) return "0"
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M"
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K"
+  if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K"
   return String(n)
 }
 
@@ -60,7 +50,6 @@ export async function GET(
 
     const { brandId } = await params
 
-    // Verify brand access
     const brand = await prisma.brand.findFirst({
       where: {
         id: brandId,
@@ -75,7 +64,8 @@ export async function GET(
       return NextResponse.json({ error: "Brand not found or access denied" }, { status: 403 })
     }
 
-    // Only fetch Approved influencers for the pipeline
+    // Fetch ALL Approved influencers — including those marked not_interested
+    // (they stay Approved so they remain visible in the pipeline's NI column)
     const brandInfluencers = await prisma.brandInfluencer.findMany({
       where: {
         brand_id: brandId,
@@ -98,60 +88,52 @@ export async function GET(
       )
 
       return {
-        // BrandInfluencer ID — used for status updates
-        id: bi.id,
-        influencerId: inf.id,
-        campaignId: bi.campaign_id,
-        campaignName: bi.campaign?.name ?? null,
+        id:            bi.id,
+        influencerId:  inf.id,
+        campaignId:    bi.campaign_id,
+        campaignName:  bi.campaign?.name ?? null,
 
-        // Display fields
-        influencer: inf.full_name || inf.handle,
-        instagramHandle: inf.platform === "instagram"
-          ? `@${inf.handle}`
-          : inf.handle,
-        handle: inf.handle,
-        platform: inf.platform.charAt(0).toUpperCase() + inf.platform.slice(1), // "instagram" → "Instagram"
+        influencer:      inf.full_name || inf.handle,
+        instagramHandle: inf.platform === "instagram" ? `@${inf.handle}` : inf.handle,
+        handle:          inf.handle,
+        platform:        inf.platform.charAt(0).toUpperCase() + inf.platform.slice(1),
 
-        // Stats
-        followers: formatFollowers(inf.follower_count),
-        followerCount: inf.follower_count,
+        followers:      formatFollowers(inf.follower_count),
+        followerCount:  inf.follower_count,
         engagementRate: inf.engagement_rate
           ? `${Number(inf.engagement_rate).toFixed(1)}%`
           : "0%",
 
-        // Profile
-        niche: inf.niche || "",
-        location: inf.location || "",
-        email: inf.email || "",
+        niche:           inf.niche    || "",
+        location:        inf.location || "",
+        email:           inf.email    || "",
         profileImageUrl: inf.profile_image_url || null,
-        bio: inf.bio || "",
+        bio:             inf.bio      || "",
 
-        // Pipeline status (derived)
         pipelineStatus,
 
-        // Raw BrandInfluencer fields (for sidebar / future use)
-        contactStatus: bi.contact_status,
-        stage: bi.stage,
-        orderStatus: bi.order_status,
-        contentPosted: bi.content_posted,
-        approvalStatus: bi.approval_status,
-        approvalNotes: bi.approval_notes,
-        agreedRate: bi.agreed_rate ? Number(bi.agreed_rate) : null,
-        currency: bi.currency,
-        deliverables: bi.deliverables,
-        deadline: bi.deadline ? bi.deadline.toISOString() : null,
-        postUrl: bi.post_url,
-        likesCount: bi.likes_count,
-        commentsCount: bi.comments_count,
+        contactStatus:   bi.contact_status,
+        stage:           bi.stage,
+        orderStatus:     bi.order_status,
+        contentPosted:   bi.content_posted,
+        approvalStatus:  bi.approval_status,   // still "Approved"
+        approvalNotes:   bi.approval_notes,    // contains the NI reason
+        agreedRate:      bi.agreed_rate  ? Number(bi.agreed_rate) : null,
+        currency:        bi.currency,
+        deliverables:    bi.deliverables,
+        deadline:        bi.deadline     ? bi.deadline.toISOString()     : null,
+        postUrl:         bi.post_url,
+        likesCount:      bi.likes_count,
+        commentsCount:   bi.comments_count,
         engagementCount: bi.engagement_count,
-        postedAt: bi.posted_at ? bi.posted_at.toISOString() : null,
-        shippedAt: bi.shipped_at ? bi.shipped_at.toISOString() : null,
-        deliveredAt: bi.delivered_at ? bi.delivered_at.toISOString() : null,
-        productDetails: bi.product_details,
-        notes: bi.notes || "",
-        internalRating: bi.internal_rating ? Number(bi.internal_rating) : null,
-        lastContact: bi.updated_at.toISOString(),
-        createdAt: bi.created_at.toISOString(),
+        postedAt:        bi.posted_at    ? bi.posted_at.toISOString()    : null,
+        shippedAt:       bi.shipped_at   ? bi.shipped_at.toISOString()   : null,
+        deliveredAt:     bi.delivered_at ? bi.delivered_at.toISOString() : null,
+        productDetails:  bi.product_details,
+        notes:           bi.notes        || "",   // contains the NI reason
+        internalRating:  bi.internal_rating ? Number(bi.internal_rating) : null,
+        lastContact:     bi.updated_at.toISOString(),
+        createdAt:       bi.created_at.toISOString(),
       }
     })
 
