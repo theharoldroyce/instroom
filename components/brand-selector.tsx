@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
+import { useSession } from "next-auth/react"
 import Script from "next/script"
 import {
   Select,
@@ -14,7 +15,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Zap, AlertCircle } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Plus, Zap, AlertCircle, Check, ChevronDown } from "lucide-react"
 
 interface Brand {
   id: string
@@ -35,11 +37,14 @@ interface BuyBrandsModalState {
 export function BrandSelector() {
   const router = useRouter()
   const pathname = usePathname()
+  const { data: session } = useSession()
   const [brands, setBrands] = useState<Brand[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedBrandId, setSelectedBrandId] = useState<string>("")
   const [mounted, setMounted] = useState(false)
   const [error, setError] = useState("")
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   
   // Buy brands modal state
   const [buyBrandsModal, setBuyBrandsModal] = useState<BuyBrandsModalState>({
@@ -63,6 +68,7 @@ export function BrandSelector() {
     const fetchBrands = async () => {
       try {
         const response = await fetch("/api/brand/list")
+        
         if (response.ok) {
           const data = await response.json()
           setBrands(data.brands)
@@ -88,6 +94,20 @@ export function BrandSelector() {
     fetchBrands()
   }, [pathname, router])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+
+    if (dropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [dropdownOpen])
+
   const handleBrandChange = (brandId: string) => {
     if (brandId === "create-new") {
       checkBrandLimitAndBuy()
@@ -108,6 +128,7 @@ export function BrandSelector() {
 
       if (!res.ok) {
         setError(data.error || "Failed to check brand limit")
+        console.error("Brand limit check failed:", data)
         return
       }
 
@@ -121,14 +142,18 @@ export function BrandSelector() {
           maxTotalBrands: data.maxTotalBrands,
         })
         setBrandsToAdd(1)
+        setError("") // Clear any previous errors
       } else if (data.allowed) {
         // Can create a new brand
         router.push("/dashboard/brand/create")
       } else {
         setError(data.message || "You've reached your brand limit and cannot purchase more.")
+        console.warn("Cannot buy more brands:", data)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred")
+      const errorMsg = err instanceof Error ? err.message : "An error occurred"
+      setError(errorMsg)
+      console.error("Brand limit check error:", err)
     }
   }
 
@@ -225,7 +250,7 @@ export function BrandSelector() {
   }, [buyBrandsModal.isOpen, buyBrandsModal.pricePerBrand, paypalLoaded])
 
   if (!mounted || loading) {
-    return <div className="text-sm text-muted-foreground">Loading workspaces...</div>
+    return <div className="text-sm text-muted-foreground">Loading...</div>
   }
 
   if (brands.length === 0) {
@@ -243,45 +268,148 @@ export function BrandSelector() {
   }
 
   const currentBrand = brands.find((b) => b.id === selectedBrandId)
+  const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").toUpperCase()
+  
+  // Separate owned and shared brands
+  const ownedBrands = brands.filter((b) => b.isOwner)
+  const sharedBrands = brands.filter((b) => !b.isOwner)
 
   return (
     <>
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-50 text-red-700 border border-red-200 text-sm max-w-xs">
-          <AlertCircle className="h-4 w-4" />
-          <span className="text-xs">{error}</span>
+        <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-md bg-red-50 text-red-700 border border-red-200 text-sm">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
         </div>
       )}
       
-      <div className="flex items-center gap-2">
-        <Select value={selectedBrandId} onValueChange={handleBrandChange}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Select a brand" />
-          </SelectTrigger>
-          <SelectContent>
-            {brands.map((brand) => (
-              <SelectItem key={brand.id} value={brand.id}>
-                <div className="flex items-center gap-2">
-                  {brand.logo_url && (
+      <div className="relative" ref={dropdownRef}>
+        {/* Trigger Button - Current Brand */}
+        <button
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          className="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+        >
+          {currentBrand?.logo_url ? (
+            <img
+              src={currentBrand.logo_url}
+              alt={currentBrand.name}
+              className="h-6 w-6 rounded"
+            />
+          ) : (
+            <Avatar className="h-6 w-6">
+              <AvatarFallback className="text-xs font-semibold">{getInitials(currentBrand?.name || "")}</AvatarFallback>
+            </Avatar>
+          )}
+          <span className="text-sm font-medium">{currentBrand?.name}</span>
+          <ChevronDown 
+            className={`h-4 w-4 text-gray-500 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {/* Dropdown Menu */}
+        {dropdownOpen && (
+          <div className="absolute right-0 mt-3 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+            {/* Workspaces Header */}
+            <div className="px-5 py-3 border-b border-gray-100">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">My Workspaces</p>
+            </div>
+
+            {/* Brands List */}
+            <div className="max-h-64 overflow-y-auto">
+              {brands.map((brand) => (
+                <button
+                  key={brand.id}
+                  onClick={() => {
+                    setSelectedBrandId(brand.id)
+                    const params = new URLSearchParams()
+                    params.set("brandId", brand.id)
+                    router.push(`${pathname}?${params.toString()}`)
+                    setDropdownOpen(false)
+                  }}
+                  className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0"
+                >
+                  {brand.logo_url ? (
                     <img
                       src={brand.logo_url}
                       alt={brand.name}
-                      className="h-4 w-4 rounded"
+                      className="h-10 w-10 rounded flex-shrink-0"
                     />
+                  ) : (
+                    <Avatar className="h-10 w-10 flex-shrink-0">
+                      <AvatarFallback className="text-sm font-semibold">{getInitials(brand.name)}</AvatarFallback>
+                    </Avatar>
                   )}
-                  {brand.name}
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-medium text-gray-900">{brand.name}</p>
+                    {brand.isOwner && (
+                      <p className="text-xs text-gray-500">Owner</p>
+                    )}
+                  </div>
+                  {brand.id === selectedBrandId && (
+                    <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Shared Brands Section */}
+            {sharedBrands.length > 0 && (
+              <>
+                <div className="border-t border-gray-100" />
+                <div className="px-5 py-3 border-b border-gray-100">
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Shared With You</p>
                 </div>
-              </SelectItem>
-            ))}
-            <div className="my-1 border-t" />
-            <SelectItem value="create-new">
-              <div className="flex items-center gap-2 text-primary">
+                <div className="max-h-40 overflow-y-auto">
+                  {sharedBrands.map((brand) => (
+                    <button
+                      key={brand.id}
+                      onClick={() => {
+                        setSelectedBrandId(brand.id)
+                        const params = new URLSearchParams()
+                        params.set("brandId", brand.id)
+                        router.push(`${pathname}?${params.toString()}`)
+                        setDropdownOpen(false)
+                      }}
+                      className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0"
+                    >
+                      {brand.logo_url ? (
+                        <img
+                          src={brand.logo_url}
+                          alt={brand.name}
+                          className="h-10 w-10 rounded flex-shrink-0"
+                        />
+                      ) : (
+                        <Avatar className="h-10 w-10 flex-shrink-0">
+                          <AvatarFallback className="text-sm font-semibold">{getInitials(brand.name)}</AvatarFallback>
+                        </Avatar>
+                      )}
+                      <div className="flex-1 text-left">
+                        <p className="text-sm font-medium text-gray-900">{brand.name}</p>
+                      </div>
+                      {brand.id === selectedBrandId && (
+                        <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Create New Brand Button */}
+            <div className="border-t border-gray-100 px-5 py-3">
+              <button
+                onClick={() => {
+                  checkBrandLimitAndBuy()
+                  setDropdownOpen(false)
+                }}
+                className="w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 py-2 px-3 rounded-md flex items-center gap-2 transition-all cursor-pointer"
+              >
                 <Plus className="h-4 w-4" />
-                Create New Workspace
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+                Create workspace
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Buy Extra Brands Modal */}
