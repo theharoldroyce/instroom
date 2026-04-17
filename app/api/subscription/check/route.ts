@@ -22,6 +22,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ active: false }, { status: 200 })
     }
 
+    const now = new Date()
+    
+    // Check if subscription period has ended
+    if (subscription.current_period_end && subscription.current_period_end < now) {
+      return NextResponse.json({ active: false }, { status: 200 })
+    }
+    
+    // Check if subscription was explicitly ended
+    if (subscription.ended_at && subscription.ended_at < now) {
+      return NextResponse.json({ active: false }, { status: 200 })
+    }
+
     return NextResponse.json({ active: true, subscription }, { status: 200 })
   } catch (error) {
     return NextResponse.json(

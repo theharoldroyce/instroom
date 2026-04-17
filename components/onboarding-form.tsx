@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import {
   Card,
   CardContent,
@@ -18,16 +19,16 @@ interface OnboardingFormProps {
   step: number
   showWelcome: boolean
   formData: {
-    goal: string
-    website: string
-    teamSize: string
-    revenue: string
-    source: string
+    operatorType: string
+    businessType: string
+    campaignGoal: string
+    influencerCount: string
+    acquisitionSource: string[]
   }
   onNext: () => void
   onBack: () => void
   onSubmit: () => void
-  onFormChange: (key: string, value: string) => void
+  onFormChange: (key: string, value: string | string[]) => void
   onSkip: () => void
   isLoading?: boolean
   imageWidth?: number | string
@@ -35,11 +36,10 @@ interface OnboardingFormProps {
 }
 
 const STEPS = [
-  { number: 1, title: 'Your Goal', emoji: '🎯', tip: "We'll personalize your\ndashboard around this" },
-  { number: 2, title: 'Website Link', emoji: '🔗', tip: 'Helps us connect analytics\nto your brand' },
-  { number: 3, title: 'Team Size', emoji: '👥', tip: "We'll set up the right\nworkspace for your team" },
-  { number: 4, title: 'Monthly Revenue', emoji: '💰', tip: 'Helps us recommend the\nright plan for you' },
-  { number: 5, title: 'How You Found Us', emoji: '🔍', tip: 'Almost done —\njust one last question!' },
+  { number: 1, title: 'Who are you setting this up for?', description: "We'll configure the right workspace and account type for you." },
+  { number: 2, title: 'What best describes your business?', description: 'Helps us tailor your dashboard and recommend the right tools.' },
+  { number: 3, title: 'What is the main reason you run influencer campaigns?', description: "We'll build your dashboard and reporting around this. You can change this anytime in Settings." },
+  { number: 4, title: 'How many influencers are you currently working with?', description: 'Helps us recommend the right plan and tools for your programme.' },
 ]
 
 export function OnboardingForm({
@@ -55,24 +55,22 @@ export function OnboardingForm({
   imageWidth = '250px',
   imageHeight = '90%',
 }: OnboardingFormProps) {
+  const router = useRouter()
   const currentStep = STEPS[step - 1]
 
   const validateStep = (): string | null => {
     switch (step) {
       case 1:
-        if (!formData.goal) return "Please select your primary goal to continue."
+        if (!formData.operatorType) return "Please select your account type to continue."
         return null
       case 2:
-        // Website is optional
+        if (!formData.businessType) return "Please select your business type to continue."
         return null
       case 3:
-        if (!formData.teamSize) return "Please select your team size to continue."
+        if (!formData.campaignGoal) return "Please select your campaign goal to continue."
         return null
       case 4:
-        if (!formData.revenue) return "Please select your monthly revenue to continue."
-        return null
-      case 5:
-        if (!formData.source) return "Please select how you heard about us to continue."
+        if (!formData.influencerCount) return "Please select your influencer count to continue."
         return null
       default:
         return null
@@ -93,32 +91,92 @@ export function OnboardingForm({
       <div className="flex w-full max-w-sm sm:max-w-2xl rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
         <div className="w-full px-6 sm:px-10 py-8 sm:py-12 flex flex-col items-center justify-center text-center">
-          <div className="text-4xl sm:text-6xl mb-4">🎉</div>
+          <div className="text-4xl sm:text-6xl mb-4"></div>
           <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 mb-2">
-            Almost there!
+            Your workspace is ready!
           </h1>
           <p className="text-xs sm:text-base text-gray-600 mb-8 max-w-xs sm:max-w-sm">
-            Onboarding complete. Now let's find the perfect plan for your needs.
+            Here's what we set up based on your answers
           </p>
-          <Button
-            onClick={onSubmit}
-            disabled={isLoading}
-            className="h-10 sm:h-12 px-8 sm:px-12 text-sm sm:text-base bg-[#4caf50] text-white font-semibold hover:bg-[#2d7d32] rounded-full"
-          >
-            {isLoading ? 'Choosing Plan...' : 'Choose Plan →'}
-          </Button>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-8 w-full text-left text-sm">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👤</span>
+                <span><strong>Account:</strong> {formData.operatorType}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🛒</span>
+                <span><strong>Business:</strong> {formData.businessType}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🎯</span>
+                <span><strong>Goal:</strong> {formData.campaignGoal}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👥</span>
+                <span><strong>Programme:</strong> {formData.influencerCount}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Attribution Question */}
+          <div className="mb-8">
+            <p className="text-xs font-semibold text-gray-600 mb-3">One last thing — how did you hear about us?</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                'Facebook', 'Instagram', 'TikTok', 'LinkedIn',
+                'YouTube', 'Google Search', 'Referral', 'Blog / Article',
+                'Chrome Web Store', 'Product Hunt', 'Podcast', 'Other'
+              ].map((source) => (
+                <button
+                  key={source}
+                  onClick={() => {
+                    const current = formData.acquisitionSource || []
+                    const updated = current.includes(source)
+                      ? current.filter(s => s !== source)
+                      : [...current, source]
+                    onFormChange('acquisitionSource', updated)
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
+                    (formData.acquisitionSource || []).includes(source)
+                      ? 'bg-[#1FAE5B] text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {source}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 w-full">
+            <Button
+              onClick={onSubmit}
+              disabled={isLoading}
+              className="h-10 sm:h-12 px-8 sm:px-12 text-sm sm:text-base bg-[#1FAE5B] text-white font-semibold hover:bg-[#17a04e] rounded-full"
+            >
+              {isLoading ? 'Taking you to dashboard...' : 'Take me to my dashboard →'}
+            </Button>
+            <button
+              onClick={() => router.push("/pricing")}
+              className="text-sm text-gray-600 hover:text-[#1FAE5B] font-medium"
+            >
+              View recommended plan
+            </button>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col sm:flex-row w-full max-w-full sm:max-w-4xl min-h-[620px] sm:h-[520px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative">
+    <div className="flex flex-col sm:flex-row w-full max-w-full sm:max-w-4xl min-h-[520px] sm:h-[480px] rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 border border-[#0F6B3E]/15 relative items-stretch">
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
+      
       {/* Left Content Area */}
-      <div className="flex-1 px-6 sm:px-12 py-6 sm:py-8 flex flex-col overflow-y-auto">
+      <div className="flex-1 px-6 sm:px-10 py-4 sm:py-6 flex flex-col overflow-y-auto">
         {/* Logo */}
-        <div className="flex items-center gap-2 mb-6 sm:mb-8">
+        <div className="flex items-center gap-2 mb-4 sm:mb-6">
           <Image 
             src="/images/instroomLogo.png" 
             alt="Instroom Logo" 
@@ -130,163 +188,124 @@ export function OnboardingForm({
         </div>
 
         {/* Step Indicator */}
-        <div className="text-xs font-semibold text-gray-500 mb-2 tracking-wider">
+        <div className="text-xs font-semibold text-gray-500 mb-1.5 tracking-wider">
           STEP {step} OF {STEPS.length}
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden mb-4 sm:mb-6">
+        <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden mb-3 sm:mb-4">
           <div
-            className="h-full bg-[#4caf50] transition-all duration-300"
+            className="h-full bg-[#1FAE5B] transition-all duration-300"
             style={{ width: `${(step / STEPS.length) * 100}%` }}
           />
         </div>
 
         {/* Question */}
-        <h2 className="text-xl sm:text-3xl font-bold text-gray-900 mb-4 sm:mb-6">
+        <h2 className="text-base sm:text-lg font-bold text-gray-900 mb-1.5 sm:mb-2">
           {currentStep.title}
         </h2>
+        <p className="text-xs leading-tight text-gray-600 mb-3 sm:mb-4">
+          {currentStep.description}
+        </p>
 
         {/* Content */}
-        <div className="flex-1 mb-6 sm:mb-8">
+        <div className="flex-1 mb-4 sm:mb-6">
           {step === 1 && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-                {['Brand Awareness', 'Conversion (Sales)', 'Get UGC', 'Increase Traffic', 'Analytics', 'Global Reach'].map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => onFormChange('goal', option)}
-                    className={`p-3 sm:p-4 rounded-xl border-2 transition-all text-center min-h-[90px] sm:min-h-[100px] flex flex-col items-center justify-center ${
-                      formData.goal === option
-                        ? 'border-[#4caf50] bg-green-50'
-                        : 'border-gray-200 bg-white hover:border-[#4caf50]'
-                    }`}
-                  >
-                    <span className="text-lg sm:text-xl block mb-1 sm:mb-2">
-                      {option === 'Brand Awareness' && '📣'}
-                      {option === 'Conversion (Sales)' && '💸'}
-                      {option === 'Get UGC' && '📸'}
-                      {option === 'Increase Traffic' && '🚀'}
-                      {option === 'Analytics' && '📊'}
-                      {option === 'Global Reach' && '🌍'}
-                    </span>
-                    <p className="text-xs font-semibold text-gray-900 leading-tight">{option}</p>
-                    {formData.goal === option && (
-                      <div className="absolute top-2 right-2 w-5 h-5 bg-[#4caf50] rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs">✓</span>
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: '🛍️ My own brand', subtext: 'I manage my brand\'s influencer campaigns' },
+                { label: '🏢 My brand + a team', subtext: 'We have an in-house marketing team' },
+                { label: '🏬 An agency — multiple clients', subtext: 'I manage campaigns for other brands' },
+                { label: '🧑‍💻 Freelancer / consultant', subtext: 'I work independently across brands' },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  onClick={() => onFormChange('operatorType', option.label)}
+                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
+                    formData.operatorType === option.label
+                      ? 'border-[#1FAE5B] bg-green-50'
+                      : 'border-gray-200 bg-white hover:border-[#1FAE5B]'
+                  }`}
+                >
+                  <p className="font-semibold text-gray-900 text-sm">{option.label}</p>
+                  <p className="text-xs text-gray-500 mt-1">{option.subtext}</p>
+                </button>
+              ))}
             </div>
           )}
 
           {step === 2 && (
-            <div className="space-y-4">
-              <Input
-                type="url"
-                placeholder="https://yourwebsite.com"
-                value={formData.website}
-                onChange={(e) => onFormChange('website', e.target.value)}
-                className="border-2 border-gray-200 rounded-lg px-4 py-3 focus:border-[#4caf50]"
-              />
-              <p className="text-xs text-gray-500">Optional — you can always add this later in settings</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { emoji: '🛒', label: 'eCommerce / DTC', subtext: 'I sell physical products online' },
+                { emoji: '📱', label: 'Mobile app', subtext: 'Installs, sign-ups, in-app actions' },
+                { emoji: '💻', label: 'SaaS / digital product', subtext: 'Software, subscriptions, online tools' },
+                { emoji: '🎨', label: 'Services / personal brand', subtext: 'Coaching, agency, creator, consultant' },
+                { emoji: '🏪', label: 'Retail / physical store', subtext: 'Brick-and-mortar with online presence' },
+                { emoji: '🌐', label: 'Other', subtext: 'None of the above' },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  onClick={() => onFormChange('businessType', option.label)}
+                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
+                    formData.businessType === option.label
+                      ? 'border-[#1FAE5B] bg-green-50'
+                      : 'border-gray-200 bg-white hover:border-[#1FAE5B]'
+                  }`}
+                >
+                  <p className="font-semibold text-gray-900 text-sm">{option.emoji} {option.label}</p>
+                  <p className="text-xs text-gray-500 mt-1">{option.subtext}</p>
+                </button>
+              ))}
             </div>
           )}
 
           {step === 3 && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3">
-              {['Only me', '2–5', '6–10', '11–20', '21–50', '51–100', '100+'].map((option) => (
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { emoji: '🎯', label: 'Drive conversions', subtext: 'Sales, installs, sign-ups, leads' },
+                { emoji: '📣', label: 'Build brand awareness', subtext: 'Reach new audiences at scale' },
+                { emoji: '📸', label: 'Collect UGC content', subtext: 'Photos and videos to repurpose' },
+                { emoji: '💪', label: 'Build an ambassador army', subtext: 'Long-term creator relationships' },
+                { emoji: '⭐', label: 'Build social proof', subtext: 'Trust, credibility, reviews' },
+                { emoji: '🌍', label: 'Expand to new markets', subtext: 'Enter new regions or demographics' },
+              ].map((option) => (
                 <button
-                  key={option}
-                  onClick={() => onFormChange('teamSize', option)}
-                  className={`p-3 rounded-lg border-2 text-center transition-all relative ${
-                    formData.teamSize === option
-                      ? 'border-[#4caf50] bg-green-50'
-                      : 'border-gray-200 bg-white hover:border-[#4caf50]'
+                  key={option.label}
+                  onClick={() => onFormChange('campaignGoal', option.label)}
+                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
+                    formData.campaignGoal === option.label
+                      ? 'border-[#1FAE5B] bg-green-50'
+                      : 'border-gray-200 bg-white hover:border-[#1FAE5B]'
                   }`}
                 >
-                  <span className="text-lg sm:text-xl block mb-1 sm:mb-2">
-                    {option === 'Only me' && '🧑'}
-                    {option === '2–5' && '👥'}
-                    {option === '6–10' && '👨‍👩‍👧'}
-                    {option === '11–20' && '🏢'}
-                    {option === '21–50' && '🏬'}
-                    {option === '51–100' && '🏭'}
-                    {option === '100+' && '🌐'}
-                  </span>
-                  <p className="text-xs font-semibold text-gray-900">{option}</p>
-                  {formData.teamSize === option && (
-                    <div className="absolute top-1 right-1 w-4 h-4 bg-[#4caf50] rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">✓</span>
-                    </div>
-                  )}
+                  <p className="font-semibold text-gray-900 text-sm">{option.emoji} {option.label}</p>
+                  <p className="text-xs text-gray-500 mt-1">{option.subtext}</p>
                 </button>
               ))}
             </div>
           )}
 
           {step === 4 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-              {['$10K–$20K', '$20K–$30K', '$30K–$40K', '$40K–$50K', '$50K+'].map((option) => (
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { emoji: '🌱', label: 'None yet', subtext: 'Just getting started' },
+                { emoji: '👤', label: '1 – 10', subtext: 'Small roster, early stage' },
+                { emoji: '👥', label: '11 – 50', subtext: 'Growing programme' },
+                { emoji: '🚀', label: '51 – 200', subtext: 'Active and scaling' },
+                { emoji: '🏆', label: '200+', subtext: 'Large or agency-scale' },
+              ].map((option) => (
                 <button
-                  key={option}
-                  onClick={() => onFormChange('revenue', option)}
-                  className={`p-3 sm:p-4 rounded-xl border-2 text-center transition-all relative min-h-[90px] sm:min-h-[100px] flex flex-col items-center justify-center ${
-                    formData.revenue === option
-                      ? 'border-[#4caf50] bg-green-50'
-                      : 'border-gray-200 bg-white hover:border-[#4caf50]'
+                  key={option.label}
+                  onClick={() => onFormChange('influencerCount', option.label)}
+                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
+                    formData.influencerCount === option.label
+                      ? 'border-[#1FAE5B] bg-green-50'
+                      : 'border-gray-200 bg-white hover:border-[#1FAE5B]'
                   }`}
                 >
-                  <span className="text-lg sm:text-xl block mb-1 sm:mb-2">
-                    {option === '$10K–$20K' && '💵'}
-                    {option === '$20K–$30K' && '💴'}
-                    {option === '$30K–$40K' && '💶'}
-                    {option === '$40K–$50K' && '💷'}
-                    {option === '$50K+' && '💎'}
-                  </span>
-                  <p className="text-xs font-semibold text-gray-900">{option}</p>
-                  {formData.revenue === option && (
-                    <div className="absolute top-2 right-2 w-5 h-5 bg-[#4caf50] rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">✓</span>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {step === 5 && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3">
-              {['Facebook', 'Instagram', 'TikTok', 'LinkedIn', 'YouTube', 'X', 'Google', 'Upwork', 'Referral', 'Ads'].map((option) => (
-                <button
-                  key={option}
-                  onClick={() => onFormChange('source', option)}
-                  className={`p-3 rounded-lg border-2 text-center transition-all relative ${
-                    formData.source === option
-                      ? 'border-[#4caf50] bg-green-50'
-                      : 'border-gray-200 bg-white hover:border-[#4caf50]'
-                  }`}
-                >
-                  <span className="text-lg sm:text-xl block mb-1 sm:mb-2">
-                    {option === 'Facebook' && '👍'}
-                    {option === 'Instagram' && '📷'}
-                    {option === 'TikTok' && '🎵'}
-                    {option === 'LinkedIn' && '💼'}
-                    {option === 'YouTube' && '▶️'}
-                    {option === 'X' && '✖️'}
-                    {option === 'Google' && '🔎'}
-                    {option === 'Upwork' && '🧑‍💻'}
-                    {option === 'Referral' && '🤝'}
-                    {option === 'Ads' && '📢'}
-                  </span>
-                  <p className="text-xs font-semibold text-gray-900">{option}</p>
-                  {formData.source === option && (
-                    <div className="absolute top-1 right-1 w-4 h-4 bg-[#4caf50] rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs">✓</span>
-                    </div>
-                  )}
+                  <p className="font-semibold text-gray-900 text-sm">{option.emoji} {option.label}</p>
+                  <p className="text-xs text-gray-500 mt-1">{option.subtext}</p>
                 </button>
               ))}
             </div>
@@ -300,7 +319,7 @@ export function OnboardingForm({
               <div
                 key={index}
                 className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                  index < step ? 'bg-[#4caf50]' : 'bg-gray-300'
+                  index < step ? 'bg-[#1FAE5B]' : 'bg-gray-300'
                 }`}
               />
             ))}
@@ -309,7 +328,7 @@ export function OnboardingForm({
             {step === 1 ? (
               <button
                 onClick={onSkip}
-                className="text-sm text-gray-500 hover:text-[#4caf50]"
+                className="text-sm text-gray-500 hover:text-[#1FAE5B]"
                 disabled={isLoading}
               >
                 Skip ≫
@@ -326,7 +345,7 @@ export function OnboardingForm({
             <Button
               onClick={handleNext}
               disabled={isLoading}
-              className="px-6 sm:px-8 h-9 sm:h-10 text-xs sm:text-sm bg-[#4caf50] text-white font-semibold hover:bg-[#2d7d32] rounded-full whitespace-nowrap"
+              className="px-6 sm:px-8 h-9 sm:h-10 text-xs sm:text-sm bg-[#1FAE5B] text-white font-semibold hover:bg-[#17a04e] rounded-full whitespace-nowrap"
             >
               {step === STEPS.length ? (isLoading ? 'Completing...' : 'Complete Setup →') : 'Next Step →'}
             </Button>
@@ -335,61 +354,46 @@ export function OnboardingForm({
       </div>
 
       {/* Right Sidebar - Hidden on mobile */}
-      <div className="hidden sm:block w-full sm:w-64 bg-gradient-to-b from-[#d4edcf] to-[#aed9b0] relative overflow-hidden">
-        <div className="absolute w-40 h-40 bg-white/20 rounded-full -top-20 -right-20" />
-        <div className="absolute w-24 h-24 bg-white/15 rounded-full -bottom-10 -left-10" />
+      <div className="hidden sm:block w-full sm:w-64 h-full relative overflow-hidden">
         
-        {/* Image container - fills entire sidebar */}
-        <div 
-          className="w-full h-full relative"
-        >
+        {/* Images for each step */}
+        <div className="w-full h-full relative">
           {step === 1 && (
             <Image
-              src="/images/yourGoal.png"
-              alt="Your Goal"
+              src="/images/1.png"
+              alt="Step 1: Account Type"
               fill
               className="object-cover"
+              priority
             />
           )}
           {step === 2 && (
             <Image
-              src="/images/websiteLink.png"
-              alt="Website Link"
+              src="/images/2.png"
+              alt="Step 2: Business Type"
               fill
               className="object-cover"
+              priority
             />
           )}
           {step === 3 && (
             <Image
-              src="/images/teamSize.png"
-              alt="Team Size"
+              src="/images/3.png"
+              alt="Step 3: Campaign Goal"
               fill
               className="object-cover"
+              priority
             />
           )}
           {step === 4 && (
             <Image
-              src="/images/revenue.png"
-              alt="Revenue"
+              src="/images/4.png"
+              alt="Step 4: Influencer Count"
               fill
               className="object-cover"
+              priority
             />
           )}
-          {step === 5 && (
-            <Image
-              src="/images/how'dHear.png"
-              alt="How You Heard About Us"
-              fill
-              className="object-cover"
-            />
-          )}
-        </div>
-        
-        {/* Text container - positioned below image */}
-        <div className="absolute bottom-0 left-0 right-0 px-4 py-5 bg-gradient-to-t from-black/40 via-black/20 to-transparent z-10">
-          <p className="text-center text-xs font-semibold text-white leading-relaxed whitespace-pre-line drop-shadow-lg">
-            {currentStep.tip}
-          </p>
         </div>
       </div>
     </div>

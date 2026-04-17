@@ -294,6 +294,25 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   const handleGoogleSignup = async () => {
     try {
       setIsLoading(true)
+      setError(null)
+
+      // Check if email already exists before initiating Google OAuth
+      if (formData.email) {
+        const checkResponse = await fetch("/api/auth/check-google-signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: formData.email }),
+        })
+
+        if (checkResponse.status === 409) {
+          const data = await checkResponse.json()
+          setError(data.error || "Account already exists. Please log in instead.")
+          // Redirect to login
+          window.location.href = "/login"
+          return
+        }
+      }
+
       await signIn("google", { callbackUrl: "/onboarding" })
     } catch (err) {
       setError("Google signup failed. Please try again.")
@@ -303,14 +322,14 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   }
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6 w-full max-w-sm sm:max-w-lg">
-      <Card className={cn("rounded-2xl shadow-lg p-6 sm:p-8 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden")}>
+    <div className="flex flex-col gap-2 sm:gap-3 w-full max-w-sm sm:max-w-lg">
+      <Card className={cn("rounded-2xl shadow-lg p-4 sm:p-5 border border-[#0F6B3E]/15 bg-gradient-to-b from-white via-white to-[#0F6B3E]/5 relative overflow-hidden")}>
         {/* Decorative accent line at top */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#1FAE5B] to-transparent" />
         
         {step === 'form' ? (
           <>
-            <CardHeader className="gap-2 pb-1 pt-4">
+            <CardHeader className="gap-0.5 pb-0 pt-1">
               <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900">Create an account</CardTitle>
               <CardDescription className="text-xs sm:text-sm text-gray-600">
                 Enter your information below to create your account
@@ -318,12 +337,12 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
             </CardHeader>
         <CardContent className="pt-1">
           {error && (
-            <div className="mb-6 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-3 text-xs sm:text-sm text-[#C87500]">
+            <div className="mb-2 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-1.5 text-xs sm:text-sm text-[#C87500]">
               {error}
             </div>
           )}
           <form onSubmit={handleGenerateOTP}>
-            <FieldGroup className="space-y-2 sm:space-y-1">
+            <FieldGroup className="space-y-0.5">
               <Field>
                 <FieldLabel htmlFor="name" className="font-medium text-gray-700 text-xs sm:text-sm">
                   Full Name
@@ -353,7 +372,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                   required
                   className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors text-sm"
                 />
-                <FieldDescription className="text-gray-600 text-xs mt-1">
+                <FieldDescription className="text-gray-600 text-xs mt-0.5">
                   We&apos;ll use this to contact you. We will not share your email
                   with anyone else.
                 </FieldDescription>
@@ -375,7 +394,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                 
                 {/* Password Strength Indicator */}
                 {formData.password && (
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-1.5 space-y-1">
                     {/* Strength Bar */}
                     <div className="flex gap-1">
                       <div className={`h-1 flex-1 rounded-full transition-colors ${passwordStrength.hasMinLength ? 'bg-green-500' : 'bg-gray-200'}`} />
@@ -399,7 +418,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                     </div>
 
                     {/* Requirements Checklist */}
-                    <div className="text-xs space-y-1 mt-2">
+                    <div className="text-xs space-y-0.5 mt-1">
                       <div className={`flex items-center gap-2 ${passwordStrength.hasMinLength ? 'text-green-600' : 'text-gray-500'}`}>
                         <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${passwordStrength.hasMinLength ? 'bg-green-500' : 'bg-gray-300'}`}>
                           {passwordStrength.hasMinLength && <span className="text-white text-xs">✓</span>}
@@ -449,7 +468,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                   className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors"
                 />
               </Field>
-              <Field className="space-y-2 sm:space-y-3 pt-4">
+              <Field className="space-y-0.5 pt-0.5">
                 <Button
                   type="submit"
                   disabled={isLoading}
@@ -472,7 +491,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                   Sign up with Google
                 </Button>
               </Field>
-              <Field className="pt-2 border-t border-gray-100">
+              <Field className="pt-0.5 border-t border-gray-100">
                 <FieldDescription className="text-center text-xs sm:text-sm text-gray-600">
                   Already have an account?{" "}
                   <Link href="/login" className="text-[#0F6B3E] hover:text-[#1FAE5B] font-semibold">
@@ -486,7 +505,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
           </>
         ) : (
           <>
-            <CardHeader className="gap-2 pb-1 pt-4">
+            <CardHeader className="gap-0.5 pb-0 pt-1">
               <CardTitle className="text-xl sm:text-2xl font-bold text-gray-900">Verify your email</CardTitle>
               <CardDescription className="text-xs sm:text-sm text-gray-600">
                 We sent a 6-digit code to <span className="font-medium text-gray-900">{formData.email}</span>
@@ -494,12 +513,12 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
             </CardHeader>
             <CardContent className="pt-1">
               {error && (
-                <div className="mb-6 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-3 text-xs sm:text-sm text-[#C87500]">
+                <div className="mb-2 rounded-lg border border-[#F4B740]/40 bg-[#F4B740]/8 p-1.5 text-xs sm:text-sm text-[#C87500]">
                   {error}
                 </div>
               )}
               <form onSubmit={handleVerifyOTP}>
-                <FieldGroup className="space-y-2 sm:space-y-1">
+                <FieldGroup className="space-y-0.5">
                   <Field>
                     <FieldLabel htmlFor="otp" className="font-medium text-gray-700 text-xs sm:text-sm">
                       Verification Code
@@ -516,11 +535,11 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                       required
                       className="rounded-lg border border-gray-200 bg-gray-50/50 text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-[#0F6B3E] focus:ring-[#0F6B3E]/20 transition-colors text-center text-2xl font-mono tracking-widest"
                     />
-                    <FieldDescription className="text-gray-600 text-xs mt-1">
+                    <FieldDescription className="text-gray-600 text-xs mt-0.5">
                       Enter the 6-digit code you received by email
                     </FieldDescription>
                   </Field>
-                  <Field className="space-y-2 sm:space-y-3 pt-4">
+                  <Field className="space-y-0.5 pt-0.5">
                     <Button
                       type="submit"
                       disabled={isLoading || otpData.otp.length !== 6}
@@ -537,7 +556,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                       {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend Code"}
                     </Button>
                   </Field>
-                  <Field className="pt-2 border-t border-gray-100">
+                  <Field className="pt-0.5 border-t border-gray-100">
                     <FieldDescription className="text-center text-xs sm:text-sm text-gray-600">
                       <button
                         type="button"

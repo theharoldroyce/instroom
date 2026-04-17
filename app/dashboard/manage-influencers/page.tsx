@@ -11,6 +11,7 @@ import TableSheet, {
 } from "@/components/table-sheet"
 import { useInfluencerData } from "@/hooks/useInfluencerData"
 import { LimitExceededDialog } from "@/components/limit-exceeded-dialog"
+import { WorkspaceUnavailableModal } from "@/components/workspace-unavailable-modal"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -141,6 +142,28 @@ function InfluencersContent() {
   const dbIds = useRef<Set<string>>(new Set())
   const seededForBrand = useRef<string | null>(null)
 
+  // Fetch brand name for the modal
+  useEffect(() => {
+    if (!brandId) return
+    
+    const fetchBrandName = async () => {
+      try {
+        const res = await fetch(`/api/brands/me?brandId=${brandId}`)
+        if (res.ok) {
+          const data = await res.json()
+          const brand = data.brands?.find((b: any) => b.id === brandId)
+          if (brand) {
+            setSelectedBrandName(brand.name)
+          }
+        }
+      } catch (err) {
+        // Silent fail - we have the brandId anyway
+      }
+    }
+    
+    fetchBrandName()
+  }, [brandId])
+
   useEffect(() => {
     if (!isLoading && rows.length > 0 && brandId && seededForBrand.current !== brandId) {
       seededForBrand.current = brandId
@@ -168,6 +191,8 @@ function InfluencersContent() {
   const idSwapCallback  = useRef<((tempId: string, realId: string) => void) | null>(null)
 
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false)
+  const [showWorkspaceUnavailableModal, setShowWorkspaceUnavailableModal] = useState(false)
+  const [selectedBrandName, setSelectedBrandName] = useState<string>("")
 
   // ── Schedule PUT for one row (debounced 1.5s, then queued serially) ───────
   const scheduleUpdate = useCallback(
@@ -347,16 +372,27 @@ function InfluencersContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <p className="text-gray-600 mb-2 font-medium">No brand selected</p>
-          <p className="text-sm text-gray-500">
-            <p className="text-sm text-gray-500">Please select a brand to manage influencers</p>
-            {/* Add <code className="bg-gray-100 px-1 rounded text-xs">?brandId=your-brand-id</code> to the URL */}
-          </p>
+          <p className="text-sm text-gray-500">Please select a brand to manage influencers</p>
         </div>
       </div>
     )
   }
 
   if (error) {
+    const isWorkspaceUnavailable = error.includes("workspace is unavailable") || error.includes("subscription is inactive")
+    
+    if (isWorkspaceUnavailable) {
+      return (
+        <WorkspaceUnavailableModal
+          open={true}
+          onOpenChange={() => {
+            // Redirect or close - for now just show the modal
+          }}
+          workspaceName={selectedBrandName || "Workspace"}
+        />
+      )
+    }
+
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -398,6 +434,12 @@ function InfluencersContent() {
         title="Subscription Required"
         description="You need a paid plan to add influencers."
         message="Subscribe to a paid plan to start adding influencers to your brand."
+      />
+
+      <WorkspaceUnavailableModal
+        open={showWorkspaceUnavailableModal}
+        onOpenChange={setShowWorkspaceUnavailableModal}
+        workspaceName={selectedBrandName}
       />
     </div>
   )

@@ -114,6 +114,7 @@ export async function canAddCollaborator(
 
 /**
  * Check if user can add a new influencer to their brand
+ * Free users (no active subscription) cannot add influencers
  */
 export async function canAddInfluencer(
   userId: string,
@@ -144,12 +145,13 @@ export async function canAddInfluencer(
       include: { plan: true },
     })
 
+    // Free users (no active subscription) cannot add influencers at all
     if (!subscription || subscription.status !== "active") {
       return {
         allowed: false,
         current: 0,
         max: 0,
-        message: "No active subscription found",
+        message: "Upgrade to a paid plan to add influencers. You can add team members to your workspace for free.",
       }
     }
 
@@ -351,6 +353,7 @@ export async function getSubscriptionDetails(userId: string) {
 
 /**
  * Check if a user has an active subscription
+ * Must have status 'active' or 'trialing' AND not be past the current_period_end AND ended_at must be null/future
  */
 export async function userHasActiveSubscription(userId: string): Promise<boolean> {
   try {
@@ -360,7 +363,24 @@ export async function userHasActiveSubscription(userId: string): Promise<boolean
         status: { in: ["active", "trialing"] },
       },
     })
-    return !!subscription
+    
+    if (!subscription) {
+      return false
+    }
+    
+    const now = new Date()
+    
+    // Check if subscription period has ended
+    if (subscription.current_period_end && subscription.current_period_end < now) {
+      return false
+    }
+    
+    // Check if subscription was explicitly ended
+    if (subscription.ended_at && subscription.ended_at < now) {
+      return false
+    }
+    
+    return true
   } catch (error) {
     return false
   }

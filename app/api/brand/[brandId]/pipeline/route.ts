@@ -65,13 +65,16 @@ export async function GET(
       return NextResponse.json({ error: "Brand not found or access denied" }, { status: 403 })
     }
 
-    // Check if brand owner has active subscription
-    const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
-    if (!ownerHasActiveSubscription) {
-      return NextResponse.json(
-        { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
-        { status: 403 }
-      )
+    // Check if brand owner has active subscription - only for team members (not owner)
+    const isOwner = brand.owner_id === session.user.id
+    if (!isOwner) {
+      const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
+      if (!ownerHasActiveSubscription) {
+        return NextResponse.json(
+          { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
+          { status: 403 }
+        )
+      }
     }
 
     // Only fetch Approved influencers for the pipeline

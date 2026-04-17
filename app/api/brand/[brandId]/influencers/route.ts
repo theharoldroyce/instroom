@@ -33,13 +33,15 @@ export async function GET(
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    // Check if brand owner has active subscription
-    const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
-    if (!ownerHasActiveSubscription) {
-      return NextResponse.json(
-        { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
-        { status: 403 }
-      )
+    // Check if brand owner has active subscription - only for team members (not owner)
+    if (!isOwner) {
+      const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
+      if (!ownerHasActiveSubscription) {
+        return NextResponse.json(
+          { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
+          { status: 403 }
+        )
+      }
     }
 
     // Fetch BrandInfluencer rows without include to avoid Prisma throwing
