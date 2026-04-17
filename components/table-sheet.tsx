@@ -24,7 +24,6 @@ import {
   IconSearch,
   IconFilter,
   IconEdit,
-  IconUserCircle,
   IconChartBar,
   IconTags,
   IconCurrencyDollar,
@@ -41,6 +40,9 @@ import {
   IconChevronDown,
   IconLoader2,
   IconBulb,
+  IconArrowUp,
+  IconArrowDown,
+  IconArrowsSort,
 } from "@tabler/icons-react"
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -55,6 +57,8 @@ export type InfluencerRow = {
   transferred_date?: string; approval_notes?: string; decline_reason?: string;
   tier?: string; community_status?: string; bio?: string; profile_image_url?: string;
   avg_likes?: string | number; avg_comments?: string | number; avg_views?: string | number;
+  // NEW: created_at for accurate sort
+  created_at?: string;
 }
 
 export type CustomColumn = {
@@ -64,6 +68,8 @@ export type CustomColumn = {
   assignedGroup: "Influencer Details" | "Approval Details" | "Outreach Details";
   description?: string
 }
+
+type SortOrder = "newest" | "oldest"
 
 type CellAddress = { rowIdx: number; colIdx: number }
 type ColDef = { key: string; label: string; group: "Influencer Details" | "Approval Details" | "Outreach Details"; minWidth: number; type: "text" | "number" | "select" | "url" | "date"; options?: string[]; isCustom?: false }
@@ -135,9 +141,34 @@ function displayHandle(handle: string, platform: string): string {
   return clean
 }
 
-function ProfilePicture({ src, socialLink, name, size = 28, onExpired }: { src?: string; socialLink?: string; name?: string; size?: number; onExpired?: () => void }) {
+// ── Generate a consistent color from a string (handle or name) ───────────────
+function stringToColor(str: string): { bg: string; text: string } {
+  const colors = [
+    { bg: "#dbeafe", text: "#1e40af" }, // blue
+    { bg: "#dcfce7", text: "#166534" }, // green
+    { bg: "#fce7f3", text: "#9d174d" }, // pink
+    { bg: "#ede9fe", text: "#5b21b6" }, // purple
+    { bg: "#ffedd5", text: "#9a3412" }, // orange
+    { bg: "#cffafe", text: "#155e75" }, // cyan
+    { bg: "#fef9c3", text: "#854d0e" }, // yellow
+    { bg: "#f1f5f9", text: "#334155" }, // slate
+  ]
+  let hash = 0
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash)
+  return colors[Math.abs(hash) % colors.length]
+}
+
+function getInitials(name?: string, handle?: string): string {
+  const source = name?.trim() || handle?.trim().replace(/^@/, "") || ""
+  if (!source) return "?"
+  const parts = source.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return source.slice(0, 2).toUpperCase()
+}
+
+function ProfilePicture({ src, socialLink, name, handle, size = 28, onExpired }: { src?: string; socialLink?: string; name?: string; handle?: string; size?: number; onExpired?: () => void }) {
   const [imgError, setImgError] = useState(false)
-  const needsProxy = src && (
+  const needsProxy = src && !src.startsWith("data:") && (
     src.includes("cdninstagram.com") ||
     src.includes("scontent-") ||
     src.includes("tiktokcdn") ||
@@ -161,6 +192,12 @@ function ProfilePicture({ src, socialLink, name, size = 28, onExpired }: { src?:
     }
   }
 
+  // Initials avatar fallback
+  const initials = getInitials(name, handle)
+  const colorKey = name?.trim() || handle?.trim().replace(/^@/, "") || "?"
+  const { bg, text } = stringToColor(colorKey)
+  const fontSize = size <= 24 ? size * 0.38 : size * 0.36
+
   const content = hasSrc ? (
     <img
       src={proxySrc}
@@ -171,10 +208,10 @@ function ProfilePicture({ src, socialLink, name, size = 28, onExpired }: { src?:
     />
   ) : (
     <div
-      className="rounded-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center flex-shrink-0"
-      style={{ width: size, height: size }}
+      className="rounded-full flex items-center justify-center flex-shrink-0 font-semibold select-none"
+      style={{ width: size, height: size, background: bg, color: text, fontSize }}
     >
-      <IconUserCircle size={size * 0.75} className="text-gray-400" />
+      {initials}
     </div>
   )
 
@@ -206,6 +243,8 @@ function newEmptyRow(customCols: CustomColumn[]): InfluencerRow {
     social_link: "", first_name: "", contact_info: "", approval_status: "Pending",
     transferred_date: "", approval_notes: "", decline_reason: "", tier: "Bronze",
     community_status: "Pending", profile_image_url: "",
+    // NEW: stamp created_at so sort works for newly added rows
+    created_at: new Date().toISOString(),
   }
 }
 
@@ -708,12 +747,31 @@ function ManageOptionsModal({ isOpen, onClose, title, options, onSave }: { isOpe
 /* ═══════════════════════════════════════════════════════════════════════════════
    IMPORT / EXPORT
    ═══════════════════════════════════════════════════════════════════════════════ */
+
+// These are the IMPORT-friendly columns — matches the template screenshot exactly.
+// Keep this lean: only fields a user would fill in manually from a spreadsheet.
+const IMPORT_FIELDS = [
+  { key: "handle",          label: "Handle" },
+  { key: "platform",        label: "Platform" },
+  { key: "full_name",       label: "Full Name" },
+  { key: "first_name",      label: "First Name" },
+  { key: "email",           label: "Email" },
+  { key: "niche",           label: "Niche" },
+  { key: "gender",          label: "Gender" },
+  { key: "location",        label: "Location" },
+  { key: "follower_count",  label: "Follower Count" },
+  { key: "engagement_rate", label: "Engagement" },
+  { key: "social_link",     label: "Social Link" },
+  { key: "contact_info",    label: "Contact Email" },
+]
+
+// Full export includes everything (for backup/restore)
 const CSV_EXPORT_FIELDS = [
   { key: "handle", label: "Handle" },{ key: "platform", label: "Platform" },
   { key: "full_name", label: "Full Name" },{ key: "first_name", label: "First Name" },
   { key: "email", label: "Email" },{ key: "niche", label: "Niche" },
   { key: "gender", label: "Gender" },{ key: "location", label: "Location" },
-  { key: "follower_count", label: "Follower Count" },{ key: "engagement_rate", label: "Engagement Rate (%)" },
+  { key: "follower_count", label: "Follower Count" },{ key: "engagement_rate", label: "Engagement" },
   { key: "social_link", label: "Social Link" },{ key: "contact_info", label: "Contact Email" },
   { key: "approval_status", label: "Approval Status" },{ key: "transferred_date", label: "Transferred Date" },
   { key: "approval_notes", label: "Approval Notes" },{ key: "contact_status", label: "Contact Status" },
@@ -721,6 +779,7 @@ const CSV_EXPORT_FIELDS = [
 ]
 
 function escapeCSV(val: string): string { if (!val) return ""; if (val.includes(",") || val.includes('"') || val.includes("\n")) return `"${val.replace(/"/g, '""')}"`; return val }
+
 function exportToCSV(rows: InfluencerRow[], cc: CustomColumn[]): void {
   const af=[...CSV_EXPORT_FIELDS,...cc.map(c=>({key:`custom.${c.field_key}`,label:c.field_name}))]
   const h=af.map(f=>escapeCSV(f.label)).join(",")
@@ -729,25 +788,87 @@ function exportToCSV(rows: InfluencerRow[], cc: CustomColumn[]): void {
   const b=new Blob([csv],{type:"text/csv;charset=utf-8;"})
   const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download=`influencers_export_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(u)
 }
+
+// Template uses IMPORT_FIELDS only — clean and matches the screenshot
 function downloadTemplate(cc: CustomColumn[]): void {
-  const af=[...CSV_EXPORT_FIELDS,...cc.map(c=>({key:`custom.${c.field_key}`,label:c.field_name}))]
+  const af=[...IMPORT_FIELDS,...cc.map(c=>({key:`custom.${c.field_key}`,label:c.field_name}))]
   const h=af.map(f=>escapeCSV(f.label)).join(",")
-  const csv=[h].join("\n")
-  const b=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="influencers_import_template.csv"; a.click(); URL.revokeObjectURL(u)
+  // Add a sample row so users understand the format
+  const sample=[
+    "aliyahbeauty","instagram","Aliyah Santos","Aliyah","aliyah@email.com",
+    "Beauty","Female","Philippines","45000","3.2",
+    "https://instagram.com/aliyahbeauty","aliyah@email.com",
+    ...cc.map(()=>""),
+  ].map(escapeCSV).join(",")
+  const csv=[h,sample].join("\n")
+  const b=new Blob([csv],{type:"text/csv;charset=utf-8;"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="instroom_import_template.csv"; a.click(); URL.revokeObjectURL(u)
 }
+
 function parseCSV(text: string): string[][] {
   const rows: string[][]=[]; let cur: string[]=[]; let cell=""; let inQ=false
   for(let i=0;i<text.length;i++){const ch=text[i]; if(inQ){if(ch==='"'&&text[i+1]==='"'){cell+='"';i++}else if(ch==='"')inQ=false;else cell+=ch}else{if(ch==='"')inQ=true;else if(ch===','){cur.push(cell);cell=""}else if(ch==='\n'||(ch==='\r'&&text[i+1]==='\n')){cur.push(cell);cell="";rows.push(cur);cur=[];if(ch==='\r')i++}else cell+=ch}}
   if(cell||cur.length){cur.push(cell);rows.push(cur)}; return rows
 }
-function importFromCSV(text: string, cc: CustomColumn[]): InfluencerRow[] {
-  const p=parseCSV(text); if(p.length<2)return[]
+
+// Returns { rows, niches, locations } so caller can update manage lists
+function importFromCSV(
+  text: string,
+  cc: CustomColumn[]
+): { rows: InfluencerRow[]; niches: string[]; locations: string[] } {
+  const p=parseCSV(text); if(p.length<2) return { rows:[], niches:[], locations:[] }
   const hd=p[0].map(h=>h.trim().toLowerCase())
-  const fm:Record<string,string>={};
+
+  // Build field map — accept both IMPORT_FIELDS and full CSV_EXPORT_FIELDS labels
+  const fm:Record<string,string>={}
   CSV_EXPORT_FIELDS.forEach(f=>{fm[f.label.toLowerCase()]=f.key})
+  IMPORT_FIELDS.forEach(f=>{fm[f.label.toLowerCase()]=f.key}) // overwrite with canonical
   cc.forEach(c=>{fm[c.field_name.toLowerCase()]=`custom.${c.field_key}`})
-  const rows:InfluencerRow[]=[]; for(let i=1;i<p.length;i++){const vals=p[i]; if(vals.every(v=>!v.trim()))continue; const row=newEmptyRow(cc); hd.forEach((h,ci)=>{const key=fm[h]; if(!key||ci>=vals.length)return; const val=vals[ci].trim(); if(key.startsWith("custom."))row.custom[key.slice(7)]=val; else (row as Record<string,unknown>)[key]=val}); if(!["Approved","Declined","Pending"].includes(row.approval_status||""))row.approval_status="Pending"; row.handle=cleanHandle(row.handle); rows.push(row)}
-  return rows
+
+  const rows:InfluencerRow[]=[]
+  const discoveredNiches=new Set<string>()
+  const discoveredLocations=new Set<string>()
+
+  for(let i=1;i<p.length;i++){
+    const vals=p[i]
+    if(vals.every(v=>!v.trim()))continue
+    const row=newEmptyRow(cc)
+    hd.forEach((h,ci)=>{
+      const key=fm[h]
+      if(!key||ci>=vals.length)return
+      const val=vals[ci].trim()
+      if(!val)return
+      if(key.startsWith("custom."))row.custom[key.slice(7)]=val
+      else (row as Record<string,unknown>)[key]=val
+    })
+    if(!["Approved","Declined","Pending"].includes(row.approval_status||""))row.approval_status="Pending"
+    row.handle=cleanHandle(row.handle)
+
+    // Normalise platform to lowercase internal value
+    if(row.platform){
+      const pl=row.platform.toLowerCase()
+      const map:Record<string,string>={instagram:"instagram",tiktok:"tiktok",youtube:"youtube","x (twitter)":"twitter",twitter:"twitter",other:"other"}
+      row.platform=map[pl]||"instagram"
+    }
+
+    // Collect niches & locations for the manage lists
+    if(row.niche?.trim()) discoveredNiches.add(row.niche.trim())
+    if(row.location?.trim()) discoveredLocations.add(row.location.trim())
+
+    // Sync email → contact_info
+    if(row.email && !row.contact_info) row.contact_info = row.email
+    if(row.contact_info && !row.email) row.email = row.contact_info
+
+    // Derive first_name from full_name if not provided
+    if(!row.first_name && row.full_name) row.first_name = row.full_name.split(" ")[0]
+
+    rows.push(row)
+  }
+
+  return {
+    rows,
+    niches: [...discoveredNiches],
+    locations: [...discoveredLocations],
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -810,7 +931,6 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
     }
   }
 
-  // ── FIX: handleSave — properly rebuilds full_name from first_name ──────────
   const handleSave = async () => {
     if (!editedRow || !row?.id) return
     if (row.id.trim() === "") {
@@ -823,8 +943,6 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
         ? `/api/brand/${brandId}/influencers/${row.id}`
         : `/api/influencers/${row.id}`
 
-      // Rebuild full_name from edited first_name + any existing last name parts
-      // so that editing first_name in the sidebar actually persists to the DB
       const existingLastName = editedRow.full_name
         ? editedRow.full_name.split(" ").slice(1).join(" ")
         : ""
@@ -838,7 +956,6 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
         handle: editedRow.handle,
         platform: editedRow.platform,
         full_name: rebuiltFullName,
-        // Use contact_info as primary email — Order tab writes here
         email: editedRow.contact_info || editedRow.email || null,
         gender: editedRow.gender || null,
         niche: editedRow.niche || null,
@@ -848,7 +965,6 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
         social_link: editedRow.social_link || null,
         follower_count: parseInt(String(editedRow.follower_count)) || 0,
         engagement_rate: parseFloat(String(editedRow.engagement_rate)) || 0,
-        // Persist API-fetched metrics so they survive page reload
         avg_likes: parseInt(String(editedRow.avg_likes)) || 0,
         avg_comments: parseInt(String(editedRow.avg_comments)) || 0,
         avg_views: parseInt(String(editedRow.avg_views)) || 0,
@@ -867,7 +983,6 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
         body: JSON.stringify(payload),
       })
       if (response.ok) {
-        // Sync the rebuilt full_name back into editedRow so the UI stays consistent
         const synced = {
           ...editedRow,
           full_name: rebuiltFullName || editedRow.full_name,
@@ -926,7 +1041,7 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
           <div style={{fontSize:15,fontWeight:600,color:"#1e1e1e",marginBottom:12}}>Influencer Profile</div>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
             <div style={S.avatar}>
-              <ProfilePicture src={editedRow.profile_image_url} socialLink={editedRow.social_link || getProfileUrl(editedRow.platform, editedRow.handle)} name={editedRow.full_name || editedRow.handle} size={52} />
+              <ProfilePicture src={editedRow.profile_image_url} socialLink={editedRow.social_link || getProfileUrl(editedRow.platform, editedRow.handle)} name={editedRow.full_name || editedRow.handle} handle={editedRow.handle} size={52} />
             </div>
             <div style={{flex:1}}>
               <div style={S.name}>{editedRow.full_name||editedRow.first_name||""}</div>
@@ -1003,32 +1118,19 @@ function ProfileSidebar({ row, customCols, onUpdate, onClose, readOnly=false, ni
           )}
           {profileTab===1&&(
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {/* ── FIX: first_name and email write directly to editedRow via handleFieldChange ── */}
               <div style={S.formRow}>
                 <div style={S.formGroup}>
                   <div style={S.formLabel}>First name</div>
-                  <input
-                    style={S.formInput}
-                    value={editedRow.first_name||""}
-                    onChange={e=>handleFieldChange("first_name",e.target.value)}
-                  />
+                  <input style={S.formInput} value={editedRow.first_name||""} onChange={e=>handleFieldChange("first_name",e.target.value)}/>
                 </div>
                 <div style={S.formGroup}>
                   <div style={S.formLabel}>Last name</div>
-                  <input
-                    style={{...S.formInput,background:"#f7f9f8",color:"#888"}}
-                    value={editedRow.full_name?.split(" ").slice(1).join(" ")||""}
-                    readOnly
-                  />
+                  <input style={{...S.formInput,background:"#f7f9f8",color:"#888"}} value={editedRow.full_name?.split(" ").slice(1).join(" ")||""} readOnly/>
                 </div>
               </div>
               <div style={S.formGroup}>
                 <div style={S.formLabel}>Email</div>
-                <input
-                  style={S.formInput}
-                  value={editedRow.contact_info||editedRow.email||""}
-                  onChange={e=>handleFieldChange("contact_info",e.target.value)}
-                />
+                <input style={S.formInput} value={editedRow.contact_info||editedRow.email||""} onChange={e=>handleFieldChange("contact_info",e.target.value)}/>
               </div>
               <div style={S.formGroup}><div style={S.formLabel}>Product Name</div><input style={S.formInput} value={orderData.productName} onChange={e=>setOrderData(d=>({...d,productName:e.target.value}))}/></div>
               <div style={S.formGroup}><div style={S.formLabel}>Order Number</div><input style={S.formInput} value={orderData.orderNumber} onChange={e=>setOrderData(d=>({...d,orderNumber:e.target.value}))}/></div>
@@ -1176,6 +1278,60 @@ function AddColumnModal({ isOpen, onClose, onConfirm, customCols }: { isOpen: bo
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
+   SORT BUTTON COMPONENT
+   ═══════════════════════════════════════════════════════════════════════════════ */
+function SortToggle({ sortOrder, onChange }: { sortOrder: SortOrder; onChange: (o: SortOrder) => void }) {
+  return (
+    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+      <button
+        onClick={() => onChange("newest")}
+        title="Newest first"
+        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${
+          sortOrder === "newest"
+            ? "bg-green-600 text-white"
+            : "text-gray-600 hover:bg-gray-100"
+        }`}
+      >
+        <IconArrowDown size={13} />
+        Newest
+      </button>
+      <div className="w-px h-5 bg-gray-200" />
+      <button
+        onClick={() => onChange("oldest")}
+        title="Oldest first"
+        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${
+          sortOrder === "oldest"
+            ? "bg-green-600 text-white"
+            : "text-gray-600 hover:bg-gray-100"
+        }`}
+      >
+        <IconArrowUp size={13} />
+        Oldest
+      </button>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SORT HELPER
+   ═══════════════════════════════════════════════════════════════════════════════ */
+function sortRows(rows: InfluencerRow[], order: SortOrder): InfluencerRow[] {
+  // If rows have created_at timestamps, sort by them (most accurate)
+  const hasTimestamps = rows.some(r => r.created_at)
+
+  if (hasTimestamps) {
+    return [...rows].sort((a, b) => {
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+      return order === "newest" ? tb - ta : ta - tb
+    })
+  }
+
+  // Fallback: rows are in insertion order — reverse for newest first
+  return order === "newest" ? [...rows].reverse() : [...rows]
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
    MAIN TABLE SHEET — No localStorage, fully controlled via props
    ═══════════════════════════════════════════════════════════════════════════════ */
 export default function TableSheet({
@@ -1186,6 +1342,7 @@ export default function TableSheet({
   onFetchComplete,
   onRegisterIdSwap,
   onCustomColumnsChange,
+  onImportRows,
   readOnly = false,
   brandId,
 }: {
@@ -1196,11 +1353,15 @@ export default function TableSheet({
   onFetchComplete?: (row: InfluencerRow) => void
   onRegisterIdSwap?: (fn: (tempId: string, realId: string) => void) => void
   onCustomColumnsChange?: (cols: CustomColumn[]) => void
+  onImportRows?: (rows: InfluencerRow[]) => void
   readOnly?: boolean
   brandId?: string
 }) {
   const [rows, setRows] = useState<InfluencerRow[]>(initialRows)
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
+
+  // ── NEW: Sort state — default newest first ────────────────────────────────
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest")
 
   useEffect(() => {
     onRegisterIdSwap?.((tempId, realId) => {
@@ -1290,17 +1451,27 @@ export default function TableSheet({
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h)
   }, [showImportExportMenu])
 
-  const filteredRows = rows.filter(row => {
-    if (searchQuery.trim()) {
-      const q=searchQuery.toLowerCase()
-      if (!(row.handle.toLowerCase().includes(q)||row.full_name.toLowerCase().includes(q)||row.email.toLowerCase().includes(q)||row.niche.toLowerCase().includes(q)||row.notes.toLowerCase().includes(q)||(row.first_name&&row.first_name.toLowerCase().includes(q))||(row.location&&row.location.toLowerCase().includes(q)))) return false
-    }
-    if (filters.platform!=="all") { const pm:Record<string,string>={"Instagram":"instagram","YouTube":"youtube","TikTok":"tiktok","X (Twitter)":"twitter"}; if(pm[filters.platform]!==row.platform) return false }
-    if (filters.niche!=="all"&&row.niche!==filters.niche) return false
-    if (filters.location!=="all"&&row.location!==filters.location) return false
-    if (filters.gender!=="all"&&row.gender!==filters.gender) return false
-    return true
-  })
+  // ── FILTER + SORT (applied together) ─────────────────────────────────────
+  const filteredAndSortedRows = (() => {
+    // 1. Filter
+    const filtered = rows.filter(row => {
+      if (searchQuery.trim()) {
+        const q=searchQuery.toLowerCase()
+        if (!(row.handle.toLowerCase().includes(q)||row.full_name.toLowerCase().includes(q)||row.email.toLowerCase().includes(q)||row.niche.toLowerCase().includes(q)||row.notes.toLowerCase().includes(q)||(row.first_name&&row.first_name.toLowerCase().includes(q))||(row.location&&row.location.toLowerCase().includes(q)))) return false
+      }
+      if (filters.platform!=="all") { const pm:Record<string,string>={"Instagram":"instagram","YouTube":"youtube","TikTok":"tiktok","X (Twitter)":"twitter"}; if(pm[filters.platform]!==row.platform) return false }
+      if (filters.niche!=="all"&&row.niche!==filters.niche) return false
+      if (filters.location!=="all"&&row.location!==filters.location) return false
+      if (filters.gender!=="all"&&row.gender!==filters.gender) return false
+      return true
+    })
+
+    // 2. Sort
+    return sortRows(filtered, sortOrder)
+  })()
+
+  // Keep old name as alias so the rest of the component doesn't need mass-renaming
+  const filteredRows = filteredAndSortedRows
 
   const totalRows=filteredRows.length; const totalPages=Math.max(1,Math.ceil(totalRows/rowsPerPage))
   const pageStart=(currentPage-1)*rowsPerPage; const pageEnd=Math.min(pageStart+rowsPerPage,totalRows)
@@ -1341,6 +1512,7 @@ export default function TableSheet({
     try {
       const data = await fetchInfluencerFromAPI(handle, platform)
       if (!data) { addToast("error", `${clean} not found on ${platform}`); return }
+
       setRows(prev => {
         const next = prev.map(row => {
           if (row.id !== rowId) return row
@@ -1352,7 +1524,7 @@ export default function TableSheet({
           if (!u.location && data.location) u.location = data.location
           if (!u.niche && data.niche) u.niche = data.niche
           if (!u.gender && data.gender) u.gender = data.gender
-          if (!u.profile_image_url && data.profile_image_url) u.profile_image_url = data.profile_image_url
+          if (data.profile_image_url) u.profile_image_url = data.profile_image_url
           if (data.first_name) u.first_name = data.first_name
           if (data.follower_count && data.follower_count !== "0") u.follower_count = data.follower_count
           if (data.engagement_rate && data.engagement_rate !== "0") u.engagement_rate = data.engagement_rate
@@ -1386,8 +1558,9 @@ export default function TableSheet({
   const addRow = () => {
     const r=newEmptyRow(customCols)
     setRows(prev=>{const n=[...prev,r];onRowsChange?.(n);return n})
-    setCurrentPage(Math.ceil((rows.length+1)/rowsPerPage))
-    setActiveCell({rowIdx:rows.length,colIdx:0}); containerRef.current?.focus()
+    // When newest-first, new row will appear at top (page 1)
+    setCurrentPage(sortOrder === "newest" ? 1 : Math.ceil((rows.length+1)/rowsPerPage))
+    setActiveCell({rowIdx:0,colIdx:0}); containerRef.current?.focus()
   }
 
   const deleteRow = (id: string) => {
@@ -1414,7 +1587,19 @@ export default function TableSheet({
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f=e.target.files?.[0]; if(!f)return
-    const r=new FileReader(); r.onload=(ev)=>{const t=ev.target?.result as string;if(!t)return;const im=importFromCSV(t,customCols);if(!im.length){alert("No valid rows");return};setRows(prev=>{const n=[...prev,...im];onRowsChange?.(n);return n});setCurrentPage(1)}
+    const r=new FileReader(); r.onload=(ev)=>{
+      const t=ev.target?.result as string; if(!t)return
+      const { rows: imported } = importFromCSV(t, customCols)
+      if(!imported.length){alert("No valid rows found. Make sure your CSV matches the template headers.");return}
+
+      setRows(prev=>{const n=[...prev,...imported];onRowsChange?.(n);return n})
+      setCurrentPage(1)
+
+      // Fire DB save for all imported rows — bypasses readyToSave and platform guards
+      onImportRows?.(imported)
+
+      addToast("success", `Imported ${imported.length} influencer${imported.length!==1?"s":""}`)
+    }
     r.readAsText(f); e.target.value=""; setShowImportExportMenu(false)
   }
 
@@ -1467,7 +1652,6 @@ export default function TableSheet({
       else if(colKey.startsWith("custom.")) { row.custom={...row.custom,[colKey.slice(7)]:cleanedValue} }
       else { (row as Record<string,unknown>)[colKey]=cleanedValue }
 
-      // ── FIX: when first_name is edited in table cell, also update full_name ──
       if (colKey === "first_name") {
         const lastName = row.full_name ? row.full_name.split(" ").slice(1).join(" ") : ""
         row.full_name = cleanedValue
@@ -1583,7 +1767,7 @@ export default function TableSheet({
 
     if(disabled) return (
       <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm bg-gray-100 text-gray-400 cursor-not-allowed`} style={{minWidth:col.minWidth}}>
-        {col.key==="contact_status"?<StatusBadge value={value}/>:col.key==="approval_status"?<ApprovalBadge value={value}/>:col.key==="handle"?<div className="flex items-center gap-2"><ProfilePicture src={row.profile_image_url} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} size={24} /><span className="truncate text-gray-400">{displayHandle(value, row.platform) || "—"}</span></div>:col.key==="follower_count"?<span className="block truncate text-gray-400">{Number(value) ? formatFollowers(Number(value)) : "—"}</span>:col.key==="engagement_rate"?<span className="block truncate text-gray-400">{parseFloat(value) ? `${parseFloat(value)}%` : "—"}</span>:<span className="block truncate text-gray-400">{value||"—"}</span>}
+        {col.key==="contact_status"?<StatusBadge value={value}/>:col.key==="approval_status"?<ApprovalBadge value={value}/>:col.key==="handle"?<div className="flex items-center gap-2"><ProfilePicture src={row.profile_image_url} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} handle={row.handle} size={24} /><span className="truncate text-gray-400">{displayHandle(value, row.platform) || "—"}</span></div>:col.key==="follower_count"?<span className="block truncate text-gray-400">{Number(value) ? formatFollowers(Number(value)) : "—"}</span>:col.key==="engagement_rate"?<span className="block truncate text-gray-400">{parseFloat(value) ? `${parseFloat(value)}%` : "—"}</span>:<span className="block truncate text-gray-400">{value||"—"}</span>}
       </td>
     )
 
@@ -1591,7 +1775,7 @@ export default function TableSheet({
       if(isEditing){
         return <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{minWidth:col.minWidth}}>
           <div className="flex items-center gap-2 px-2">
-            <ProfilePicture src={row.profile_image_url} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} size={24} />
+            <ProfilePicture src={row.profile_image_url} socialLink={row.social_link || getProfileUrl(row.platform, row.handle)} name={row.full_name} handle={row.handle} size={24} />
             <input ref={editInputRef as any} type="text" value={editValue} placeholder="username" onChange={e=>setEditValue(e.target.value)} onBlur={handleEditBlur} onKeyDown={handleEditKeyDown} onMouseDown={e=>e.stopPropagation()} className="flex-1 h-full py-1.5 text-sm outline-none bg-white min-w-0"/>
           </div>
         </td>
@@ -1599,7 +1783,7 @@ export default function TableSheet({
       const socialLink = row.social_link || getProfileUrl(row.platform, row.handle)
       return <td key={col.key} className={`border border-gray-200 px-2 py-1.5 text-sm cursor-cell select-none relative hover:bg-blue-50/20 ${ringCls}`} style={{minWidth:col.minWidth}} onClick={()=>startEdit(rowIdx,colIdx)} onFocus={()=>setActiveCell({rowIdx,colIdx})}>
         <div className="flex items-center gap-2">
-          <ProfilePicture src={row.profile_image_url} socialLink={socialLink} name={row.full_name} size={24}
+          <ProfilePicture src={row.profile_image_url} socialLink={socialLink} name={row.full_name} handle={row.handle} size={24}
             onExpired={() => {
               setRows(prev => prev.map(r => r.id === row.id ? { ...r, profile_image_url: "" } : r))
               if (row.handle && (row.platform === "instagram" || row.platform === "tiktok")) {
@@ -1692,7 +1876,7 @@ export default function TableSheet({
           <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
           <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search creators..." className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"/>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {!readOnly&&(
             <div className="relative">
               <button ref={importExportBtnRef} onClick={()=>setShowImportExportMenu(!showImportExportMenu)} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">
@@ -1717,6 +1901,10 @@ export default function TableSheet({
               </div>
             </div>
           )}
+
+          {/* ── NEW: Sort toggle ──────────────────────────────────────────── */}
+          <SortToggle sortOrder={sortOrder} onChange={(o) => { setSortOrder(o); setCurrentPage(1) }} />
+
           <div className="relative">
             <button ref={filterBtnRef} onClick={()=>setShowFilterPopover(!showFilterPopover)} className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg transition border ${hasActiveFilters?"bg-green-50 text-green-700 border-green-200":"text-gray-600 hover:bg-gray-100 border-gray-200"}`}>
               <IconFilter size={16}/> Filters {hasActiveFilters&&<span className="w-2 h-2 bg-green-500 rounded-full"/>}
