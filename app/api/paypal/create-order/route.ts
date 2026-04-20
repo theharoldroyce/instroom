@@ -40,7 +40,6 @@ export async function POST(req: Request) {
 
     const { amount, description } = await req.json()
     const amountNum = typeof amount === "string" ? parseFloat(amount) : amount
-    console.log("Creating PayPal order with amount:", amountNum, "description:", description)
 
     if (!amountNum || amountNum < 0.01) {
       return NextResponse.json(
@@ -49,9 +48,7 @@ export async function POST(req: Request) {
       )
     }
 
-    console.log("Getting PayPal access token...")
     const accessToken = await getPayPalAccessToken()
-    console.log("Access token obtained successfully")
 
     const orderPayload = {
       intent: "CAPTURE",
@@ -65,7 +62,6 @@ export async function POST(req: Request) {
         },
       ],
     }
-    console.log("Sending to PayPal:", JSON.stringify(orderPayload))
 
     const response = await fetch(`${PAYPAL_API_URL}/v2/checkout/orders`, {
       method: "POST",
@@ -86,7 +82,6 @@ export async function POST(req: Request) {
     }
 
     const order = await response.json()
-    console.log("PayPal order created successfully:", order.id)
     return NextResponse.json(order)
   } catch (error) {
     console.error("Error creating PayPal order:", error)

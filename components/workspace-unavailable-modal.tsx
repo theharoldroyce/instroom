@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import {
   AlertCircle,
 } from "lucide-react"
@@ -16,18 +17,41 @@ interface WorkspaceUnavailableModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   workspaceName: string
+  onClose?: () => void
 }
 
 export function WorkspaceUnavailableModal({
   open,
   onOpenChange,
   workspaceName,
+  onClose,
 }: WorkspaceUnavailableModalProps) {
+  const router = useRouter()
+
   if (!open) return null
 
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onOpenChange(false)
+    if (onClose) {
+      onClose()
+    } else {
+      router.push("/dashboard")
+    }
+  }
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleClose(e as any)
+    }
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md">
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={handleBackdropClick}
+    >
+      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-yellow-600" />
@@ -46,7 +70,7 @@ export function WorkspaceUnavailableModal({
           </p>
           <div className="pt-2">
             <Button
-              onClick={() => onOpenChange(false)}
+              onClick={handleClose}
               className="w-full bg-[#1FAE5B] hover:bg-[#0F6B3E]"
             >
               Close

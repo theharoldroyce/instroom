@@ -360,7 +360,7 @@ export function OnboardingForm({
         <div className="w-full h-full relative">
           {step === 1 && (
             <Image
-              src="/images/1.png"
+              src="/images/accountType.png"
               alt="Step 1: Account Type"
               fill
               className="object-cover"
@@ -369,7 +369,7 @@ export function OnboardingForm({
           )}
           {step === 2 && (
             <Image
-              src="/images/2.png"
+              src="/images/businessType.png"
               alt="Step 2: Business Type"
               fill
               className="object-cover"
@@ -378,7 +378,7 @@ export function OnboardingForm({
           )}
           {step === 3 && (
             <Image
-              src="/images/3.png"
+              src="/images/campaign.png"
               alt="Step 3: Campaign Goal"
               fill
               className="object-cover"
@@ -387,7 +387,7 @@ export function OnboardingForm({
           )}
           {step === 4 && (
             <Image
-              src="/images/4.png"
+              src="/images/influencerCount.png"
               alt="Step 4: Influencer Count"
               fill
               className="object-cover"

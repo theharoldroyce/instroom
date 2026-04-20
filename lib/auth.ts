@@ -3,8 +3,8 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "./prisma"
 import { sendWelcomeEmail } from "./email"
+import { syncBrandActivityWithSubscription } from "./subscription-limits"
 import bcrypt from "bcryptjs"
-import { checkLoginRateLimit, resetLoginRateLimit, getClientIp } from "./rate-limit"
 
 declare module "next-auth" {
   interface Session {
@@ -60,7 +60,6 @@ const nextAuthConfig = {
             image: user.image,
           }
         } catch (error) {
-          console.error("Auth error:", error)
           return null
         }
       },
@@ -69,16 +68,15 @@ const nextAuthConfig = {
   pages: { signIn: "/login" },
   callbacks: {
     async signIn({ user, account, profile }: any) {
-      // For Google OAuth, create user record if it doesn't exist
       if (account?.provider === "google" && profile?.email) {
-        // Extract avatar from profile
         const avatarUrl = profile.image || profile.picture || null
         
         try {
-          // Find or create user
           let dbUser = await prisma.user.findUnique({
             where: { email: profile.email },
           })
+          
+          const isNewUser = !dbUser
           
           if (!dbUser) {
             dbUser = await prisma.user.create({
@@ -91,12 +89,10 @@ const nextAuthConfig = {
               },
             })
             
-            // Send welcome email to new user
             try {
               await sendWelcomeEmail(dbUser.email, dbUser.name || "User")
             } catch (emailError) {
-              console.error("Failed to send welcome email:", emailError instanceof Error ? emailError.message : String(emailError))
-              // Continue anyway, don't fail the signin
+              // Silently continue on email error
             }
           } else {
             dbUser = await prisma.user.update({
@@ -109,24 +105,27 @@ const nextAuthConfig = {
           }
           
           if (dbUser) {
-            // Set user ID to database ID
             user.id = dbUser.id
             user.email = dbUser.email
             user.name = dbUser.name
             user.image = dbUser.image
+            user.isNewUser = isNewUser
             
-            // Ensure onboarding record exists
-            const onboarding = await prisma.onboarding.findUnique({
-              where: { user_id: dbUser.id },
-            })
-            
-            if (!onboarding) {
-              await prisma.onboarding.create({
-                data: { user_id: dbUser.id },
+            if (isNewUser) {
+              const onboarding = await prisma.onboarding.findUnique({
+                where: { user_id: dbUser.id },
               })
+              
+              if (!onboarding) {
+                await prisma.onboarding.create({
+                  data: { 
+                    user_id: dbUser.id,
+                    operator_type: "",
+                  },
+                })
+              }
             }
             
-            // Create/update account record for provider tracking
             try {
               await prisma.account.upsert({
                 where: {
@@ -157,23 +156,24 @@ const nextAuthConfig = {
                   },
                 })
             } catch (accountError) {
-              console.error("Account record error:", accountError instanceof Error ? accountError.message : String(accountError))
+              // Silently continue on account error
             }
           }
         } catch (error) {
-          console.error("Google OAuth error:", error instanceof Error ? error.message : String(error))
           return false
         }
       }
       return true
     },
     
-    // JWT callback: store user ID and email, and set 30-minute expiration
     jwt({ token, user }: any) {
       if (user) {
         token.id = user.id
         token.email = user.email
-        // Set token expiration to 30 minutes from now
+        // Only set isNewUser if it was explicitly provided (from Google OAuth flow)
+        if (user.isNewUser !== undefined) {
+          token.isNewUser = user.isNewUser
+        }
         token.iat = Math.floor(Date.now() / 1000)
         token.exp = Math.floor(Date.now() / 1000) + 30 * 60
       }
@@ -184,8 +184,24 @@ const nextAuthConfig = {
       if (session?.user) {
         session.user.id = token.id as string;
         if (token.name) session.user.name = token.name as string;
+        // Only set isNewUser if it was explicitly provided (from Google OAuth flow)
+        if (token.isNewUser !== undefined) {
+          session.user.isNewUser = token.isNewUser
+        }
+        
+        // Sync brand activity with subscription status on each session
+        await syncBrandActivityWithSubscription(session.user.id)
       }
       return session;
+    },
+    
+    redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
+      if (url.includes("/onboarding") || url.includes("/signup")) {
+        return url;
+      }
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
     },
   },
 }

@@ -29,10 +29,42 @@ export default function OnboardingPage() {
       router.replace("/signup");
       return;
     }
-    // User is authenticated, proceed with onboarding
+    // Only redirect if explicitly marked as existing account from Google signup attempt
+    const isNewUser = (session.user as any).isNewUser;
+    if (isNewUser === false) {
+      // Google OAuth detected existing account
+      router.replace("/login?error=account-exists&message=Account%20already%20exists.%20Please%20log%20in%20with%20your%20email%20and%20password.");
+      return;
+    }
+    // isNewUser === true: new Google signup (proceed to onboarding)
+    // isNewUser === undefined: credentials login (proceed to check onboarding status)
+    
+    // Check if user has already completed onboarding
+    checkOnboardingStatus();
     setIsSubscribed(true);
     setSubscriptionChecked(true);
   }, [status, session, router])
+
+  const checkOnboardingStatus = async () => {
+    try {
+      if (!session?.user) return;
+      
+      const response = await fetch('/api/onboarding', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // If onboarding is completed, redirect to dashboard
+        if (data.onboarding?.completed_at) {
+          router.replace('/dashboard');
+        }
+      }
+    } catch (err) {
+      // Silently continue on error
+    }
+  }
 
   const handleSkip = async () => {
     setIsLoading(true);

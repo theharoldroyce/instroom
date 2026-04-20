@@ -295,24 +295,6 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     try {
       setIsLoading(true)
       setError(null)
-
-      // Check if email already exists before initiating Google OAuth
-      if (formData.email) {
-        const checkResponse = await fetch("/api/auth/check-google-signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: formData.email }),
-        })
-
-        if (checkResponse.status === 409) {
-          const data = await checkResponse.json()
-          setError(data.error || "Account already exists. Please log in instead.")
-          // Redirect to login
-          window.location.href = "/login"
-          return
-        }
-      }
-
       await signIn("google", { callbackUrl: "/onboarding" })
     } catch (err) {
       setError("Google signup failed. Please try again.")

@@ -38,6 +38,15 @@ export function LoginForm({
     password: "",
   })
 
+  // Check for error from query parameters (e.g., from OAuth duplicate account)
+  useEffect(() => {
+    const errorParam = searchParams?.get("error")
+    const messageParam = searchParams?.get("message")
+    if (errorParam === "account-exists" && messageParam) {
+      setError(decodeURIComponent(messageParam))
+    }
+  }, [searchParams])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target
     setFormData((prev) => ({ ...prev, [id]: value }))
@@ -94,7 +103,6 @@ export function LoginForm({
           router.push("/onboarding")
         }
       } catch (err) {
-        console.error("Failed to check onboarding status:", err)
         router.push("/onboarding")
       }
     } catch (err) {
