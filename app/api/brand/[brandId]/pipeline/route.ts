@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { userHasActiveSubscription } from "@/lib/subscription-limits"
 
 function derivePipelineStatus(
   contactStatus: string,
@@ -65,11 +64,10 @@ export async function GET(
       return NextResponse.json({ error: "Brand not found or access denied" }, { status: 403 })
     }
 
-    // Check if brand owner has active subscription
-    const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
-    if (!ownerHasActiveSubscription) {
+    // Check if brand is active
+    if (!brand.is_active) {
       return NextResponse.json(
-        { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
+        { error: "This workspace is unavailable." },
         { status: 403 }
       )
     }

@@ -49,7 +49,13 @@ export async function middleware(req: any) {
       },
     });
 
-    const hasValidSubscription = !!subscription;
+    const now = new Date();
+    // Check if subscription is valid: status is active/trialing AND not past the period end AND not explicitly ended
+    const hasValidSubscription = !!(
+      subscription && 
+      (!subscription.current_period_end || subscription.current_period_end > now) &&
+      (!subscription.ended_at || subscription.ended_at > now)
+    );
     setCachedSubscription(token.sub, hasValidSubscription);
 
     if (!hasValidSubscription) {

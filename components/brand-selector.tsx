@@ -65,6 +65,23 @@ export function BrandSelector() {
   const [unavailableModalOpen, setUnavailableModalOpen] = useState(false)
   const [unavailableBrand, setUnavailableBrand] = useState<Brand | null>(null)
 
+  const handleUnavailableModalClose = () => {
+    setUnavailableModalOpen(false)
+    setDropdownOpen(false)
+    
+    // Find the first available brand (active subscription)
+    const availableBrand = brands.find(b => b.subscriptionActive)
+    if (availableBrand) {
+      setSelectedBrandId(availableBrand.id)
+      const params = new URLSearchParams()
+      params.set("brandId", availableBrand.id)
+      router.push(`${pathname}?${params.toString()}`)
+    } else {
+      // No available brands, redirect to dashboard
+      router.push("/dashboard")
+    }
+  }
+
   // Read brandId from URL on client side after mount
   useEffect(() => {
     setMounted(true)
@@ -581,6 +598,7 @@ export function BrandSelector() {
       <WorkspaceUnavailableModal
         open={unavailableModalOpen}
         onOpenChange={setUnavailableModalOpen}
+        onClose={handleUnavailableModalClose}
         workspaceName={unavailableBrand?.name || ""}
       />
     </>

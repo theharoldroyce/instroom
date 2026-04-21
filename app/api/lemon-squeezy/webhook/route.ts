@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { syncBrandActivityWithSubscription } from "@/lib/subscription-limits"
 import { NextResponse } from "next/server"
 import crypto from "crypto"
 
@@ -102,14 +103,15 @@ export async function POST(req: Request) {
         where: { user_id: userId },
       })
 
-      // Calculate subscription period end date based on cycle
-      // Lemon Squeezy typically provides renews_at date, but we calculate from creation
-      const currentPeriodEnd = new Date()
-      if (cycle === "monthly") {
-        currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1)
-      } else if (cycle === "yearly") {
-        currentPeriodEnd.setFullYear(currentPeriodEnd.getFullYear() + 1)
-      }
+      // Calculate period dates
+      const now = new Date()
+      const periodStart = jsonBody.data.attributes.renews_at 
+        ? new Date(jsonBody.data.attributes.renews_at)
+        : now
+      
+      const periodEnd = jsonBody.data.attributes.expires_at
+        ? new Date(jsonBody.data.attributes.expires_at)
+        : new Date(now.getTime() + (cycle === "yearly" ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000))
 
       let subscription
       if (existingSubscription) {
@@ -120,8 +122,8 @@ export async function POST(req: Request) {
             status: "active",
             billing_cycle: cycle as "monthly" | "yearly",
             payment_subscription_id: jsonBody.data.attributes.subscription_id?.toString(),
-            current_period_start: new Date(),
-            current_period_end: currentPeriodEnd,
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
           },
         })
       } else {
@@ -133,8 +135,8 @@ export async function POST(req: Request) {
             billing_cycle: cycle as "monthly" | "yearly",
             extra_brands: 0,
             payment_subscription_id: jsonBody.data.attributes.subscription_id?.toString(),
-            current_period_start: new Date(),
-            current_period_end: currentPeriodEnd,
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
           },
         })
       }
@@ -150,28 +152,33 @@ export async function POST(req: Request) {
         },
       }).catch(() => void 0)
 
+      // Sync brand activity with new subscription status
+      await syncBrandActivityWithSubscription(userId)
+
       return NextResponse.json({ success: true })
     }
 
     if (eventName === "subscription:cancelled" || eventName === "subscription_cancelled") {
       await prisma.userSubscription.updateMany({
         where: { user_id: userId },
-        data: { 
-          status: "cancelled",
-          ended_at: new Date(),
-        },
+        data: { status: "cancelled" },
       })
+      
+      // Sync brand activity when subscription is cancelled
+      await syncBrandActivityWithSubscription(userId)
+      
       return NextResponse.json({ success: true })
     }
 
     if (eventName === "subscription:paused" || eventName === "subscription_paused") {
       await prisma.userSubscription.updateMany({
         where: { user_id: userId },
-        data: { 
-          status: "paused",
-          ended_at: new Date(),
-        },
+        data: { status: "paused" },
       })
+      
+      // Sync brand activity when subscription is paused
+      await syncBrandActivityWithSubscription(userId)
+      
       return NextResponse.json({ success: true })
     }
 

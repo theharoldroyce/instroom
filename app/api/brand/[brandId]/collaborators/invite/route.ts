@@ -124,8 +124,9 @@ export async function POST(
       },
     })
   } catch (error) {
+    console.error("POST /api/brand/[brandId]/collaborators/invite:", error instanceof Error ? error.message : String(error))
     return NextResponse.json(
-      { error: "Failed to invite collaborator" },
+      { error: "Failed to invite collaborator", details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     )
   }
