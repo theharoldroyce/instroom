@@ -79,8 +79,6 @@ function buildUpdatePayload(row: InfluencerRow) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Serial PUT queue — ensures only ONE request runs at a time
-// This is the key fix for the connection limit problem.
-// Instead of firing 8 PUT requests simultaneously, we process them one-by-one.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type QueueItem = {
@@ -108,18 +106,17 @@ function createPutQueue() {
           item.onError?.(res.status)
         }
       } catch {
-        // Network error — silent, will be retried on next edit
+        // Network error — silent
       }
     }
     running = false
   }
 
   return {
-    // Enqueue a PUT — if same URL already queued, replace payload (latest wins)
     enqueue(item: QueueItem) {
       const existing = queue.findIndex((q) => q.url === item.url)
       if (existing >= 0) {
-        queue[existing] = item // replace with latest
+        queue[existing] = item
       } else {
         queue.push(item)
       }
@@ -138,7 +135,7 @@ function InfluencersContent() {
   const { rows, customColumns, isLoading, error, setCustomColumns } =
     useInfluencerData(brandId)
 
-  // ── dbIds: Influencer.ids that exist in DB for this brand ─────────────────
+  // ── dbIds: Influencer.ids confirmed in DB for this brand ──────────────────
   const dbIds = useRef<Set<string>>(new Set())
   const seededForBrand = useRef<string | null>(null)
 
@@ -172,7 +169,6 @@ function InfluencersContent() {
   }, [isLoading, rows, brandId])
 
   // ── Prevent PUT storm on mount ────────────────────────────────────────────
-  // TableSheet fires onRowsChange on mount. We block PUTs for the first 800ms.
   const readyToSave = useRef(false)
   useEffect(() => {
     if (!isLoading && rows.length > 0) {
@@ -181,7 +177,7 @@ function InfluencersContent() {
     }
   }, [isLoading, rows.length])
 
-  // ── Serial PUT queue (one request at a time) ──────────────────────────────
+  // ── Serial PUT queue ──────────────────────────────────────────────────────
   const putQueue = useRef(createPutQueue())
 
   // per-row debounce timers
@@ -229,7 +225,7 @@ function InfluencersContent() {
     [brandId]
   )
 
-  // ── CREATE new row ─────────────────────────────────────────────────────────
+  // ── CREATE new row ────────────────────────────────────────────────────────
   const createRow = useCallback(
     async (row: InfluencerRow) => {
       if (!brandId || !rowHasHandle(row)) return
@@ -281,7 +277,6 @@ function InfluencersContent() {
       if (!brandId || !rowHasHandle(row)) return
 
       if (dbIds.current.has(row.id)) {
-        // Existing row — push to queue (serialized)
         const existing = updateTimers.current.get(row.id)
         if (existing) clearTimeout(existing)
         putQueue.current.enqueue({
@@ -298,7 +293,6 @@ function InfluencersContent() {
   // ── onRowsChange — user edited something in the table ─────────────────────
   const handleRowsChange = useCallback(
     (updatedRows: InfluencerRow[]) => {
-      // Block PUTs during initial load burst
       if (!readyToSave.current) return
 
       updatedRows.forEach((row) => {
@@ -315,7 +309,7 @@ function InfluencersContent() {
     [scheduleUpdate, createRow]
   )
 
-  // ── DELETE ─────────────────────────────────────────────────────────────────
+  // ── DELETE ────────────────────────────────────────────────────────────────
   const handleDeleteRow = useCallback(
     async (rowId: string) => {
       if (!brandId || !dbIds.current.has(rowId)) return
@@ -338,7 +332,7 @@ function InfluencersContent() {
     [brandId]
   )
 
-  // ── Custom columns ─────────────────────────────────────────────────────────
+  // ── Custom columns ────────────────────────────────────────────────────────
   const handleCustomColumnsChange = useCallback(
     async (cols: CustomColumn[]) => {
       setCustomColumns(cols)
@@ -372,7 +366,13 @@ function InfluencersContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <p className="text-gray-600 mb-2 font-medium">No brand selected</p>
+<<<<<<< HEAD
           <p className="text-sm text-gray-500">Please select a brand to manage influencers</p>
+=======
+          <p className="text-sm text-gray-500">
+            Add <code className="bg-gray-100 px-1 rounded text-xs">?brandId=your-brand-id</code> to the URL
+          </p>
+>>>>>>> 4aed5ecba5dd628c41664961444901b19ec05d15
         </div>
       </div>
     )

@@ -72,6 +72,7 @@ export async function PUT(
       bi.agreed_rate = data.agreed_rate ? parseFloat(String(data.agreed_rate)) : null
     }
     if (data.notes          !== undefined) bi.notes          = data.notes          || null
+    if (data.approval_status !== undefined) bi.approval_status = data.approval_status || "Pending"
     if (data.approval_notes !== undefined) bi.approval_notes = data.approval_notes || null
     if (data.transferred_date !== undefined) bi.transferred_date = data.transferred_date ? new Date(data.transferred_date) : null
     
