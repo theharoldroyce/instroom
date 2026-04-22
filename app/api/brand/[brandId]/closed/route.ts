@@ -1,65 +1,85 @@
+// app/api/brand/[brandId]/closed/route.ts
+
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// ─── Mapping ────────────────────────────────────────────────────────────────
-function closedStatusToFields(
-  closedStatus: string,
-  current: {
-    shipped_at: Date | null
-    delivered_at: Date | null
-    posted_at: Date | null
+type ClosedColumn =
+  | "For Order Creation"
+  | "In-Transit"
+  | "Delivered"
+  | "Posted"
+  | "No post"
+
+function deriveClosedStatus(
+  contactStatus: string,
+  stage: number,
+  orderStatus: string | null,
+  contentPosted: boolean,
+  approvalStatus: string | null
+): ClosedColumn {
+  // 1. Hard exits
+  if (approvalStatus === "Declined" || contactStatus === "not_interested") {
+    return "No post"
   }
-) {
-  switch (closedStatus) {
-    case "For Order Creation":
-      return { stage: 2, order_status: "pending" }
 
-    case "In-Transit":
-      return {
-        stage: 3,
-        order_status: "shipped",
-        shipped_at: current.shipped_at ?? new Date(),
-      }
+  // 2. Content done
+  if (contentPosted) {
+    return "Posted"
+  }
 
-    case "Delivered":
-      return {
-        stage: 4,
-        order_status: "delivered",
-        delivered_at: current.delivered_at ?? new Date(),
-      }
+  // 3. Order status priority
+  if (orderStatus === "delivered") return "Delivered"
+  if (orderStatus === "shipped") return "In-Transit"
+  if (orderStatus === "pending") return "For Order Creation"
 
-    case "Posted":
-      return {
-        stage: 5,
-        content_posted: true,
-        posted_at: current.posted_at ?? new Date(),
-      }
+  // 4. Stage logic (FIXED ORDER)
+  if (stage >= 4) return "Delivered"
+  if (stage >= 3) return "In-Transit"
 
-    case "Completed":
-      return {
-        stage: 5,
-        content_posted: true,
-      }
+  if (
+    stage >= 5 ||
+    contactStatus === "for_order_creation" ||
+    contactStatus === "agreed"
+  ) {
+    return "For Order Creation"
+  }
 
-    default:
-      return { stage: 2 }
+  return "For Order Creation"
+}
+
+function safeJSONParse(value: string | null) {
+  if (!value) return {}
+  try {
+    return JSON.parse(value)
+  } catch (err) {
+    console.error("Invalid JSON in product_details:", value)
+    return {}
   }
 }
 
-export async function PATCH(
+function formatFollowers(n: number): string {
+  if (!n) return "0"
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M"
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K"
+  return String(n)
+}
+
+export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ brandId: string; brandInfluencerId: string }> }
+  { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
+
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { brandId, brandInfluencerId } = await params
+    const { brandId } = await params
 
+    // Access check
     const brand = await prisma.brand.findFirst({
       where: {
         id: brandId,
@@ -72,97 +92,108 @@ export async function PATCH(
     })
 
     if (!brand) {
-      return NextResponse.json({ error: "Not found" }, { status: 403 })
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const body = await req.json()
-    const { closedStatus, paidCollabData, campaignType } = body
-
-    if (!closedStatus && !paidCollabData && campaignType === undefined) {
-      return NextResponse.json(
-        { error: "closedStatus, paidCollabData, or campaignType is required" },
-        { status: 400 }
-      )
-    }
-
-    // ✅ Get current values
-    const current = await prisma.brandInfluencer.findUnique({
-      where: { id: brandInfluencerId },
-      select: {
-        product_details: true,
-        shipped_at: true,
-        delivered_at: true,
-        posted_at: true,
+    // Fetch data
+    const rows = await prisma.brandInfluencer.findMany({
+      where: {
+        brand_id: brandId,
+        OR: [
+          { approval_status: "Approved" },
+          { approval_status: "Declined" },
+          { contact_status: "not_interested" },
+        ],
+      },
+      include: {
+        influencer: true,
+        campaign: true,
+      },
+      orderBy: {
+        updated_at: "desc",
       },
     })
 
-    if (!current) {
-      return NextResponse.json({ error: "Record not found" }, { status: 404 })
-    }
+    // Transform
+    const data = rows.map((row) => {
+      const productDetails = safeJSONParse(row.product_details)
+      const inf = row.influencer
 
-    // ── Parse JSON safely ─────────────────────────────────────────────
-    let blob: Record<string, unknown> = {}
+      return {
+        id: row.id,
+        influencerId: row.influencer_id,
+        campaignId: row.campaign_id,
+        campaignName: row.campaign?.name || null,
 
-    if (current.product_details) {
-      try {
-        blob = JSON.parse(current.product_details)
-      } catch {
-        blob = { legacyProductDetails: current.product_details }
+        influencer: inf?.full_name || inf?.handle || "Unknown",
+        handle: inf?.handle || "",
+
+        platform: inf?.platform
+          ? inf.platform.charAt(0).toUpperCase() + inf.platform.slice(1)
+          : "Instagram",
+
+        followers: formatFollowers(inf?.follower_count || 0),
+        followerCount: inf?.follower_count || 0,
+
+        engagementRate: inf?.engagement_rate
+          ? `${Number(inf.engagement_rate).toFixed(1)}%`
+          : "0%",
+
+        niche: inf?.niche || "",
+        location: inf?.location || "",
+        email: inf?.email || "",
+        profileImageUrl: inf?.profile_image_url || null,
+        bio: inf?.bio || "",
+
+        closedStatus: deriveClosedStatus(
+          row.contact_status,
+          row.stage,
+          row.order_status,
+          row.content_posted,
+          row.approval_status
+        ),
+
+        contactStatus: row.contact_status,
+        stage: row.stage,
+        orderStatus: row.order_status,
+        contentPosted: row.content_posted,
+        approvalStatus: row.approval_status,
+        approvalNotes: row.approval_notes || "",
+
+        agreedRate: row.agreed_rate,
+        currency: row.currency,
+        deliverables: row.deliverables,
+        deadline: row.deadline?.toISOString() || null,
+        notes: row.notes || "",
+
+        campaignType: productDetails.campaignType || null,
+        productDetails: row.product_details,
+
+        shippedAt: row.shipped_at?.toISOString() || null,
+        deliveredAt: row.delivered_at?.toISOString() || null,
+        trackingNumber: productDetails.trackingNumber || null,
+
+        postUrl: row.post_url,
+        postedAt: row.posted_at?.toISOString() || null,
+
+        likesCount: row.likes_count || 0,
+        commentsCount: row.comments_count || 0,
+        engagementCount: row.engagement_count || 0,
+
+        paidCollabData: productDetails.paidCollab || null,
+
+        internalRating: row.internal_rating,
+        lastContact: row.updated_at.toISOString(),
+        createdAt: row.created_at.toISOString(),
       }
-    }
-
-    // ── Merge updates ────────────────────────────────────────────────
-    if (closedStatus) blob.closedStatus = closedStatus
-    if (paidCollabData !== undefined) blob.paidCollab = paidCollabData
-    if (campaignType !== undefined) blob.campaignType = campaignType
-
-    // ── Map status to DB ─────────────────────────────────────────────
-    const dbFields = closedStatus
-      ? closedStatusToFields(closedStatus, {
-          shipped_at: current.shipped_at,
-          delivered_at: current.delivered_at,
-          posted_at: current.posted_at,
-        })
-      : null
-
-    const updated = await prisma.brandInfluencer.update({
-      where: { id: brandInfluencerId },
-      data: {
-        product_details: JSON.stringify(blob),
-
-        ...(dbFields && {
-          stage: dbFields.stage,
-          contact_status: "agreed",
-
-          ...(dbFields.order_status && {
-            order_status: dbFields.order_status,
-          }),
-
-          ...(dbFields.content_posted !== undefined && {
-            content_posted: dbFields.content_posted,
-          }),
-
-          ...(dbFields.posted_at && {
-            posted_at: dbFields.posted_at,
-          }),
-
-          ...(dbFields.shipped_at && {
-            shipped_at: dbFields.shipped_at,
-          }),
-
-          ...(dbFields.delivered_at && {
-            delivered_at: dbFields.delivered_at,
-          }),
-        }),
-      },
     })
 
-    return NextResponse.json({ success: true, data: updated })
+    return NextResponse.json({ success: true, data })
   } catch (error: any) {
-    console.error("PATCH closed error:", error)
+    console.error("GET closed error:", error)
 
     return NextResponse.json(
-      { error: "Failed to update", detail: error?.message },
+      { error: "Failed to fetch data", detail: error?.message },
       { status: 500 }
     )
   }
