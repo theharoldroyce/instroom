@@ -55,7 +55,7 @@ function mapColumnToDb(column: string) {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { brandId: string; brandInfluencerId: string } } // ✅ FIXED
+  { params }: { params: Promise<{ brandId: string; brandInfluencerId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -64,7 +64,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { brandId, brandInfluencerId } = params // ✅ NO await
+    const { brandId, brandInfluencerId } = await params
 
     const brand = await prisma.brand.findFirst({
       where: {
