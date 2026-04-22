@@ -14,6 +14,8 @@ declare module "next-auth" {
       name?: string | null
       image?: string | null
     }
+    accessToken?: string  // ← Gmail access token exposed on session
+    error?: string
   }
 }
 
@@ -23,6 +25,20 @@ const nextAuthConfig = {
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          // Added: Gmail scopes so inbox can read and send emails
+          scope: [
+            "openid",
+            "email",
+            "profile",
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.send",
+          ].join(" "),
+          access_type: "offline",  // ensures we get a refresh_token
+          prompt: "consent",       // always show consent so refresh_token is returned
+        },
+      },
     }),
     CredentialsProvider({
       name: "Credentials",
@@ -132,29 +148,29 @@ const nextAuthConfig = {
                   provider_providerAccountId: {
                     provider: account.provider,
                     providerAccountId: account.providerAccountId,
-                    },
                   },
-                  create: {
-                    userId: dbUser.id,
-                    type: account.type || "oauth",
-                    provider: account.provider,
-                    providerAccountId: account.providerAccountId,
-                    access_token: account.access_token || null,
-                    refresh_token: account.refresh_token || null,
-                    expires_at: account.expires_at || null,
-                    token_type: account.token_type || null,
-                    scope: account.scope || null,
-                    id_token: account.id_token || null,
-                  },
-                  update: {
-                    access_token: account.access_token || null,
-                    refresh_token: account.refresh_token || null,
-                    expires_at: account.expires_at || null,
-                    token_type: account.token_type || null,
-                    scope: account.scope || null,
-                    id_token: account.id_token || null,
-                  },
-                })
+                },
+                create: {
+                  userId: dbUser.id,
+                  type: account.type || "oauth",
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                  access_token: account.access_token || null,
+                  refresh_token: account.refresh_token || null,
+                  expires_at: account.expires_at || null,
+                  token_type: account.token_type || null,
+                  scope: account.scope || null,
+                  id_token: account.id_token || null,
+                },
+                update: {
+                  access_token: account.access_token || null,
+                  refresh_token: account.refresh_token || null,
+                  expires_at: account.expires_at || null,
+                  token_type: account.token_type || null,
+                  scope: account.scope || null,
+                  id_token: account.id_token || null,
+                },
+              })
             } catch (accountError) {
               // Silently continue on account error
             }
@@ -166,46 +182,63 @@ const nextAuthConfig = {
       return true
     },
     
-    jwt({ token, user }: any) {
+    jwt({ token, user, account }: any) {
+      // Existing user fields
       if (user) {
         token.id = user.id
         token.email = user.email
-        // Only set isNewUser if it was explicitly provided (from Google OAuth flow)
         if (user.isNewUser !== undefined) {
           token.isNewUser = user.isNewUser
         }
         token.iat = Math.floor(Date.now() / 1000)
         token.exp = Math.floor(Date.now() / 1000) + 30 * 60
       }
+
+      // Added: store Google access/refresh tokens for Gmail API calls
+      if (account?.provider === "google") {
+        token.accessToken = account.access_token
+        token.refreshToken = account.refresh_token
+        token.accessTokenExpires = account.expires_at
+          ? account.expires_at * 1000
+          : Date.now() + 3600 * 1000
+      }
+
       return token
     },
     
     async session({ session, token }: any) {
       if (session?.user) {
-        session.user.id = token.id as string;
-        if (token.name) session.user.name = token.name as string;
-        // Only set isNewUser if it was explicitly provided (from Google OAuth flow)
+        session.user.id = token.id as string
+        if (token.name) session.user.name = token.name as string
         if (token.isNewUser !== undefined) {
           session.user.isNewUser = token.isNewUser
         }
-        
-        // Sync brand activity with subscription status on each session
         await syncBrandActivityWithSubscription(session.user.id)
       }
-      return session;
+
+      // Added: expose Gmail access token to server-side API routes
+      if (token.accessToken) {
+        session.accessToken = token.accessToken
+      }
+      if (token.error) {
+        session.error = token.error
+      }
+
+      return session
     },
     
     redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
       if (url.includes("/onboarding") || url.includes("/signup")) {
-        return url;
+        return url
       }
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      else if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
+      if (url.startsWith("/")) return `${baseUrl}${url}`
+      else if (new URL(url).origin === baseUrl) return url
+      return baseUrl
     },
   },
 }
+
 const handler = NextAuth(nextAuthConfig)
 
-export { handler as GET, handler as POST };
-export const authOptions = nextAuthConfig;
+export { handler as GET, handler as POST }
+export const authOptions = nextAuthConfig
