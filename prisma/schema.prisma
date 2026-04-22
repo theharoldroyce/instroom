@@ -178,6 +178,7 @@ model Brand {
   members BrandMember[]
   influencers BrandInfluencer[]
   invitations BrandInvitation[]
+  campaigns Campaign[]
 
   @@index([owner_id])
   @@index([slug])
@@ -259,6 +260,9 @@ model Campaign {
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
+  brand       Brand             @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  influencers BrandInfluencer[]
+
   @@index([brand_id])
 }
 
@@ -295,6 +299,7 @@ model BrandInfluencer {
 
   brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
   influencer Influencer @relation(fields: [influencer_id], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation(fields: [campaign_id], references: [id], onDelete: SetNull)
 
   @@unique([brand_id, influencer_id])
   @@index([brand_id])
