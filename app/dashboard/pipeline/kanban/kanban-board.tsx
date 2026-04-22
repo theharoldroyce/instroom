@@ -19,7 +19,6 @@ import { useDraggable } from "@dnd-kit/core"
 import {
   IconLayoutKanban,
   IconList,
-  IconPlus,
   IconFilter,
   IconSearch,
   IconLocation,
@@ -29,6 +28,7 @@ import {
   IconChevronDown,
   IconLoader2,
   IconAlertCircle,
+  IconCheck,
 } from "@tabler/icons-react"
 
 import InfluencerProfileSidebar, {
@@ -83,6 +83,100 @@ const NI_REASONS = [
   { r: "Rate / deadline too tight",             bucket: "soft", color: "#F4B740" },
   { r: "Others",                                bucket: "hard", color: "#D3D1C7" },
 ]
+
+// ─── Column definitions ──────────────────────────────────────────────────────
+const columns = [
+  { key: "for-outreach",    title: "For Outreach",    color: "bg-yellow-400", status: "For Outreach" },
+  { key: "contacted",       title: "Contacted",        color: "bg-orange-400", status: "Contacted" },
+  { key: "in-conversation", title: "In Conversation",  color: "bg-blue-400",   status: "In Conversation" },
+  { key: "deal-agreed",     title: "Deal Agreed",      color: "bg-green-500",  status: "Deal Agreed" },
+  { key: "not-interested",  title: "Not Interested",   color: "bg-red-500",    status: "Not Interested" },
+]
+
+const isExitStage = (status: string) => status === "Not Interested"
+const getStatusFromColumnKey = (key: string): string => columns.find((c) => c.key === key)?.status ?? key
+
+const getStatusColor = (status: string) => {
+  const column = columns.find((c) => c.status === status)
+  if (!column) return "bg-gray-100 text-gray-700 border-gray-300"
+  switch (column.color) {
+    case "bg-yellow-400": return "bg-yellow-100 text-yellow-800 border-yellow-300"
+    case "bg-orange-400": return "bg-orange-100 text-orange-800 border-orange-300"
+    case "bg-blue-400":   return "bg-blue-100 text-blue-800 border-blue-300"
+    case "bg-green-500":  return "bg-green-100 text-green-800 border-green-300"
+    case "bg-red-500":    return "bg-red-100 text-red-800 border-red-300"
+    default:              return "bg-gray-100 text-gray-700 border-gray-300"
+  }
+}
+
+const getOptionDotColor = (status: string) => columns.find((c) => c.status === status)?.color ?? "bg-gray-400"
+const getPlatformIcon = (platform?: string): ReactNode => PLATFORM_ICONS[platform ?? ""] || PLATFORM_ICONS.Instagram
+const getAvatarColor = (name: string) => {
+  const colors = ["bg-pink-500","bg-purple-500","bg-indigo-500","bg-blue-500","bg-cyan-500","bg-teal-500","bg-green-500","bg-yellow-500","bg-orange-500","bg-red-500","bg-rose-500"]
+  return colors[name.charCodeAt(0) % colors.length]
+}
+
+const getNextStages = (currentStatus: string): string[] => {
+  switch (currentStatus) {
+    case "For Outreach":    return ["Contacted", "Not Interested"]
+    case "Contacted":       return ["In Conversation", "Not Interested"]
+    case "In Conversation": return ["Deal Agreed", "Not Interested"]
+    case "Deal Agreed":     return []
+    case "Not Interested":  return []
+    default:                return []
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
+
+// ✅ FIX: influencerToPartner was missing — added back
+function influencerToPartner(inf: PipelineInfluencer): Partner {
+  const nameParts = inf.influencer?.split(" ") || [""]
+  const firstName = nameParts[0] || inf.handle?.slice(0, 6) || ""
+  const lastName  = nameParts.slice(1).join(" ") || ""
+  return {
+    id:          inf.id as any,
+    handle:      inf.handle || "",
+    firstName,
+    lastName,
+    birthday:    "",
+    plat:        inf.platform || "Instagram",
+    niche:       inf.niche || "",
+    gend:        "",
+    loc:         inf.location || "",
+    tier:        "",
+    tierOverride: null,
+    onRet:       false,
+    retFee:      0,
+    defComm:     0,
+    commSt:      inf.pipelineStatus || "Pending",
+    clicks:      0,
+    cvr:         0,
+    sales:       0,
+    aov:         0,
+    rev:         0,
+    fol:         inf.followerCount,
+    eng:         parseFloat(inf.engagementRate) || 0,
+    avgV:        0,
+    gmv:         0,
+    added:       inf.createdAt ? new Date(inf.createdAt) : new Date(),
+    prods:       [],
+    prodCost:    0,
+    feesPaid:    inf.agreedRate || 0,
+    commPaid:    0,
+    totalSpend:  inf.agreedRate || 0,
+    roi_val:     0,
+    roas_val:    0,
+    monthly:     MONTHS.map((m) => ({ month: m, posts: 0, clicks: 0, rev: 0, eng: 0, sales: 0 })),
+    ppm:         0,
+    hClicks:     0,
+    hSales:      0,
+    hRev:        0,
+    hCVR:        0,
+    hPosts:      0,
+  }
+}
 
 // ─── Not Interested Modal ────────────────────────────────────────────────────
 interface NIModalProps {
@@ -183,79 +277,113 @@ function NotInterestedModal({ influencer, onConfirm, onCancel }: NIModalProps) {
   )
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
-
-function influencerToPartner(inf: PipelineInfluencer): Partner {
-  const nameParts = inf.influencer?.split(" ") || [""]
-  const firstName = nameParts[0] || inf.handle?.slice(0, 6) || ""
-  const lastName = nameParts.slice(1).join(" ") || ""
-  return {
-    id: inf.id as any, handle: inf.handle || "", firstName, lastName, birthday: "",
-    plat: inf.platform || "Instagram", niche: inf.niche || "", gend: "", loc: inf.location || "",
-    tier: "", tierOverride: null, onRet: false, retFee: 0, defComm: 0,
-    commSt: inf.pipelineStatus || "Pending", clicks: 0, cvr: 0, sales: 0, aov: 0, rev: 0,
-    fol: inf.followerCount, eng: parseFloat(inf.engagementRate) || 0, avgV: 0, gmv: 0,
-    added: inf.createdAt ? new Date(inf.createdAt) : new Date(), prods: [], prodCost: 0,
-    feesPaid: inf.agreedRate || 0, commPaid: 0, totalSpend: inf.agreedRate || 0,
-    roi_val: 0, roas_val: 0,
-    monthly: MONTHS.map((m) => ({ month: m, posts: 0, clicks: 0, rev: 0, eng: 0, sales: 0 })),
-    ppm: 0, hClicks: 0, hSales: 0, hRev: 0, hCVR: 0, hPosts: 0,
-  }
+// ─── Deal Agreed Checklist ────────────────────────────────────────────────────
+interface DealAgreedChecklistProps {
+  influencerId: string
+  addressReceived: boolean
+  onAddressToggle: (id: string) => void
+  onMarkOrderPlaced: (id: string) => void
 }
 
-// ─── Column definitions ──────────────────────────────────────────────────────
-const columns = [
-  { key: "for-outreach",       title: "For Outreach",       color: "bg-yellow-400", status: "For Outreach" },
-  { key: "contacted",          title: "Contacted",           color: "bg-orange-400", status: "Contacted" },
-  { key: "replied",            title: "Replied",             color: "bg-blue-400",   status: "Replied" },
-  { key: "in-progress",        title: "In-Progress",         color: "bg-pink-400",   status: "In-Progress" },
-  { key: "not-interested",     title: "Not Interested",      color: "bg-red-500",    status: "Not Interested" },
-  { key: "for-order-creation", title: "For Order Creation",  color: "bg-green-500",  status: "For Order Creation" },
-  { key: "in-transit",         title: "In-Transit",          color: "bg-yellow-500", status: "In-Transit" },
-  { key: "delivered",          title: "Delivered",           color: "bg-cyan-500",   status: "Delivered" },
-  { key: "posted",             title: "Posted",              color: "bg-green-600",  status: "Posted" },
-  { key: "completed",          title: "Completed",           color: "bg-pink-500",   status: "Completed" },
-]
-
-const getStatusFromColumnKey = (key: string): string => columns.find((c) => c.key === key)?.status ?? key
-
-const getStatusColor = (status: string) => {
-  const column = columns.find((c) => c.status === status)
-  if (!column) return "bg-gray-100 text-gray-700 border-gray-300"
-  switch (column.color) {
-    case "bg-yellow-400": return "bg-yellow-100 text-yellow-800 border-yellow-300"
-    case "bg-orange-400": return "bg-orange-100 text-orange-800 border-orange-300"
-    case "bg-blue-400":   return "bg-blue-100 text-blue-800 border-blue-300"
-    case "bg-pink-400":   return "bg-pink-100 text-pink-800 border-pink-300"
-    case "bg-red-500":    return "bg-red-100 text-red-800 border-red-300"
-    case "bg-green-500":  return "bg-green-100 text-green-800 border-green-300"
-    case "bg-yellow-500": return "bg-yellow-100 text-yellow-800 border-yellow-300"
-    case "bg-cyan-500":   return "bg-cyan-100 text-cyan-800 border-cyan-300"
-    case "bg-green-600":  return "bg-green-100 text-green-900 border-green-400"
-    case "bg-pink-500":   return "bg-pink-100 text-pink-800 border-pink-300"
-    default:              return "bg-gray-100 text-gray-700 border-gray-300"
-  }
+function DealAgreedChecklist({ influencerId, addressReceived, onAddressToggle, onMarkOrderPlaced }: DealAgreedChecklistProps) {
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100">
+      <div
+        onClick={(e) => { e.stopPropagation(); onAddressToggle(influencerId) }}
+        className="flex items-center gap-2 cursor-pointer group mb-2"
+      >
+        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0 ${addressReceived ? "bg-green-500 border-green-500" : "border-gray-300 bg-white group-hover:border-green-400"}`}>
+          {addressReceived && <IconCheck size={10} className="text-white" />}
+        </div>
+        <span className={`text-xs ${addressReceived ? "text-gray-400 line-through" : "text-gray-600"}`}>
+          Shipping address received
+        </span>
+      </div>
+      <button
+        onClick={(e) => { e.stopPropagation(); if (addressReceived) onMarkOrderPlaced(influencerId) }}
+        disabled={!addressReceived}
+        className={`w-full text-xs font-medium py-1.5 rounded-lg transition-all ${addressReceived ? "bg-green-500 text-white hover:bg-green-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+      >
+        {addressReceived ? "✓ Mark For Order Creation" : "Mark For Order Creation"}
+      </button>
+    </div>
+  )
 }
 
-const getOptionDotColor = (status: string) => columns.find((c) => c.status === status)?.color ?? "bg-gray-400"
-const getPlatformIcon = (platform?: string): ReactNode => PLATFORM_ICONS[platform ?? ""] || PLATFORM_ICONS.Instagram
-const getAvatarColor = (name: string) => {
-  const colors = ["bg-pink-500","bg-purple-500","bg-indigo-500","bg-blue-500","bg-cyan-500","bg-teal-500","bg-green-500","bg-yellow-500","bg-orange-500","bg-red-500","bg-rose-500"]
-  return colors[name.charCodeAt(0) % colors.length]
+// ─── Pipeline Card ────────────────────────────────────────────────────────────
+interface PipelineCardProps {
+  influencer: PipelineInfluencer & { addressReceived?: boolean; niReason?: string }
+  onOpenSidebar: (inf: PipelineInfluencer) => void
+  onStatusChange: (id: string, newStatus: string) => void
+  onAddressToggle?: (id: string) => void
+  onMarkOrderPlaced?: (id: string) => void
+}
+
+function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onAddressToggle, onMarkOrderPlaced }: PipelineCardProps) {
+  const nextStages = getNextStages(influencer.pipelineStatus)
+  const isExit = isExitStage(influencer.pipelineStatus)
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow">
+      <div className="cursor-pointer" onClick={() => onOpenSidebar(influencer)}>
+        {/* Name + handle — no avatar */}
+        <div className="flex flex-col text-sm mb-2">
+          <span className="font-medium text-gray-900">{influencer.influencer}</span>
+          <span className="text-xs text-gray-500">{influencer.instagramHandle}</span>
+        </div>
+        {/* Platform + location */}
+        <div className="flex items-center gap-2 text-xs text-gray-500 mb-1.5">
+          <span className="flex items-center gap-1">{getPlatformIcon(influencer.platform)}{influencer.platform || "Instagram"}</span>
+          <span>•</span>
+          <span>{influencer.location || "—"}</span>
+        </div>
+        {/* Stats */}
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span>{influencer.followerCount?.toLocaleString() || influencer.followers || "—"} followers</span>
+          <span>{influencer.engagementRate || "—"}% eng</span>
+        </div>
+        {/* NI reason */}
+        {influencer.niReason && influencer.pipelineStatus === "Not Interested" && (
+          <div className="mt-2 text-xs text-red-600 bg-red-50 rounded px-2 py-1 inline-block">
+            {influencer.niReason}
+          </div>
+        )}
+      </div>
+
+      {/* Deal Agreed checklist */}
+      {influencer.pipelineStatus === "Deal Agreed" && onAddressToggle && onMarkOrderPlaced && (
+        <DealAgreedChecklist
+          influencerId={influencer.id}
+          addressReceived={influencer.addressReceived ?? false}
+          onAddressToggle={onAddressToggle}
+          onMarkOrderPlaced={onMarkOrderPlaced}
+        />
+      )}
+
+      {/* Stage action buttons */}
+      {nextStages.length > 0 && !isExit && (
+        <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
+          {nextStages.map((stage) => (
+            <button
+              key={stage}
+              onClick={(e) => { e.stopPropagation(); onStatusChange(influencer.id, stage) }}
+              className={`text-xs px-2 py-1 rounded transition-all ${
+                stage === "Not Interested"
+                  ? "bg-red-50 text-red-600 hover:bg-red-100"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {stage === "Not Interested" ? "✕ Not Interested" : `→ ${stage}`}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Portal StatusDropdown ────────────────────────────────────────────────────
-// Uses ReactDOM.createPortal so the dropdown renders at document.body level,
-// escaping any overflow:hidden or overflow:clip on parent table/containers.
-// Position is calculated from the trigger button's bounding rect (fixed coords).
-function StatusDropdown({
-  currentStatus,
-  onStatusChange,
-}: {
-  currentStatus: string
-  onStatusChange: (status: string) => void
-}) {
+function StatusDropdown({ currentStatus, onStatusChange }: { currentStatus: string; onStatusChange: (s: string) => void }) {
   const [isOpen, setIsOpen] = useState(false)
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
   const [mounted, setMounted] = useState(false)
@@ -263,79 +391,36 @@ function StatusDropdown({
 
   useEffect(() => { setMounted(true) }, [])
 
-  // Recalculate position every time dropdown opens
   useEffect(() => {
     if (!isOpen || !buttonRef.current) return
-
     const rect = buttonRef.current.getBoundingClientRect()
-    const dropdownHeight = 380 // approximate max height
-    const dropdownWidth = 180
+    const dropdownHeight = 300, dropdownWidth = 180
     const spaceBelow = window.innerHeight - rect.bottom
     const spaceRight = window.innerWidth - rect.left
-
-    // Flip up if not enough space below
-    const top = spaceBelow >= dropdownHeight
-      ? rect.bottom + 4
-      : rect.top - dropdownHeight - 4
-
-    // Flip left if not enough space to the right
-    const left = spaceRight >= dropdownWidth
-      ? rect.left
-      : rect.right - dropdownWidth
-
-    setDropdownStyle({
-      position: "fixed",
-      top: Math.max(8, top),
-      left: Math.max(8, left),
-      zIndex: 9999,
-      minWidth: dropdownWidth,
-    })
+    const top  = spaceBelow >= dropdownHeight ? rect.bottom + 4 : rect.top - dropdownHeight - 4
+    const left = spaceRight >= dropdownWidth  ? rect.left       : rect.right - dropdownWidth
+    setDropdownStyle({ position: "fixed", top: Math.max(8, top), left: Math.max(8, left), zIndex: 9999, minWidth: dropdownWidth })
   }, [isOpen])
 
-  // Close on outside click
   useEffect(() => {
     if (!isOpen) return
     const handler = (e: MouseEvent) => {
       const target = e.target as Node
       if (buttonRef.current && !buttonRef.current.contains(target)) {
-        // Check if click is inside the portal dropdown
         const portalEl = document.getElementById("status-dropdown-portal")
-        if (!portalEl || !portalEl.contains(target)) {
-          setIsOpen(false)
-        }
+        if (!portalEl || !portalEl.contains(target)) setIsOpen(false)
       }
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [isOpen])
 
-  // Close on scroll (position would be stale)
-  useEffect(() => {
-    if (!isOpen) return
-    const handler = () => setIsOpen(false)
-    window.addEventListener("scroll", handler, true)
-    return () => window.removeEventListener("scroll", handler, true)
-  }, [isOpen])
-
   const dropdown = isOpen ? (
-    <div
-      id="status-dropdown-portal"
-      style={dropdownStyle}
-      className="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
-      onMouseDown={(e) => e.stopPropagation()}
-    >
+    <div id="status-dropdown-portal" style={dropdownStyle} className="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
       {columns.map((col, index) => (
-        <div
-          key={col.status}
-          onMouseDown={(e) => {
-            e.stopPropagation()
-            e.preventDefault()
-            onStatusChange(col.status)
-            setIsOpen(false)
-          }}
-          className={`px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 transition-colors flex items-center gap-2 ${
-            index !== columns.length - 1 ? "border-b border-gray-100" : ""
-          } ${currentStatus === col.status ? "bg-gray-50 font-semibold" : ""}`}
+        <div key={col.status}
+          onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStatusChange(col.status); setIsOpen(false) }}
+          className={`px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 flex items-center gap-2 ${index !== columns.length - 1 ? "border-b border-gray-100" : ""} ${currentStatus === col.status ? "bg-gray-50 font-semibold" : ""}`}
         >
           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getOptionDotColor(col.status)}`} />
           <span className="text-gray-700 whitespace-nowrap">{col.title}</span>
@@ -346,22 +431,14 @@ function StatusDropdown({
 
   return (
     <>
-      <button
-        ref={buttonRef}
-        onClick={(e) => {
-          e.stopPropagation()
-          setIsOpen((prev) => !prev)
-        }}
+      <button ref={buttonRef}
+        onClick={(e) => { e.stopPropagation(); setIsOpen((p) => !p) }}
         className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap border ${getStatusColor(currentStatus)}`}
       >
         {currentStatus}
         <IconChevronDown size={12} className={`transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`} />
       </button>
-
-      {/* Portal — renders at document.body, above everything */}
-      {mounted && dropdown && typeof document !== "undefined"
-        ? ReactDOM.createPortal(dropdown, document.body)
-        : null}
+      {mounted && dropdown && typeof document !== "undefined" ? ReactDOM.createPortal(dropdown, document.body) : null}
     </>
   )
 }
@@ -369,8 +446,9 @@ function StatusDropdown({
 // ─── Droppable / Draggable ────────────────────────────────────────────────────
 function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
+  const isExit = id === "not-interested"
   return (
-    <div ref={setNodeRef} className={`flex flex-col gap-3 w-[200px] flex-shrink-0 transition-colors ${isOver ? "bg-gray-50 rounded-lg" : ""}`}>
+    <div ref={setNodeRef} className={`flex flex-col gap-3 w-[240px] flex-shrink-0 transition-colors rounded-lg ${isOver ? (isExit ? "bg-red-50" : "bg-gray-50") : ""}`}>
       {children}
     </div>
   )
@@ -381,19 +459,17 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
   const style = transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined
   return (
     <div ref={setNodeRef} style={style} {...listeners} {...attributes}
-      className={`bg-gray-50 border border-gray-200 rounded-lg p-3 hover:shadow-sm transition cursor-grab active:cursor-grabbing ${isDragging ? "shadow-lg opacity-50" : ""}`}>
+      className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-50" : ""}`}>
       {children}
     </div>
   )
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-interface PipelinePageProps {
-  brandId?: string
-}
+interface PipelinePageProps { brandId?: string }
 
 export default function PipelinePage({ brandId }: PipelinePageProps) {
-  const [view, setView] = useState<"kanban" | "list">("kanban")
+  const [view, setView] = useState<"Board" | "list">("Board")
   const [search, setSearch] = useState("")
   const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -404,9 +480,41 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
   const [filters, setFilters] = useState({ influencer: "", handle: "", location: "all", niche: "all" })
   const [niModalInfluencer, setNiModalInfluencer] = useState<PipelineInfluencer | null>(null)
   const [pendingNiId, setPendingNiId] = useState<string | null>(null)
+  const [addressReceivedState, setAddressReceivedState] = useState<Record<string, boolean>>({})
 
   const { data, isLoading, error, updateStatus, refetch } = usePipelineData(brandId)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  useEffect(() => {
+    if (data.length > 0) {
+      setAddressReceivedState((prev) => {
+        const next = { ...prev }
+        data.forEach((item) => { if (!(item.id in next)) next[item.id] = false })
+        return next
+      })
+    }
+  }, [data])
+
+  const handleAddressToggle = (id: string) => {
+    setAddressReceivedState((prev) => {
+      const next = { ...prev, [id]: !prev[id] }
+      setShowSuccessMessage(`Address ${next[id] ? "confirmed" : "unchecked"}`)
+      setTimeout(() => setShowSuccessMessage(null), 2000)
+      return next
+    })
+  }
+
+  const handleMarkOrderPlaced = async (id: string) => {
+    const influencer = data.find((i) => i.id === id)
+    if (!influencer || !addressReceivedState[id]) return
+    const success = await updateStatus(id, "For Order Creation")
+    setShowSuccessMessage(
+      success
+        ? `${influencer.influencer} moved to Post Tracker → For Order Creation`
+        : `Failed to move ${influencer.influencer}`
+    )
+    setTimeout(() => setShowSuccessMessage(null), 3000)
+  }
 
   const handleDragStart = (event: DragStartEvent) => { setActiveId(event.active.id as string) }
 
@@ -420,6 +528,12 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     if (!draggedInfluencer) return
     const newStatus = getStatusFromColumnKey(destinationKey)
     if (draggedInfluencer.pipelineStatus === newStatus) return
+    const allowedNext = getNextStages(draggedInfluencer.pipelineStatus)
+    if (!allowedNext.includes(newStatus)) {
+      setShowSuccessMessage(`Cannot move from "${draggedInfluencer.pipelineStatus}" to "${newStatus}"`)
+      setTimeout(() => setShowSuccessMessage(null), 2000)
+      return
+    }
     if (newStatus === "Not Interested") {
       setPendingNiId(draggedId)
       setNiModalInfluencer(draggedInfluencer)
@@ -454,9 +568,12 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     setTimeout(() => setShowSuccessMessage(null), 2000)
   }
 
-  const openSidebar = (inf: PipelineInfluencer) => { setSelectedPartner(influencerToPartner(inf)); setSidebarOpen(true) }
+  const openSidebar = (inf: PipelineInfluencer) => {
+    setSelectedPartner(influencerToPartner(inf))
+    setSidebarOpen(true)
+  }
 
-  const handleColumnClick = (column: (typeof columns)[0]) => {
+  const handleColumnClick = (column: typeof columns[0]) => {
     setSelectedColumnStatus(column.status)
     setView("list")
     setShowSuccessMessage(`Showing "${column.title}"`)
@@ -473,29 +590,31 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     .filter((d) => d.influencer.toLowerCase().includes(search.toLowerCase()) || d.instagramHandle.toLowerCase().includes(search.toLowerCase()))
     .filter((d) => (selectedColumnStatus ? d.pipelineStatus === selectedColumnStatus : true))
 
-  if (filters.influencer) filteredData = filteredData.filter((p) => p.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
-  if (filters.handle)     filteredData = filteredData.filter((p) => p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase()))
+  if (filters.influencer)         filteredData = filteredData.filter((p) => p.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
+  if (filters.handle)             filteredData = filteredData.filter((p) => p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase()))
   if (filters.location !== "all") filteredData = filteredData.filter((p) => p.location === filters.location)
   if (filters.niche !== "all")    filteredData = filteredData.filter((p) => p.niche === filters.niche)
 
-  const getItemsByColumn = (columnKey: string) => filteredData.filter((item) => item.pipelineStatus === getStatusFromColumnKey(columnKey))
+  const getItemsByColumn = (columnKey: string) =>
+    filteredData.filter((item) => item.pipelineStatus === getStatusFromColumnKey(columnKey))
 
   const hasActiveFilters = filters.influencer !== "" || filters.handle !== "" || filters.location !== "all" || filters.niche !== "all" || search !== "" || selectedColumnStatus !== null
   const activeInfluencer = activeId ? data.find((item) => item.id === activeId) : null
   const selectedColumnInfo = selectedColumnStatus ? columns.find((col) => col.status === selectedColumnStatus) : null
 
+  // ✅ FIX: Pass addressReceived and niReason into the card via spread
   const renderCardContent = (inf: PipelineInfluencer) => (
-    <div className="flex items-center gap-3">
-      {inf.profileImageUrl ? (
-        <img src={inf.profileImageUrl} alt={inf.influencer} className="w-9 h-9 rounded-full object-cover" />
-      ) : (
-        <div className="w-9 h-9 rounded-full bg-[#1FAE5B]/20 flex items-center justify-center text-[#0F6B3E] font-semibold text-sm">{inf.influencer.charAt(0)}</div>
-      )}
-      <div className="flex flex-col text-sm">
-        <span className="font-medium">{inf.influencer}</span>
-        <span className="text-xs text-gray-500">{inf.instagramHandle}</span>
-      </div>
-    </div>
+    <PipelineCard
+      influencer={{
+        ...inf,
+        addressReceived: addressReceivedState[inf.id] ?? false,
+        niReason: (inf as any).niReason ?? (inf as any).approvalNotes ?? undefined,
+      }}
+      onOpenSidebar={openSidebar}
+      onStatusChange={handleStatusUpdate}
+      onAddressToggle={handleAddressToggle}
+      onMarkOrderPlaced={handleMarkOrderPlaced}
+    />
   )
 
   if (isLoading) return (
@@ -515,7 +634,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
 
   return (
     <div className="flex flex-col gap-4 p-6">
-
       {niModalInfluencer && <NotInterestedModal influencer={niModalInfluencer} onConfirm={handleNiConfirm} onCancel={handleNiCancel} />}
 
       {showSuccessMessage && (
@@ -577,16 +695,16 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                   </div>
                 </div>
                 <div className="flex items-center justify-end gap-3 mt-5">
-                  <button className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition" onClick={() => setFilters({ influencer: "", handle: "", location: "all", niche: "all" })}>Clear all</button>
-                  <button className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition" onClick={() => setShowFilterPanel(false)}>Apply</button>
+                  <button onClick={() => setFilters({ influencer: "", handle: "", location: "all", niche: "all" })} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition">Clear all</button>
+                  <button onClick={() => setShowFilterPanel(false)} className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition">Apply</button>
                 </div>
               </div>
             )}
           </div>
           <div className="flex gap-2">
-            <button onClick={() => { setView("kanban"); setSelectedColumnStatus(null) }}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "kanban" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
-              <IconLayoutKanban size={16} /> Kanban
+            <button onClick={() => { setView("Board"); setSelectedColumnStatus(null) }}
+              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "Board" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
+              <IconLayoutKanban size={16} /> Board
             </button>
             <button onClick={() => { setView("list"); setSelectedColumnStatus(null) }}
               className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "list" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
@@ -597,7 +715,7 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
       </div>
 
       {/* KANBAN VIEW */}
-      {view === "kanban" && (
+      {view === "Board" && (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
             <div className="flex gap-4 min-w-max">
@@ -605,16 +723,20 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                 const items = getItemsByColumn(col.key)
                 return (
                   <DroppableColumn key={col.key} id={col.key}>
-                    <div onClick={() => handleColumnClick(col)} className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center cursor-pointer hover:opacity-90 transition-opacity`}>
-                      <span>{items.length} {col.title}</span>
+                    <div onClick={() => handleColumnClick(col)}
+                      className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between cursor-pointer hover:opacity-90 transition-opacity`}>
+                      <span>{col.title}</span>
+                      <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
                     </div>
-                    {items.map((inf) => (
-                      <DraggableCard key={inf.id} id={inf.id}>
-                        <div onClick={() => openSidebar(inf)} className="cursor-pointer">{renderCardContent(inf)}</div>
-                      </DraggableCard>
-                    ))}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center text-sm text-gray-500 flex flex-col items-center justify-center gap-2 hover:bg-gray-50 transition">
-                      <span>Drop Here</span><IconPlus size={16} />
+                    <div className="flex flex-col gap-2 min-h-[400px]">
+                      {items.map((inf) => (
+                        <DraggableCard key={inf.id} id={inf.id}>
+                          {renderCardContent(inf)}
+                        </DraggableCard>
+                      ))}
+                      {items.length === 0 && (
+                        <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center text-xs text-gray-400">Drop here</div>
+                      )}
                     </div>
                   </DroppableColumn>
                 )
@@ -623,7 +745,9 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
           </div>
           <DragOverlay>
             {activeInfluencer ? (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 shadow-lg rotate-2 w-[220px]">{renderCardContent(activeInfluencer)}</div>
+              <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg rotate-2 w-[240px]">
+                {renderCardContent(activeInfluencer)}
+              </div>
             ) : null}
           </DragOverlay>
         </DndContext>
@@ -644,10 +768,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
               </button>
             </div>
           )}
-          {/* KEY FIX: Remove overflow-x-auto from table wrapper,
-              wrap the table in a div that doesn't clip child portals.
-              The portal renders at body level so overflow doesn't matter,
-              but we still need the table scroll container to not cut off the trigger button area. */}
           <div style={{ overflowX: "auto" }}>
             <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
               <thead className="bg-gray-50 border-b">
@@ -687,18 +807,12 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1"><IconLocation size={14} className="text-gray-400" />{inf.location}</div>
                       </td>
-                      <td className="px-4 py-3">{inf.followers}</td>
+                      <td className="px-4 py-3">{inf.followerCount?.toLocaleString() || inf.followers}</td>
                       <td className="px-4 py-3">{inf.engagementRate}</td>
+                      <td className="px-4 py-3"><span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">{inf.niche}</span></td>
                       <td className="px-4 py-3">
-                        <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">{inf.niche}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {/* Stop row click from firing when interacting with dropdown */}
                         <div onClick={(e) => e.stopPropagation()}>
-                          <StatusDropdown
-                            currentStatus={inf.pipelineStatus}
-                            onStatusChange={(newStatus) => handleStatusUpdate(inf.id, newStatus)}
-                          />
+                          <StatusDropdown currentStatus={inf.pipelineStatus} onStatusChange={(s) => handleStatusUpdate(inf.id, s)} />
                         </div>
                       </td>
                     </tr>

@@ -38,7 +38,7 @@ const navData = {
     { title: "Inbox", url: "/dashboard/inbox", icon: IconMail },
     { title: "Influencers List", url: "/dashboard/manage-influencers", icon: IconUsers },
     { title: "Pipeline", url: "/dashboard/pipeline", icon: IconGitBranch },
-    { title: "Closed", url: "/dashboard/closed", icon: IconCircleCheck },
+    { title: "Post Tracker", url: "/dashboard/post-tracker", icon: IconCircleCheck },
     { title: "Brand Partners", url: "/dashboard/brand-partners", icon: IconBuildingStore },
     { title: "Analytics", url: "/dashboard/analytics", icon: IconChartBar },
   ],
