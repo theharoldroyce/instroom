@@ -188,20 +188,26 @@ function InfluencersContent() {
   }, [brandId])
 
   useEffect(() => {
-    if (!isLoading && rows.length > 0 && brandId && seededForBrand.current !== brandId) {
+    if (!isLoading && brandId && seededForBrand.current !== brandId) {
       seededForBrand.current = brandId
+      // Seed ALL loaded rows — even if rows is empty (fresh brand)
       rows.forEach((r) => dbIds.current.add(r.id))
     }
   }, [isLoading, rows, brandId])
 
   // ── Prevent PUT storm on mount ────────────────────────────────────────────
+  // FIX 1: readyToSave only gates EDIT-triggered saves, not import saves.
+  // We expose a separate importSave path that bypasses this guard.
   const readyToSave = useRef(false)
   useEffect(() => {
-    if (!isLoading && rows.length > 0) {
-      const t = setTimeout(() => { readyToSave.current = true }, 800)
+    if (!isLoading) {
+      // Wait a tick after loading finishes — whether there are rows or not.
+      const t = setTimeout(() => {
+        readyToSave.current = true
+      }, 800)
       return () => clearTimeout(t)
     }
-  }, [isLoading, rows.length])
+  }, [isLoading])
 
   // ── Serial PUT queue ──────────────────────────────────────────────────────
   const putQueue = useRef(createPutQueue())
@@ -209,8 +215,11 @@ function InfluencersContent() {
   // per-row debounce timers
   const updateTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
-  const createdHandles  = useRef<Set<string>>(new Set())
-  const idSwapCallback  = useRef<((tempId: string, realId: string) => void) | null>(null)
+  // FIX 1: Track which handles we've ALREADY created so the Instroom API
+  // re-fetch (autoFetchInfluencer) doesn't re-create a row that was just
+  // fetched on load.  Key = "handle@platform".
+  const createdHandles = useRef<Set<string>>(new Set())
+  const idSwapCallback = useRef<((tempId: string, realId: string) => void) | null>(null)
 
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false)
   const [showWorkspaceUnavailableModal, setShowWorkspaceUnavailableModal] = useState(false)
@@ -258,12 +267,12 @@ function InfluencersContent() {
 
   // ── CREATE new row ────────────────────────────────────────────────────────
   const createRow = useCallback(
-    async (row: InfluencerRow) => {
-      if (!brandId || !rowHasHandle(row)) return
+    async (row: InfluencerRow, skipToast = false) => {
+      if (!brandId || !rowHasHandle(row)) return null
 
       const handle = row.handle.trim().replace(/^@/, "")
       const key = `${handle}@${row.platform}`
-      if (createdHandles.current.has(key)) return
+      if (createdHandles.current.has(key)) return null
       createdHandles.current.add(key)
 
       try {
@@ -278,47 +287,58 @@ function InfluencersContent() {
           const realId: string = created.id || created.influencer_id
           dbIds.current.add(realId)
           idSwapCallback.current?.(row.id, realId)
-          toast.success(`@${handle} added`)
+          if (!skipToast) toast.success(`@${handle} added`)
+          return realId
         } else if (res.status === 409) {
+          // Already exists globally — link it to this brand
           const body = await res.json().catch(() => ({}))
           const existingId: string = body.id || body.influencer_id || row.id
           dbIds.current.add(existingId)
           if (existingId !== row.id) idSwapCallback.current?.(row.id, existingId)
+          return existingId
         } else if (res.status === 403) {
           const body = await res.json().catch(() => ({}))
           if (body.requiresSubscription) setShowSubscriptionDialog(true)
           else toast.error(body.error || "Influencer limit reached")
           createdHandles.current.delete(key)
+          return null
         } else {
           const body = await res.json().catch(() => ({}))
-          toast.error(body.details || body.error || `Failed to save @${handle}`)
+          if (!skipToast) toast.error(body.details || body.error || `Failed to save @${handle}`)
           createdHandles.current.delete(key)
+          return null
         }
       } catch {
-        toast.error(`Network error saving @${handle}`)
+        if (!skipToast) toast.error(`Network error saving @${handle}`)
         createdHandles.current.delete(key)
+        return null
       }
     },
     [brandId]
   )
 
-  // ── onFetchComplete — Instroom API enriched a row ─────────────────────────
+  // ── FIX 1: onFetchComplete — Instroom API enriched a row ─────────────────
+  // ONLY save if the row is ALREADY in dbIds (i.e. it existed before the fetch).
+  // If the row is new (not yet in DB), createRow will handle saving it when
+  // the user finishes typing — we must NOT trigger a second create here.
   const handleFetchComplete = useCallback(
     (row: InfluencerRow) => {
       if (!brandId || !rowHasHandle(row)) return
 
       if (dbIds.current.has(row.id)) {
+        // Row already exists — just update the enriched fields
         const existing = updateTimers.current.get(row.id)
         if (existing) clearTimeout(existing)
         putQueue.current.enqueue({
           url: `/api/brand/${brandId}/influencers/${row.id}`,
           payload: JSON.stringify(buildUpdatePayload(row)),
         })
-      } else {
-        createRow(row)
       }
+      // If NOT in dbIds: this is a new row mid-creation. The handle-blur in
+      // applyCellValue will trigger createRow via handleRowsChange once the
+      // platform is also set. Don't double-create here.
     },
-    [brandId, createRow]
+    [brandId]
   )
 
   // ── onRowsChange — user edited something in the table ─────────────────────
@@ -332,12 +352,56 @@ function InfluencersContent() {
         if (dbIds.current.has(row.id)) {
           scheduleUpdate(row)
         } else {
-          const isApiPlatform = row.platform === "instagram" || row.platform === "tiktok"
+          // FIX 1: Only auto-create for non-API platforms (youtube, twitter, other).
+          // For instagram/tiktok, autoFetchInfluencer fires first; createRow is
+          // called from handleFetchComplete ONLY after the API enriches the row.
+          // This prevents the double-create race condition.
+          const isApiPlatform =
+            row.platform === "instagram" || row.platform === "tiktok"
           if (!isApiPlatform) createRow(row)
         }
       })
     },
     [scheduleUpdate, createRow]
+  )
+
+  // ── FIX 3: onImportRows — batch save all imported rows ───────────────────
+  // Import bypasses readyToSave and the platform guard because imported rows
+  // already have a handle and we want them all saved immediately.
+  const handleImportRows = useCallback(
+    async (importedRows: InfluencerRow[]) => {
+      if (!brandId) return
+
+      const validRows = importedRows.filter(rowHasHandle)
+      if (!validRows.length) return
+
+      let savedCount = 0
+      let skippedCount = 0
+
+      // Save concurrently in batches of 5 to avoid overwhelming the server
+      const BATCH = 5
+      for (let i = 0; i < validRows.length; i += BATCH) {
+        const batch = validRows.slice(i, i + BATCH)
+        await Promise.all(
+          batch.map(async (row) => {
+            const realId = await createRow(row, true /* skipToast */)
+            if (realId) {
+              savedCount++
+            } else {
+              skippedCount++
+            }
+          })
+        )
+      }
+
+      if (savedCount > 0)
+        toast.success(
+          `Imported ${savedCount} influencer${savedCount !== 1 ? "s" : ""}${skippedCount ? ` (${skippedCount} skipped — duplicates or limit reached)` : ""}`
+        )
+      else if (skippedCount > 0)
+        toast.warning(`${skippedCount} rows skipped — already exist or limit reached`)
+    },
+    [brandId, createRow]
   )
 
   // ── DELETE ────────────────────────────────────────────────────────────────
@@ -398,7 +462,11 @@ function InfluencersContent() {
         <div className="text-center">
           <p className="text-gray-600 mb-2 font-medium">No brand selected</p>
           <p className="text-sm text-gray-500">
-            Add <code className="bg-gray-100 px-1 rounded text-xs">?brandId=your-brand-id</code> to the URL
+            Add{" "}
+            <code className="bg-gray-100 px-1 rounded text-xs">
+              ?brandId=your-brand-id
+            </code>{" "}
+            to the URL
           </p>
         </div>
       </div>
@@ -457,7 +525,9 @@ function InfluencersContent() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <p className="text-red-600 mb-2 font-medium">Failed to load influencers</p>
+          <p className="text-red-600 mb-2 font-medium">
+            Failed to load influencers
+          </p>
           <p className="text-sm text-gray-500">{error}</p>
         </div>
       </div>
@@ -481,7 +551,10 @@ function InfluencersContent() {
           onDeleteRow={handleDeleteRow}
           onFetchComplete={handleFetchComplete}
           onCustomColumnsChange={handleCustomColumnsChange}
-          onRegisterIdSwap={(fn) => { idSwapCallback.current = fn }}
+          onImportRows={handleImportRows}
+          onRegisterIdSwap={(fn) => {
+            idSwapCallback.current = fn
+          }}
           brandId={brandId}
         />
       )}
