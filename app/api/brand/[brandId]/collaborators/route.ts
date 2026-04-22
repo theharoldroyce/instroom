@@ -1,7 +1,6 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { userHasActiveSubscription } from "@/lib/subscription-limits"
 import { NextResponse } from "next/server"
 
 export async function GET(
@@ -40,16 +39,14 @@ export async function GET(
       )
     }
 
-    // Check if brand owner has active subscription - only for team members (not owner)
+    // Owners can always manage collaborators
+    // Members can only access if brand is active (subscription status)
     const isOwner = brand.owner_id === session.user.id
-    if (!isOwner) {
-      const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
-      if (!ownerHasActiveSubscription) {
-        return NextResponse.json(
-          { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
-          { status: 403 }
-        )
-      }
+    if (!isOwner && !brand.is_active) {
+      return NextResponse.json(
+        { error: "This workspace is unavailable." },
+        { status: 403 }
+      )
     }
 
     // Get owner

@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useRef, Suspense, useCallback, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import TableSheet, {
@@ -129,11 +129,37 @@ function createPutQueue() {
 
 function InfluencersContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const rawBrandId = searchParams.get("brandId")
   const brandId = rawBrandId?.trim() || null
 
   const { rows, customColumns, isLoading, error, setCustomColumns } =
     useInfluencerData(brandId)
+
+  // ── Auto-select owned brand if no brandId provided ──────────────────────────
+  useEffect(() => {
+    if (brandId) return // Already have a brandId, don't auto-select
+
+    const autoSelectBrand = async () => {
+      try {
+        const res = await fetch("/api/brand/list")
+        if (res.ok) {
+          const data = await res.json()
+          const brands = data.brands || []
+          
+          // Find the first brand owned by this user
+          const ownedBrand = brands.find((b: any) => b.owner === true)
+          if (ownedBrand) {
+            router.push(`/dashboard/manage-influencers?brandId=${ownedBrand.id}`)
+          }
+        }
+      } catch (err) {
+        // Silent fail - user can manually select brand
+      }
+    }
+
+    autoSelectBrand()
+  }, [brandId, router])
 
   // ── dbIds: Influencer.ids confirmed in DB for this brand ──────────────────
   const dbIds = useRef<Set<string>>(new Set())
@@ -189,6 +215,11 @@ function InfluencersContent() {
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false)
   const [showWorkspaceUnavailableModal, setShowWorkspaceUnavailableModal] = useState(false)
   const [selectedBrandName, setSelectedBrandName] = useState<string>("")
+
+  const handleWorkspaceUnavailableClose = () => {
+    setShowWorkspaceUnavailableModal(false)
+    router.push("/dashboard")
+  }
 
   // ── Schedule PUT for one row (debounced 1.5s, then queued serially) ───────
   const scheduleUpdate = useCallback(
@@ -366,29 +397,59 @@ function InfluencersContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <p className="text-gray-600 mb-2 font-medium">No brand selected</p>
-<<<<<<< HEAD
-          <p className="text-sm text-gray-500">Please select a brand to manage influencers</p>
-=======
           <p className="text-sm text-gray-500">
             Add <code className="bg-gray-100 px-1 rounded text-xs">?brandId=your-brand-id</code> to the URL
           </p>
->>>>>>> 4aed5ecba5dd628c41664961444901b19ec05d15
         </div>
       </div>
     )
   }
 
   if (error) {
-    const isWorkspaceUnavailable = error.includes("workspace is unavailable") || error.includes("subscription is inactive")
+    const isSubscriptionExpired = error.toLowerCase().includes("subscription expired")
+    const isWorkspaceUnavailable = error.toLowerCase().includes("workspace is unavailable") || error.toLowerCase().includes("subscription is inactive")
+    
+    if (isSubscriptionExpired) {
+      return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-gray-900">Subscription Expired</h2>
+              <p className="text-sm text-gray-600 mt-2">Your subscription has expired. Please renew it to access your workspace and continue working with your influencers.</p>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-amber-900">
+                Renew your subscription now to regain full access to all features.
+              </p>
+            </div>
+
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={() => window.location.href = "/pricing"}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium"
+              >
+                Renew Subscription
+              </button>
+              <button
+                onClick={() => window.location.href = "/dashboard"}
+                className="border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50"
+              >
+                Back to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
     
     if (isWorkspaceUnavailable) {
       return (
         <WorkspaceUnavailableModal
           open={true}
-          onOpenChange={() => {
-            // Redirect or close - for now just show the modal
-          }}
+          onOpenChange={setShowWorkspaceUnavailableModal}
           workspaceName={selectedBrandName || "Workspace"}
+          onClose={handleWorkspaceUnavailableClose}
         />
       )
     }
@@ -439,6 +500,7 @@ function InfluencersContent() {
       <WorkspaceUnavailableModal
         open={showWorkspaceUnavailableModal}
         onOpenChange={setShowWorkspaceUnavailableModal}
+        onClose={handleWorkspaceUnavailableClose}
         workspaceName={selectedBrandName}
       />
     </div>

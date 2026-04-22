@@ -385,3 +385,21 @@ export async function userHasActiveSubscription(userId: string): Promise<boolean
     return false
   }
 }
+
+/**
+ * Sync brand active status with owner's subscription status
+ * Call this when subscription status changes or on login
+ */
+export async function syncBrandActivityWithSubscription(userId: string): Promise<void> {
+  try {
+    const hasActiveSubscription = await userHasActiveSubscription(userId)
+    
+    // Update all brands owned by this user
+    await prisma.brand.updateMany({
+      where: { owner_id: userId },
+      data: { is_active: hasActiveSubscription }
+    })
+  } catch (error) {
+    // Silently fail - don't block operations
+  }
+}

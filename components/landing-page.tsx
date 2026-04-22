@@ -56,7 +56,6 @@ export function LandingPage() {
           --charcoal: #1E1E1E;
           --off-white: #F7F9F8;
           --blue: #2C8EC4;
-          --amber: #F4B740;
           --border: rgba(30,30,30,0.08);
           --muted: #9ca3af;
         }
@@ -974,7 +973,7 @@ export function LandingPage() {
           <p className="hero-lead">Instroom is the system. Every creator, every campaign, every result, in one workspace. Built by people who've done the work.</p>
           <div className="hero-ctas">
             <Link href="/signup">
-              <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold h-12 px-8 hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50">
+              <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold h-12 px-8 hover:from-[#0a5a2f] hover:to-[#158a48] shadow-lg shadow-emerald-500/30">
                 Start Free Trial
               </Button>
             </Link>
@@ -1193,7 +1192,7 @@ export function LandingPage() {
           <p className="early-body">We're not going to make any up. Right now, we are our own testimonials. We use Instroom every day to run our agency across 30 brands, and that's the honest proof that it works.</p>
           <p style={{ fontFamily: "'Caveat', cursive", fontSize: "1.75rem", color: "var(--deep-green)", fontWeight: 600, marginBottom: "32px", lineHeight: 1.3 }}>Hopefully yours will live here soon.<br />Fingers crossed.</p>
           <Link href="/signup">
-            <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold h-12 px-8 hover:from-emerald-400 hover:to-lime-300">
+            <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold h-12 px-8 hover:from-[#0a5a2f] hover:to-[#158a48]">
               Start free for 30 days
             </Button>
           </Link>
@@ -1244,7 +1243,7 @@ export function LandingPage() {
               <p className="price-annual">or $15/mo billed annually</p>
               <p className="price-trial">30 days free · No card</p>
               <Link href="/signup">
-                <Button className="w-full bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold hover:from-emerald-400 hover:to-lime-300">
+                <Button className="w-full bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold hover:from-[#0a5a2f] hover:to-[#158a48]">
                   Start free
                 </Button>
               </Link>
@@ -1257,7 +1256,7 @@ export function LandingPage() {
               <p className="price-annual">or $39/mo billed annually · +$12/mo per extra workspace</p>
               <p className="price-trial">30 days free · No card</p>
               <Link href="/signup">
-                <Button className="w-full bg-green-400 text-black font-semibold hover:bg-lime-300">
+                <Button className="w-full bg-[#1FAE5B] text-white font-semibold hover:bg-[#158a48]">
                   Start free
                 </Button>
               </Link>
@@ -1302,30 +1301,31 @@ export function LandingPage() {
               style={{ marginBottom: "12px" }}
             />
             <p style={{ color: "rgba(255,255,255,0.6)", maxWidth: "280px", fontSize: "0.875rem" }}>
-              The easiest system for managing influencer marketing campaigns.
+              The influencer marketing workspace for eCommerce brands and agencies.
             </p>
           </div>
           <div>
-            <h4>Product</h4>
+            <h4>Products</h4>
             <ul>
+              <li><a href="#">Instroom Platform</a></li>
+              <li><a href="#">Chrome Extension</a></li>
+              <li><a href="#">Post Tracker</a></li>
               <li><a href="#">Features</a></li>
               <li><a href="#">Pricing</a></li>
-              <li><a href="#">Security</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Resources</h4>
+            <ul>
+              <li><a href="#">Blog</a></li>
+              <li><a href="#">FAQ's</a></li>
+              <li><a href="#">Demo</a></li>
             </ul>
           </div>
           <div>
             <h4>Company</h4>
             <ul>
               <li><a href="#">About</a></li>
-              <li><a href="#">Blog</a></li>
-              <li><a href="#">Careers</a></li>
-            </ul>
-          </div>
-          <div>
-            <h4>Legal</h4>
-            <ul>
-              <li><a href="#">Privacy</a></li>
-              <li><a href="#">Terms</a></li>
               <li><a href="#">Contact</a></li>
             </ul>
           </div>
@@ -1333,9 +1333,9 @@ export function LandingPage() {
         <div className="footer-bottom">
           <p>&copy; 2026 Instroom. All rights reserved.</p>
           <div style={{ display: "flex", gap: "24px" }}>
-            <a href="#" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>Twitter</a>
-            <a href="#" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>Instagram</a>
-            <a href="#" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>LinkedIn</a>
+            <Link href="/terms-of-service" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>Terms of Service</Link>
+            <Link href="/privacy" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>Privacy Policy</Link>
+            <Link href="/refund" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>Refund Policy</Link>
           </div>
         </div>
       </footer>

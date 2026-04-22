@@ -3,8 +3,8 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
 import { prisma } from "./prisma"
 import { sendWelcomeEmail } from "./email"
+import { syncBrandActivityWithSubscription } from "./subscription-limits"
 import bcrypt from "bcryptjs"
-import { checkLoginRateLimit, resetLoginRateLimit, getClientIp } from "./rate-limit"
 
 declare module "next-auth" {
   interface Session {
@@ -14,6 +14,8 @@ declare module "next-auth" {
       name?: string | null
       image?: string | null
     }
+    accessToken?: string  // ← Gmail access token exposed on session
+    error?: string
   }
 }
 
@@ -23,6 +25,20 @@ const nextAuthConfig = {
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          // Added: Gmail scopes so inbox can read and send emails
+          scope: [
+            "openid",
+            "email",
+            "profile",
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.send",
+          ].join(" "),
+          access_type: "offline",  // ensures we get a refresh_token
+          prompt: "consent",       // always show consent so refresh_token is returned
+        },
+      },
     }),
     CredentialsProvider({
       name: "Credentials",
@@ -60,7 +76,6 @@ const nextAuthConfig = {
             image: user.image,
           }
         } catch (error) {
-          console.error("Auth error:", error)
           return null
         }
       },
@@ -69,16 +84,15 @@ const nextAuthConfig = {
   pages: { signIn: "/login" },
   callbacks: {
     async signIn({ user, account, profile }: any) {
-      // For Google OAuth, create user record if it doesn't exist
       if (account?.provider === "google" && profile?.email) {
-        // Extract avatar from profile
         const avatarUrl = profile.image || profile.picture || null
         
         try {
-          // Find or create user
           let dbUser = await prisma.user.findUnique({
             where: { email: profile.email },
           })
+          
+          const isNewUser = !dbUser
           
           if (!dbUser) {
             dbUser = await prisma.user.create({
@@ -91,12 +105,10 @@ const nextAuthConfig = {
               },
             })
             
-            // Send welcome email to new user
             try {
               await sendWelcomeEmail(dbUser.email, dbUser.name || "User")
             } catch (emailError) {
-              console.error("Failed to send welcome email:", emailError instanceof Error ? emailError.message : String(emailError))
-              // Continue anyway, don't fail the signin
+              // Silently continue on email error
             }
           } else {
             dbUser = await prisma.user.update({
@@ -109,87 +121,124 @@ const nextAuthConfig = {
           }
           
           if (dbUser) {
-            // Set user ID to database ID
             user.id = dbUser.id
             user.email = dbUser.email
             user.name = dbUser.name
             user.image = dbUser.image
+            user.isNewUser = isNewUser
             
-            // Ensure onboarding record exists
-            const onboarding = await prisma.onboarding.findUnique({
-              where: { user_id: dbUser.id },
-            })
-            
-            if (!onboarding) {
-              await prisma.onboarding.create({
-                data: { user_id: dbUser.id },
+            if (isNewUser) {
+              const onboarding = await prisma.onboarding.findUnique({
+                where: { user_id: dbUser.id },
               })
+              
+              if (!onboarding) {
+                await prisma.onboarding.create({
+                  data: { 
+                    user_id: dbUser.id,
+                    operator_type: "",
+                  },
+                })
+              }
             }
             
-            // Create/update account record for provider tracking
             try {
               await prisma.account.upsert({
                 where: {
                   provider_providerAccountId: {
                     provider: account.provider,
                     providerAccountId: account.providerAccountId,
-                    },
                   },
-                  create: {
-                    userId: dbUser.id,
-                    type: account.type || "oauth",
-                    provider: account.provider,
-                    providerAccountId: account.providerAccountId,
-                    access_token: account.access_token || null,
-                    refresh_token: account.refresh_token || null,
-                    expires_at: account.expires_at || null,
-                    token_type: account.token_type || null,
-                    scope: account.scope || null,
-                    id_token: account.id_token || null,
-                  },
-                  update: {
-                    access_token: account.access_token || null,
-                    refresh_token: account.refresh_token || null,
-                    expires_at: account.expires_at || null,
-                    token_type: account.token_type || null,
-                    scope: account.scope || null,
-                    id_token: account.id_token || null,
-                  },
-                })
+                },
+                create: {
+                  userId: dbUser.id,
+                  type: account.type || "oauth",
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                  access_token: account.access_token || null,
+                  refresh_token: account.refresh_token || null,
+                  expires_at: account.expires_at || null,
+                  token_type: account.token_type || null,
+                  scope: account.scope || null,
+                  id_token: account.id_token || null,
+                },
+                update: {
+                  access_token: account.access_token || null,
+                  refresh_token: account.refresh_token || null,
+                  expires_at: account.expires_at || null,
+                  token_type: account.token_type || null,
+                  scope: account.scope || null,
+                  id_token: account.id_token || null,
+                },
+              })
             } catch (accountError) {
-              console.error("Account record error:", accountError instanceof Error ? accountError.message : String(accountError))
+              // Silently continue on account error
             }
           }
         } catch (error) {
-          console.error("Google OAuth error:", error instanceof Error ? error.message : String(error))
           return false
         }
       }
       return true
     },
     
-    // JWT callback: store user ID and email, and set 30-minute expiration
-    jwt({ token, user }: any) {
+    jwt({ token, user, account }: any) {
+      // Existing user fields
       if (user) {
         token.id = user.id
         token.email = user.email
-        // Set token expiration to 30 minutes from now
+        if (user.isNewUser !== undefined) {
+          token.isNewUser = user.isNewUser
+        }
         token.iat = Math.floor(Date.now() / 1000)
         token.exp = Math.floor(Date.now() / 1000) + 30 * 60
       }
+
+      // Added: store Google access/refresh tokens for Gmail API calls
+      if (account?.provider === "google") {
+        token.accessToken = account.access_token
+        token.refreshToken = account.refresh_token
+        token.accessTokenExpires = account.expires_at
+          ? account.expires_at * 1000
+          : Date.now() + 3600 * 1000
+      }
+
       return token
     },
     
     async session({ session, token }: any) {
       if (session?.user) {
-        session.user.id = token.id as string;
-        if (token.name) session.user.name = token.name as string;
+        session.user.id = token.id as string
+        if (token.name) session.user.name = token.name as string
+        if (token.isNewUser !== undefined) {
+          session.user.isNewUser = token.isNewUser
+        }
+        await syncBrandActivityWithSubscription(session.user.id)
       }
-      return session;
+
+      // Added: expose Gmail access token to server-side API routes
+      if (token.accessToken) {
+        session.accessToken = token.accessToken
+      }
+      if (token.error) {
+        session.error = token.error
+      }
+
+      return session
+    },
+    
+    redirect({ url, baseUrl }: { url: string; baseUrl: string }) {
+      if (url.includes("/onboarding") || url.includes("/signup")) {
+        return url
+      }
+      if (url.startsWith("/")) return `${baseUrl}${url}`
+      else if (new URL(url).origin === baseUrl) return url
+      return baseUrl
     },
   },
 }
+
 const handler = NextAuth(nextAuthConfig)
 
-export { handler as GET, handler as POST };
-export const authOptions = nextAuthConfig;
+export { handler as GET, handler as POST }
+export const authOptions = nextAuthConfig
