@@ -49,7 +49,6 @@ async function refreshToken(refresh_token: string, userId: string): Promise<stri
     const data = await res.json()
     if (!res.ok || !data.access_token) return null
 
-    // Save refreshed token back to DB
     await prisma.account.updateMany({
       where: { userId, provider: "google" },
       data: {
@@ -69,7 +68,6 @@ async function refreshToken(refresh_token: string, userId: string): Promise<stri
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  // Get the session — accessToken is injected by the NextAuth jwt callback
   const session = await getServerSession(authOptions) as any
 
   if (!session) {
@@ -77,15 +75,13 @@ export async function GET(req: NextRequest) {
   }
 
   if (session.error === "RefreshAccessTokenError") {
-    // Refresh token is invalid — user needs to re-sign in
     return NextResponse.json(
       { error: "Session expired. Please sign in again.", reauth: true },
       { status: 401 }
     )
   }
 
-  // Try to get accessToken from session first (Google OAuth login)
-  // If missing (credentials login), fall back to the Account table in the DB
+  // Try session first (Google OAuth login), fall back to DB Account table
   let accessToken = session.accessToken as string | undefined
 
   if (!accessToken) {
@@ -97,34 +93,28 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Look up the stored Google OAuth token from the Account table
     const account = await prisma.account.findFirst({
       where: { userId, provider: "google" },
       select: { access_token: true, refresh_token: true, expires_at: true },
     })
 
     if (!account?.access_token) {
-      // User has no linked Google account — they signed up with email/password
+      // No linked Google account — signed up with email/password, needs to re-consent
       return NextResponse.json(
-        { error: "No Google account linked. Please sign in with Google to use Gmail.", reauth: true },
+        { error: "No Google account linked. Please connect your Gmail account.", reauth: true },
         { status: 403 }
       )
     }
 
-    // Check if token is expired and refresh if needed
     const isExpired = account.expires_at
       ? Date.now() > account.expires_at * 1000
       : false
-
-    console.log("[gmail/threads] token expires_at:", account.expires_at)
-    console.log("[gmail/threads] token isExpired:", isExpired)
-    console.log("[gmail/threads] has refresh_token:", !!account.refresh_token)
 
     if (isExpired && account.refresh_token) {
       const refreshed = await refreshToken(account.refresh_token, userId)
       if (!refreshed) {
         return NextResponse.json(
-          { error: "Gmail session expired. Please sign out and sign in with Google again.", reauth: true },
+          { error: "Gmail session expired. Please reconnect your Gmail account.", reauth: true },
           { status: 403 }
         )
       }
@@ -143,7 +133,22 @@ export async function GET(req: NextRequest) {
 
     if (!listRes.ok) {
       const err = await listRes.json()
-      throw new Error(err?.error?.message || "Failed to list threads")
+      const message: string = err?.error?.message || "Failed to list threads"
+
+      // Token exists but was granted without Gmail scopes (e.g. user signed in
+      // before we added Gmail to the consent flow). Tell the client to re-consent.
+      if (
+        listRes.status === 403 ||
+        message.toLowerCase().includes("insufficient authentication scopes") ||
+        message.toLowerCase().includes("request had insufficient")
+      ) {
+        return NextResponse.json(
+          { error: "Gmail access not granted. Please connect your Gmail account.", reauth: true },
+          { status: 403 }
+        )
+      }
+
+      throw new Error(message)
     }
 
     const listData = await listRes.json()

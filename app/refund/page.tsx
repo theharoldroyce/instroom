@@ -274,7 +274,7 @@ export default function RefundPolicy() {
   return (
     <div
       className="min-h-screen font-sans text-[#1a1a1a]"
-      style={{ background: "#f5f0e8", fontFamily: "'DM Sans', sans-serif" }}
+      style={{ background: "#F4F7F5", fontFamily: "'DM Sans', sans-serif" }}
     >
       {/* Google Fonts */}
       <style>{`
@@ -685,9 +685,7 @@ export default function RefundPolicy() {
       {/* ── Footer ── */}
       <footer className="bg-[#0d2b1a] px-12 py-9 flex items-center justify-between flex-wrap gap-4">
         <p className="text-[13px] text-white/40 font-light m-0">
-          © 2026 Armful OPC, trading as Armful Media (SEC Reg. No. 2024090169123-01). Instroom is
-          a product of Armful OPC. 2/F Armful Media Bldg., Santiago, Naujan, Oriental Mindoro,
-          Philippines 5204. Consumer rights protected under RA 7394.
+          © 2026 Armful OPC, trading as Armful Media (SEC Reg. No. 2024090169123-01). Instroom is a product of Armful OPC. 2/F Armful Media Bldg., Santiago, Naujan, Oriental Mindoro, Philippines 5204. All rights reserved.
         </p>
         <div className="flex gap-6">
           {["Terms of Service", "Privacy Policy", "Refund Policy"].map((link) => (

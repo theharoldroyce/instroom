@@ -3,6 +3,7 @@ import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./providers";
 import { Toaster } from "sonner";
+import InactivityProvider from "@/components/InactivityProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -30,7 +31,11 @@ export default function RootLayout({
         className={`${inter.variable} ${manrope.variable} antialiased`}
         suppressHydrationWarning
       >
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <InactivityProvider>
+            {children}
+          </InactivityProvider>
+        </AuthProvider>
         <Toaster />
       </body>
     </html>

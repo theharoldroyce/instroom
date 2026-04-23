@@ -11,7 +11,7 @@ const styles = `
     --green-brand: #2d7a4f;
     --green-bright: #3dbd72;
     --green-light: #a8e6c1;
-    --cream: #f5f0e8;
+    --cream: #F4F7F5;
     --text-main: #1a1a1a;
     --text-muted: #5a6b5e;
     --border: #d4e8db;
