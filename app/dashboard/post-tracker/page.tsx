@@ -109,14 +109,11 @@ function getAvatarColor(name: string) {
   return colors[name.charCodeAt(0) % colors.length]
 }
 
-// Updated formatNumber to handle both string and number inputs
 function formatNumber(num: number | string | null | undefined): string {
   if (!num && num !== 0) return "—"
   
-  // Convert string to number if needed
   let numericValue: number
   if (typeof num === "string") {
-    // Remove any non-numeric characters except decimal point
     const cleaned = num.replace(/[^0-9.]/g, "")
     numericValue = parseFloat(cleaned)
   } else {
@@ -132,7 +129,6 @@ function formatNumber(num: number | string | null | undefined): string {
       : numericValue.toString()
 }
 
-// Helper to extract numeric value from followers string for display
 function getFollowerNumber(inf: ClosedInfluencer): number {
   return inf.followerCount || 0
 }
@@ -625,7 +621,7 @@ function ProfileDrawer({
   onClose:              () => void
   onColumnChange:       (id: string, col: ClosedColumn) => Promise<boolean>
   onPaidCollabSave:     (id: string, d: PaidCollabData) => Promise<boolean>
-  onCampaignTypeChange: (id: string, type: string)      => void
+  onCampaignTypeChange: (id: string, type: string)      => Promise<boolean>
 }) {
   const [tab,        setTab]        = useState(0)
   const [saving,     setSaving]     = useState(false)
@@ -644,9 +640,17 @@ function ProfileDrawer({
 
   const handleSave = async () => {
     setSaving(true)
-    if (isPaid) await onPaidCollabSave(inf.id, paidCollab)
-    showToast("Changes saved ✓")
-    setSaving(false)
+    try {
+      if (isPaid) {
+        await onPaidCollabSave(inf.id, paidCollab)
+      }
+      showToast("Changes saved ✓")
+    } catch (error) {
+      showToast("Error saving changes")
+      console.error(error)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -690,7 +694,10 @@ function ProfileDrawer({
               <select
                 className="text-[12px] px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 font-medium outline-none cursor-pointer"
                 value={inf.closedStatus}
-                onChange={e => onColumnChange(inf.id, e.target.value as ClosedColumn)}
+                onChange={async (e) => {
+                  const success = await onColumnChange(inf.id, e.target.value as ClosedColumn)
+                  if (success) showToast(`Stage updated to ${e.target.value}`)
+                }}
               >
                 {COLUMNS.map(c => <option key={c.key} value={c.key}>{c.title}</option>)}
               </select>
@@ -700,9 +707,10 @@ function ProfileDrawer({
               <select
                 className="text-[12px] px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 font-medium outline-none cursor-pointer"
                 value={campaignType}
-                onChange={e => {
-                  onCampaignTypeChange(inf.id, e.target.value)
+                onChange={async (e) => {
+                  await onCampaignTypeChange(inf.id, e.target.value)
                   if (!isPaidType(e.target.value) && tab === 4) setTab(0)
+                  showToast(`Campaign type updated to ${e.target.value}`)
                 }}
               >
                 {CAMPAIGN_TYPES.map(ct => <option key={ct.value} value={ct.value}>{ct.label}</option>)}
@@ -856,7 +864,7 @@ export default function ClosedPage() {
   const params  = useParams()
   const brandId = params?.brandId as string | undefined
 
-  const { data, isLoading, error, updateColumn, updatePaidCollab, refetch } = useClosedData(brandId)
+  const { data, isLoading, error, updateColumn, updatePaidCollab, updateCampaignType, refetch } = useClosedData(brandId)
 
   // View state
   const [view, setView] = useState<"Board" | "list">("Board")
@@ -869,9 +877,6 @@ export default function ClosedPage() {
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [filters, setFilters] = useState({ influencer: "", handle: "", location: "all", niche: "all" })
   const [selectedColumnStatus, setSelectedColumnStatus] = useState<ClosedColumn | null>(null)
-
-  // Local campaign type overrides
-  const [campaignTypeOverrides, setCampaignTypeOverrides] = useState<Record<string, string>>({})
 
   const showToast = (msg: string) => { setToastMsg(msg); setTimeout(() => setToastMsg(null), 3000) }
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -917,14 +922,14 @@ export default function ClosedPage() {
   }
 
   const handleCampaignTypeChange = useCallback(async (id: string, type: string) => {
-    setCampaignTypeOverrides(p => ({ ...p, [id]: type }))
-    setSelectedInf(p => p?.id === id ? { ...p, campaignType: type } : p)
-    await fetch(`/api/brand/${brandId}/closed/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campaignType: type }),
-    }).catch(console.error)
-  }, [brandId])
+    const success = await updateCampaignType(id, type)
+    if (success) {
+      setSelectedInf(p => p?.id === id ? { ...p, campaignType: type } : p)
+      showToast(`Campaign type updated to ${type}`)
+    } else {
+      showToast("Failed to update campaign type")
+    }
+  }, [updateCampaignType])
 
   const handleColumnClick = (column: typeof COLUMNS[0]) => {
     setSelectedColumnStatus(column.key)
@@ -937,13 +942,7 @@ export default function ClosedPage() {
     showToast("Showing all influencers")
   }
 
-  // Merge local overrides
-  const resolvedData: ClosedInfluencer[] = filteredData.map(inf => ({
-    ...inf,
-    campaignType: campaignTypeOverrides[inf.id] ?? inf.campaignType,
-  }))
-
-  const getItemsByColumn = (columnKey: ClosedColumn) => resolvedData.filter(item => item.closedStatus === columnKey)
+  const getItemsByColumn = (columnKey: ClosedColumn) => data.filter(item => item.closedStatus === columnKey)
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-64">
@@ -1065,19 +1064,14 @@ export default function ClosedPage() {
                           <DraggableCard
                             key={inf.id}
                             id={inf.id}
-                            onClick={() =>
-                              setSelectedInf({
-                                ...inf,
-                                campaignType: campaignTypeOverrides[inf.id] ?? inf.campaignType,
-                              })
-                            }
+                            onClick={() => setSelectedInf(inf)}
                           >
                             <div className="flex items-start justify-between">
                               <div>
                                 <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
                                 <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
                               </div>
-                              <CampaignBadge type={campaignTypeOverrides[inf.id] ?? inf.campaignType} />
+                              <CampaignBadge type={inf.campaignType} />
                             </div>
                             <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
                               <span>{inf.platform || "Instagram"}</span>
@@ -1133,19 +1127,14 @@ export default function ClosedPage() {
                           <DraggableCard
                             key={inf.id}
                             id={inf.id}
-                            onClick={() =>
-                              setSelectedInf({
-                                ...inf,
-                                campaignType: campaignTypeOverrides[inf.id] ?? inf.campaignType,
-                              })
-                            }
+                            onClick={() => setSelectedInf(inf)}
                           >
                             <div className="flex items-start justify-between">
                               <div>
                                 <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
                                 <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
                               </div>
-                              <CampaignBadge type={campaignTypeOverrides[inf.id] ?? inf.campaignType} />
+                              <CampaignBadge type={inf.campaignType} />
                             </div>
                             <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
                               <span>{inf.platform || "Instagram"}</span>
@@ -1218,7 +1207,7 @@ export default function ClosedPage() {
                   <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No influencers found matching your filters</td></tr>
                 ) : (
                   filteredData.map(inf => (
-                    <tr key={inf.id} className="border-t hover:bg-gray-50 cursor-pointer transition" onClick={() => setSelectedInf({ ...inf, campaignType: campaignTypeOverrides[inf.id] ?? inf.campaignType })}>
+                    <tr key={inf.id} className="border-t hover:bg-gray-50 cursor-pointer transition" onClick={() => setSelectedInf(inf)}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           {inf.profileImageUrl ? (
@@ -1242,7 +1231,7 @@ export default function ClosedPage() {
                         <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">{inf.niche || "—"}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <CampaignBadge type={campaignTypeOverrides[inf.id] ?? inf.campaignType} />
+                        <CampaignBadge type={inf.campaignType} />
                       </td>
                       <td className="px-4 py-3">
                         <div onClick={(e) => e.stopPropagation()}>
@@ -1266,20 +1255,6 @@ export default function ClosedPage() {
             </table>
           </div>
         </div>
-      )}
-
-      {selectedInf && (
-        <ProfileDrawer
-          inf={selectedInf}
-          onClose={() => setSelectedInf(null)}
-          onColumnChange={async (id, col) => {
-            const ok = await updateColumn(id, col)
-            if (ok) setSelectedInf(p => p ? { ...p, closedStatus: col } : p)
-            return ok
-          }}
-          onPaidCollabSave={updatePaidCollab}
-          onCampaignTypeChange={handleCampaignTypeChange}
-        />
       )}
     </div>
   )
