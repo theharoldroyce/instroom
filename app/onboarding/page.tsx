@@ -14,11 +14,11 @@ export default function OnboardingPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    goal: '',
-    website: '',
-    teamSize: '',
-    revenue: '',
-    source: '',
+    operatorType: '',
+    businessType: '',
+    campaignGoal: '',
+    influencerCount: '',
+    acquisitionSource: [] as string[],
   })
   const [subscriptionChecked, setSubscriptionChecked] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
@@ -29,10 +29,42 @@ export default function OnboardingPage() {
       router.replace("/signup");
       return;
     }
-    // User is authenticated, proceed with onboarding
+    // Only redirect if explicitly marked as existing account from Google signup attempt
+    const isNewUser = (session.user as any).isNewUser;
+    if (isNewUser === false) {
+      // Google OAuth detected existing account
+      router.replace("/login?error=account-exists&message=Account%20already%20exists.%20Please%20log%20in%20with%20your%20email%20and%20password.");
+      return;
+    }
+    // isNewUser === true: new Google signup (proceed to onboarding)
+    // isNewUser === undefined: credentials login (proceed to check onboarding status)
+    
+    // Check if user has already completed onboarding
+    checkOnboardingStatus();
     setIsSubscribed(true);
     setSubscriptionChecked(true);
   }, [status, session, router])
+
+  const checkOnboardingStatus = async () => {
+    try {
+      if (!session?.user) return;
+      
+      const response = await fetch('/api/onboarding', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // If onboarding is completed, redirect to dashboard
+        if (data.onboarding?.completed_at) {
+          router.replace('/dashboard');
+        }
+      }
+    } catch (err) {
+      // Silently continue on error
+    }
+  }
 
   const handleSkip = async () => {
     setIsLoading(true);
@@ -50,11 +82,11 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
-          goal: null,
-          website: null,
-          team_size: null,
-          revenue: null,
-          source: null,
+          operator_type: null,
+          business_type: null,
+          campaign_goal: null,
+          influencer_count: null,
+          acquisition_source: null,
         }),
       });
       if (!response.ok) {
@@ -70,37 +102,33 @@ export default function OnboardingPage() {
   };
 
   const handleNext = () => {
-    // Validation for each step
+    // Validation for each step (4-step flow)
     if (step === 1) {
-      if (!formData.goal) {
-        setError('Please select your primary goal to continue.')
+      if (!formData.operatorType) {
+        setError('Please select your account type to continue.')
         return
       }
     }
     if (step === 2) {
-      // Website is optional - no validation needed
-      setError(null)
+      if (!formData.businessType) {
+        setError('Please select your business type to continue.')
+        return
+      }
     }
     if (step === 3) {
-      if (!formData.teamSize) {
-        setError('Please select your team size to continue.')
+      if (!formData.campaignGoal) {
+        setError('Please select your campaign goal to continue.')
         return
       }
     }
     if (step === 4) {
-      if (!formData.revenue) {
-        setError('Please select your monthly revenue to continue.')
-        return
-      }
-    }
-    if (step === 5) {
-      if (!formData.source) {
-        setError('Please select how you heard about us to continue.')
+      if (!formData.influencerCount) {
+        setError('Please select your influencer count to continue.')
         return
       }
     }
     setError(null)
-    if (step < 5) {
+    if (step < 4) {
       setStep(step + 1)
     } else {
       setShowWelcome(true)
@@ -132,11 +160,11 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
-          goal: formData.goal,
-          website: formData.website || null,
-          team_size: formData.teamSize || null,
-          revenue: formData.revenue || null,
-          source: formData.source || null,
+          operator_type: formData.operatorType || null,
+          business_type: formData.businessType || null,
+          campaign_goal: formData.campaignGoal || null,
+          influencer_count: formData.influencerCount || null,
+          acquisition_source: formData.acquisitionSource.length > 0 ? formData.acquisitionSource : null,
         }),
       })
 
@@ -145,8 +173,8 @@ export default function OnboardingPage() {
         throw new Error(data.error || 'Failed to save onboarding data')
       }
 
-      // Redirect to pricing
-      router.push('/pricing')
+      // Redirect to dashboard
+      router.push('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -154,7 +182,7 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleFormChange = (key: string, value: string) => {
+  const handleFormChange = (key: string, value: string | string[]) => {
     setFormData({ ...formData, [key]: value })
   }
 

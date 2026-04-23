@@ -32,13 +32,6 @@ export async function GET(
     // Fetch all campaigns for this brand
     const campaigns = await prisma.campaign.findMany({
       where: { brand_id: brandId },
-      include: {
-        influencers: {
-          include: {
-            influencer: true,
-          },
-        },
-      },
       orderBy: { created_at: "desc" },
     })
 
@@ -105,13 +98,6 @@ export async function POST(
         name: name.trim(),
         description: description || undefined,
         status,
-      },
-      include: {
-        influencers: {
-          include: {
-            influencer: true,
-          },
-        },
       },
     })
 

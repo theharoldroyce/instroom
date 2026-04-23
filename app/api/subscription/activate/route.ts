@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { syncBrandActivityWithSubscription } from "@/lib/subscription-limits"
 
 export async function POST(req: Request) {
   try {
@@ -43,11 +44,13 @@ export async function POST(req: Request) {
       },
     })
 
+    // Sync brand activity with new active subscription
+    await syncBrandActivityWithSubscription(userId)
+
     return NextResponse.json({ success: true, subscription })
   } catch (error) {
-    console.error("Subscription activation error:", error)
     return NextResponse.json(
-      { error: "Failed to activate subscription", details: error },
+      { error: "Failed to activate subscription" },
       { status: 500 }
     )
   }

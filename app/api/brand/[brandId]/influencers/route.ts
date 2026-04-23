@@ -2,7 +2,6 @@
 
 import { prisma } from "@/lib/prisma"
 import { canAddInfluencer } from "@/lib/subscription-limits"
-import { userHasActiveSubscription } from "@/lib/subscription-limits"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { NextRequest, NextResponse } from "next/server"
@@ -29,17 +28,35 @@ export async function GET(
     const isMember = isOwner ? true : !!(await prisma.brandMember.findFirst({
       where: { brand_id: brandId, user_id: session.user.id }
     }))
+    
     if (!isMember) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    // Check if brand owner has active subscription
-    const ownerHasActiveSubscription = await userHasActiveSubscription(brand.owner_id)
-    if (!ownerHasActiveSubscription) {
+    // Managers can only access if brand is active (subscription status)
+    if (!isOwner && !brand.is_active) {
       return NextResponse.json(
-        { error: "This workspace is unavailable. The workspace owner's subscription is inactive." },
+        { error: "This workspace is unavailable." },
         { status: 403 }
       )
+    }
+
+    // For owners: check if subscription exists and is expired (block access)
+    // vs. no subscription at all (allow access, block on actions)
+    if (isOwner && !brand.is_active) {
+      const subscription = await prisma.userSubscription.findUnique({
+        where: { user_id: brand.owner_id },
+      })
+      
+      // If subscription exists but is expired, block owner access
+      if (subscription && (subscription.status === "cancelled" || subscription.status === "paused" || 
+          (subscription.current_period_end && subscription.current_period_end < new Date()))) {
+        return NextResponse.json(
+          { error: "Subscription expired. Please renew to access this workspace.", subscriptionExpired: true },
+          { status: 403 }
+        )
+      }
+      // If no subscription (new user), allow access but they can't add influencers
     }
 
     // Fetch BrandInfluencer rows without include to avoid Prisma throwing
