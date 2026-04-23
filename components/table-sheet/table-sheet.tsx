@@ -125,10 +125,14 @@ export default function TableSheet({
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest")
 
+  // ── Register id swap so parent can also call it if needed ────────────────────
+  const swapIdRef = useRef<(tempId: string, realId: string) => void>(() => {})
   useEffect(() => {
-    onRegisterIdSwap?.((tempId, realId) => {
+    const swapFn = (tempId: string, realId: string) => {
       setRows(prev => prev.map(r => r.id === tempId ? { ...r, id: realId } : r))
-    })
+    }
+    swapIdRef.current = swapFn
+    onRegisterIdSwap?.(swapFn)
   }, [onRegisterIdSwap])
 
   const lastInitialKey = useRef("")
@@ -350,67 +354,172 @@ export default function TableSheet({
     setSelectedRowIds(new Set())
   }
 
+  // ── Save row to DB ────────────────────────────────────────────────────────────
+  // Called internally after API fetch enriches a row. Handles both POST (new)
+  // and PUT (existing). Only sends fields that exist in the Influencer model.
+  const saveRowToDatabase = useCallback(async (row: InfluencerRow): Promise<void> => {
+    if (!row.handle || !row.platform) return
+
+    const isTempId = row.id.startsWith("temp-")
+
+    // Only fields that exist in the Influencer prisma model
+    const payload = {
+      handle:            row.handle,
+      platform:          row.platform,
+      full_name:         row.full_name || null,
+      email:             row.email || null,
+      gender:            row.gender || null,
+      niche:             row.niche || null,
+      location:          row.location || null,
+      bio:               row.bio || null,
+      profile_image_url: row.profile_image_url || null,
+      social_link:       row.social_link || null,
+      follower_count:    Number(row.follower_count) || 0,
+      engagement_rate:   Number(row.engagement_rate) || 0,
+      avg_likes:         Number(row.avg_likes) || 0,
+      avg_comments:      Number(row.avg_comments) || 0,
+      avg_views:         Number(row.avg_views) || 0,
+      // Pass brandId so the API links the influencer to the brand
+      ...(brandId ? { brandId } : {}),
+    }
+
+    if (isTempId) {
+      // POST — create new influencer
+      try {
+        const res = await fetch("/api/influencers/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          // 409 = already exists in DB — fetch the existing record to get its real ID
+          if (res.status === 409) {
+            const existing = await fetch(
+              `/api/influencers/find?handle=${encodeURIComponent(row.handle)}&platform=${encodeURIComponent(row.platform)}`
+            ).then(r => r.ok ? r.json() : null).catch(() => null)
+            if (existing?.id) {
+              swapIdRef.current(row.id, existing.id)
+              onFetchComplete?.({ ...row, id: existing.id })
+            }
+            return
+          }
+          // 403 = subscription limit
+          if (res.status === 403) {
+            addToast("error", err.message || "Influencer limit reached for your plan")
+            return
+          }
+          addToast("error", `Failed to save @${row.handle}: ${err.error || res.statusText}`)
+          return
+        }
+
+        const created = await res.json()
+        // Swap the temp ID for the real DB id everywhere in the table
+        swapIdRef.current(row.id, created.id)
+        onFetchComplete?.({ ...row, id: created.id })
+      } catch (err) {
+        console.error("saveRowToDatabase POST error:", err)
+        addToast("error", `Network error saving @${row.handle}`)
+      }
+    } else {
+      // PUT — update existing influencer (omit handle/platform — they're immutable)
+      const { handle, platform, brandId: _b, ...updatePayload } = payload as any
+      try {
+        const res = await fetch(`/api/influencers/${row.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatePayload),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          console.error(`PUT /api/influencers/${row.id} failed:`, err)
+          // Don't toast on PUT failures for auto-enrichment — silently log
+        } else {
+          onFetchComplete?.(row)
+        }
+      } catch (err) {
+        console.error("saveRowToDatabase PUT error:", err)
+      }
+    }
+  }, [brandId, addToast, onFetchComplete])
+
   // ── Auto fetch ───────────────────────────────────────────────────────────────
   const autoFetchInfluencer = useCallback(async (rowId: string, handle: string, platform: string) => {
     const clean = handle.trim().replace(/^@/, "").toLowerCase()
     if (!clean || clean.length < 2) return
     if (platform !== "instagram" && platform !== "tiktok") return
 
-    const existingRow = rows.find(r => r.id === rowId)
-    if (existingRow && Number(existingRow.follower_count) > 0) return
+    // Use functional state read to avoid stale closure on rows
+    setRows(prev => {
+      const existingRow = prev.find(r => r.id === rowId)
+      if (existingRow && Number(existingRow.follower_count) > 0) return prev
 
-    const duplicate = rows.find(r =>
-      r.id !== rowId && cleanHandle(r.handle).toLowerCase() === clean && r.platform === platform
-    )
-    if (duplicate) {
-      setPendingDuplicateInfo({ rowId, handle: clean, existingName: duplicate.full_name || duplicate.handle })
-      setDuplicateRowIds(prev => { const n = new Set(prev); n.add(rowId); return n })
-      return
-    }
-    setDuplicateRowIds(prev => { if (!prev.has(rowId)) return prev; const n = new Set(prev); n.delete(rowId); return n })
+      const duplicate = prev.find(r =>
+        r.id !== rowId && cleanHandle(r.handle).toLowerCase() === clean && r.platform === platform
+      )
+      if (duplicate) {
+        setPendingDuplicateInfo({ rowId, handle: clean, existingName: duplicate.full_name || duplicate.handle })
+        setDuplicateRowIds(p => { const n = new Set(p); n.add(rowId); return n })
+        return prev
+      }
+      setDuplicateRowIds(p => { if (!p.has(rowId)) return p; const n = new Set(p); n.delete(rowId); return n })
+      return prev
+    })
+
+    // Check again synchronously from a ref snapshot before starting the fetch
+    // (the setRows above is async so we re-read outside)
     setFetchingRows(prev => { const n = new Set(prev); n.add(rowId); return n })
 
     try {
       const data = await fetchInfluencerFromAPI(handle, platform)
       if (!data) { addToast("error", `${clean} not found on ${platform}`); return }
 
-      if (data.email) {
-        const emailLower = data.email.toLowerCase()
-        const emailDuplicate = rows.find(r =>
-          r.id !== rowId &&
-          ((r.email || "").toLowerCase() === emailLower || (r.contact_info || "").toLowerCase() === emailLower)
-        )
-        if (emailDuplicate) addToast("warning", `@${clean} shares an email with @${emailDuplicate.handle} — possible duplicate`)
-      }
+      // Check email duplicates and build the enriched row
+      let enrichedRow: InfluencerRow | null = null
 
       setRows(prev => {
+        if (data.email) {
+          const emailLower = data.email.toLowerCase()
+          const emailDuplicate = prev.find(r =>
+            r.id !== rowId &&
+            ((r.email || "").toLowerCase() === emailLower || (r.contact_info || "").toLowerCase() === emailLower)
+          )
+          if (emailDuplicate) addToast("warning", `@${clean} shares an email with @${emailDuplicate.handle} — possible duplicate`)
+        }
+
         const next = prev.map(row => {
           if (row.id !== rowId) return row
           const u = { ...row }
-          if (!u.full_name && data.full_name)     u.full_name = data.full_name
-          if (!u.email && data.email)             u.email = data.email
-          if (!u.contact_info && data.contact_info) u.contact_info = data.contact_info
-          if (!u.social_link && data.social_link) u.social_link = data.social_link
-          if (!u.location && data.location)       u.location = data.location
-          if (!u.niche && data.niche)             u.niche = data.niche
-          if (!u.gender && data.gender)           u.gender = data.gender
-          if (data.profile_image_url)             u.profile_image_url = data.profile_image_url
-          if (data.first_name)                    u.first_name = data.first_name
+          if (!u.full_name && data.full_name)         u.full_name = data.full_name
+          if (!u.email && data.email)                 u.email = data.email
+          if (!u.contact_info && data.contact_info)   u.contact_info = data.contact_info
+          if (!u.social_link && data.social_link)     u.social_link = data.social_link
+          if (!u.location && data.location)           u.location = data.location
+          if (!u.niche && data.niche)                 u.niche = data.niche
+          if (!u.gender && data.gender)               u.gender = data.gender
+          if (data.profile_image_url)                 u.profile_image_url = data.profile_image_url
+          if (data.first_name)                        u.first_name = data.first_name
           if (data.follower_count && data.follower_count !== "0") u.follower_count = data.follower_count
           if (data.engagement_rate && data.engagement_rate !== "0") u.engagement_rate = data.engagement_rate
-          if (data.avg_likes !== undefined)   u.avg_likes = data.avg_likes
-          if (data.avg_comments !== undefined) u.avg_comments = data.avg_comments
-          if (data.avg_views !== undefined)   u.avg_views = data.avg_views
+          if (data.avg_likes !== undefined)           u.avg_likes = data.avg_likes
+          if (data.avg_comments !== undefined)        u.avg_comments = data.avg_comments
+          if (data.avg_views !== undefined)           u.avg_views = data.avg_views
           return u
         })
+
         onRowsChange?.(next)
-        const updatedRow = next.find(r => r.id === rowId)
-        if (updatedRow) setTimeout(() => onFetchComplete?.(updatedRow), 0)
+        enrichedRow = next.find(r => r.id === rowId) ?? null
         return next
       })
+
+      // Save to DB after state update settles — use setTimeout to let React flush
+      if (enrichedRow) {
+        setTimeout(() => saveRowToDatabase(enrichedRow!), 0)
+      }
     } catch (err) { console.error("Auto-fetch failed:", err) }
     finally { setFetchingRows(prev => { const n = new Set(prev); n.delete(rowId); return n }) }
-  }, [onRowsChange, onFetchComplete, rows, addToast])
+  }, [onRowsChange, addToast, saveRowToDatabase])
 
   // ── Row add / delete ──────────────────────────────────────────────────────────
   const addRow = () => {
@@ -814,123 +923,150 @@ export default function TableSheet({
     )
     if (col.type === "boolean") { const y = value === "Yes"; return <td key={col.key} className={`${tdCls} cursor-pointer`} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${y ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>{y ? "Yes" : "No"}</span></td> }
     if (col.type === "multi-select") return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><MultiSelectDisplay value={value} /></td>
-    if (col.type === "date") { const disp = value ? new Date(value + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : ""; return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><div className="flex items-center gap-1.5"><IconCalendar size={12} className="text-gray-400 flex-shrink-0" /><span className="truncate">{disp || <span className="text-gray-300">—</span>}</span></div></td> }
-    if (col.type === "url") { const valid = isValidUrl(value); return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}>{value ? (valid ? <a href={normalizeUrl(value)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 flex items-center justify-center"><IconExternalLink size={14} /></a> : <span className="text-red-400 truncate block">{value}</span>) : <span className="text-gray-300">—</span>}</td> }
-    if (col.type === "dropdown") return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}>{value ? <span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span> : <span className="text-gray-300">—</span>}</td>
-    if (col.key === "niche") return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}>{value ? <span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span> : <span className="text-gray-300">—</span>}</td>
+    if (col.key === "follower_count") return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><span className="block truncate">{Number(value) ? formatFollowers(Number(value)) : <span className="text-gray-300">—</span>}</span></td>
+    if (col.key === "engagement_rate") return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><span className="block truncate">{parseFloat(value) ? `${parseFloat(value).toFixed(2)}%` : <span className="text-gray-300">—</span>}</span></td>
+    if (col.key === "contact_status") return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><StatusBadge value={value} /></td>
     if (col.key === "approval_status") return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><ApprovalBadge value={value} /></td>
-    if (col.key === "follower_count") { const num = Number(value); return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><span className="block truncate font-medium">{num ? formatFollowers(num) : <span className="text-gray-300 font-normal">—</span>}</span></td> }
-    if (col.key === "engagement_rate") { const num = parseFloat(value); return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><span className="block truncate">{num ? `${num}%` : <span className="text-gray-300">—</span>}</span></td> }
-    return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}>{col.key === "contact_status" ? <StatusBadge value={value} /> : <span className="block truncate">{value || <span className="text-gray-300">—</span>}</span>}</td>
+    if (col.type === "url") return (
+      <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}>
+        {value && isValidUrl(value)
+          ? <a href={normalizeUrl(value)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-1 text-blue-600 hover:underline truncate"><IconExternalLink size={11} className="flex-shrink-0" /><span className="truncate">{value}</span></a>
+          : <span className="block truncate text-gray-400">{value || "—"}</span>}
+      </td>
+    )
+    return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><span className="block truncate">{value || <span className="text-gray-300">—</span>}</span></td>
   }
 
-  const declineModalName = pendingDeclineRowIdx !== null
-    ? filteredRows[pendingDeclineRowIdx]?.full_name || filteredRows[pendingDeclineRowIdx]?.handle || "this influencer"
-    : "this influencer"
-
-  /* ════════════════════════════════════════════════════════════════════════════
-     RENDER
-     ════════════════════════════════════════════════════════════════════════════ */
+  // ── Render ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-4">
-      <style>{`
-        .instroom-table-wrap { overflow: clip visible !important; overflow-x: auto !important; }
-        .instroom-table-wrap td { position: relative; overflow: visible !important; }
-        .instroom-table-wrap thead { overflow: visible; }
-      `}</style>
-
+    <div className="flex flex-col gap-3 text-gray-700 text-sm">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      <ConfirmationDialog isOpen={confirmDialog.isOpen} onClose={() => setConfirmDialog(p => ({ ...p, isOpen: false }))} onConfirm={confirmDialog.onConfirm} title={confirmDialog.title} message={confirmDialog.message} variant={confirmDialog.variant} />
 
-      {/* Duplicate warning */}
+      <ConfirmationDialog
+        isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
+        onConfirm={() => { confirmDialog.onConfirm(); setConfirmDialog(p => ({ ...p, isOpen: false })) }}
+        onClose={() => setConfirmDialog(p => ({ ...p, isOpen: false }))} variant={confirmDialog.variant}
+      />
+
       {pendingDuplicateInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) setPendingDuplicateInfo(null) }}>
-          <div className="bg-white rounded-xl shadow-xl w-[440px] p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={e => { if (e.target === e.currentTarget) setPendingDuplicateInfo(null) }}>
+          <div className="bg-white rounded-xl shadow-xl w-[420px] p-5">
             <div className="flex items-start gap-2.5 mb-3">
-              <div className="p-2 bg-amber-100 rounded-full flex-shrink-0"><IconAlertTriangle size={20} className="text-amber-600" /></div>
-              <div className="flex-1">
-                <h3 className="text-base font-semibold text-gray-900">Duplicate Handle Detected</h3>
-                <p className="text-sm text-gray-500 mt-1"><span className="font-medium text-gray-700">{pendingDuplicateInfo.handle}</span> already exists in the table.</p>
+              <div className="p-1.5 bg-amber-100 rounded-full flex-shrink-0"><IconAlertTriangle size={18} className="text-amber-600" /></div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Duplicate Influencer</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  <strong>@{pendingDuplicateInfo.handle}</strong> already exists as <strong>{pendingDuplicateInfo.existingName}</strong>.
+                </p>
               </div>
             </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3">
-              <p className="text-xs text-amber-800">This row has been grayed out. Change the handle to a unique username or delete this row.</p>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => { const rid = pendingDuplicateInfo.rowId; setRows(prev => { const next = prev.map(r => r.id === rid ? { ...r, handle: "" } : r); onRowsChange?.(next); return next }); setDuplicateRowIds(prev => { const n = new Set(prev); n.delete(rid); return n }); setPendingDuplicateInfo(null) }} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">Clear Handle</button>
-              <button onClick={() => setPendingDuplicateInfo(null)} className="flex-1 px-4 py-2 rounded-lg bg-amber-600 text-white text-sm hover:bg-amber-700 transition">Keep as Duplicate</button>
+            <div className="flex gap-2">
+              <button onClick={() => {
+                setRows(prev => { const n = prev.filter(r => r.id !== pendingDuplicateInfo.rowId); onRowsChange?.(n); return n })
+                setDuplicateRowIds(prev => { const n = new Set(prev); n.delete(pendingDuplicateInfo.rowId); return n })
+                setPendingDuplicateInfo(null)
+              }} className="flex-1 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 text-xs hover:bg-red-100 transition">Remove duplicate</button>
+              <button onClick={() => {
+                setDuplicateRowIds(prev => { const n = new Set(prev); n.delete(pendingDuplicateInfo.rowId); return n })
+                setPendingDuplicateInfo(null)
+              }} className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition">Keep anyway</button>
             </div>
           </div>
         </div>
       )}
 
-      <DeclineConfirmationModal isOpen={showDeclineModal} onClose={() => { setShowDeclineModal(false); setPendingDeclineRowIdx(null) }} onConfirm={handleDeclineConfirm} influencerName={declineModalName} />
-      <ManageOptionsModal isOpen={showManageNiches} onClose={() => setShowManageNiches(false)} title="Niches" options={nicheOptions} onSave={setNicheOptions} />
-      <ManageOptionsModal isOpen={showManageLocations} onClose={() => setShowManageLocations(false)} title="Locations" options={locationOptions} onSave={setLocationOptions} />
-      <input ref={fileInputRef} type="file" accept=".csv" onChange={handleImport} className="hidden" />
-      <AddColumnModal isOpen={addingCol} onClose={() => setAddingCol(false)} onConfirm={confirmAddCol} customCols={customCols} />
+      {addingCol && (
+        <AddColumnModal
+          isOpen={addingCol} onClose={() => setAddingCol(false)} onConfirm={confirmAddCol}
+          customCols={customCols}
+        />
+      )}
+
+      {showManageNiches && (
+        <ManageOptionsModal
+          isOpen={showManageNiches}
+          title="Manage Niches" options={nicheOptions}
+          onSave={opts => { setNicheOptions(opts); setShowManageNiches(false) }}
+          onClose={() => setShowManageNiches(false)}
+        />
+      )}
+
+      {showManageLocations && (
+        <ManageOptionsModal
+          isOpen={showManageLocations}
+          title="Manage Locations" options={locationOptions}
+          onSave={opts => { setLocationOptions(opts); setShowManageLocations(false) }}
+          onClose={() => setShowManageLocations(false)}
+        />
+      )}
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[180px] max-w-sm">
-          <IconSearch size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search creators..." className="w-full pl-7 pr-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none" />
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {!readOnly && (
+      {!readOnly && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="text" value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1) }}
+              placeholder="Search influencers…"
+              className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-200 bg-white"
+            />
+          </div>
+
+          <div className="relative">
+            <button ref={filterBtnRef} onClick={() => setShowFilterPopover(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs border rounded-lg transition ${hasActiveFilters ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+              <IconFilter size={13} /> Filters {hasActiveFilters && `(${[filters.platform !== "all", filters.niche !== "all", filters.location !== "all", filters.gender !== "all", filters.approval !== "all", !!filters.dateFrom, !!filters.dateTo].filter(Boolean).length})`}
+            </button>
+            {showFilterPopover && (
+              <FilterPopover
+                isOpen={showFilterPopover}
+                filters={filters} niches={nicheOptions} locations={locationOptions}
+                onApplyFilters={handleApplyFilters} onClearFilters={handleClearFilters}
+                onClose={() => setShowFilterPopover(false)} anchorRef={filterBtnRef}
+              />
+            )}
+          </div>
+
+          <SortToggle sortOrder={sortOrder} onChange={v => { setSortOrder(v); setCurrentPage(1) }} />
+
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button onClick={() => setShowManageNiches(true)} className="flex items-center gap-1.5 px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition" title="Manage niches"><IconTags size={13} /> Niches</button>
+            <button onClick={() => setShowManageLocations(true)} className="flex items-center gap-1.5 px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition" title="Manage locations"><IconMapPin size={13} /> Locations</button>
+
             <div className="relative">
-              <button ref={importExportBtnRef} onClick={() => setShowImportExportMenu(!showImportExportMenu)} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition">
-                <IconDownload size={13} /> Import/Export <IconChevronDown size={11} />
+              <button ref={importExportBtnRef} onClick={() => setShowImportExportMenu(v => !v)}
+                className="flex items-center gap-1.5 px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition">
+                <IconSettings size={13} /> Import / Export
               </button>
               {showImportExportMenu && (
-                <div ref={importExportRef} className="absolute top-full right-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-[200px] py-0.5">
-                  <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"><IconUpload size={13} className="text-gray-400" /> Import CSV</button>
-                  <button onClick={() => { downloadTemplate(customCols); setShowImportExportMenu(false) }} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"><IconDownload size={13} className="text-gray-400" /> Download Template</button>
-                  <div className="border-t border-gray-100 my-0.5" />
-                  <button onClick={() => { exportToCSV(filteredRows, customCols); setShowImportExportMenu(false) }} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"><IconDownload size={13} className="text-gray-400" /> Export CSV</button>
+                <div ref={importExportRef} className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-52 py-1">
+                  <button onClick={() => { fileInputRef.current?.click(); setShowImportExportMenu(false) }}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700">
+                    <IconUpload size={13} className="text-blue-500" /> Import from CSV
+                  </button>
+                  <button onClick={() => { exportToCSV(rows, customCols); setShowImportExportMenu(false) }}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700">
+                    <IconDownload size={13} className="text-green-500" /> Export to CSV
+                  </button>
+                  <button onClick={() => { downloadTemplate(customCols); setShowImportExportMenu(false) }}
+                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700">
+                    <IconDownload size={13} className="text-gray-400" /> Download template
+                  </button>
                 </div>
               )}
             </div>
-          )}
-          {!readOnly && (
-            <div className="relative group">
-              <button className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition"><IconSettings size={13} /> Manage</button>
-              <div className="absolute top-full right-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-[160px] py-0.5 hidden group-hover:block">
-                <button onClick={() => setShowManageNiches(true)} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"><IconTags size={13} className="text-gray-400" /> Niches</button>
-                <button onClick={() => setShowManageLocations(true)} className="flex items-center gap-2 w-full text-left px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"><IconMapPin size={13} className="text-gray-400" /> Locations</button>
-              </div>
-            </div>
-          )}
-          <SortToggle sortOrder={sortOrder} onChange={o => { setSortOrder(o); setCurrentPage(1) }} />
-          <div className="relative">
-            <button ref={filterBtnRef} onClick={() => setShowFilterPopover(!showFilterPopover)} className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition border ${hasActiveFilters ? "bg-green-50 text-green-700 border-green-200" : "text-gray-600 hover:bg-gray-100 border-gray-200"}`}>
-              <IconFilter size={13} /> Filters {hasActiveFilters && <span className="w-1.5 h-1.5 bg-green-500 rounded-full ml-0.5" />}
-            </button>
-            <FilterPopover isOpen={showFilterPopover} onClose={() => setShowFilterPopover(false)} filters={filters} onApplyFilters={handleApplyFilters} onClearFilters={handleClearFilters} niches={nicheOptions} locations={locationOptions} anchorRef={filterBtnRef} />
-          </div>
-        </div>
-      </div>
 
-      {/* Active filter chips */}
-      {hasActiveFilters && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] text-gray-500">Filters:</span>
-          {filters.platform !== "all" && <div className="flex items-center gap-1 bg-blue-50 rounded-full px-2 py-0.5 text-[10px]"><span className="text-blue-700">Platform: {filters.platform}</span><button onClick={() => setFilters(p => ({ ...p, platform: "all" }))} className="text-blue-400 hover:text-blue-600 ml-0.5"><IconX size={10} /></button></div>}
-          {filters.niche !== "all" && <div className="flex items-center gap-1 bg-blue-50 rounded-full px-2 py-0.5 text-[10px]"><span className="text-blue-700">Niche: {filters.niche}</span><button onClick={() => setFilters(p => ({ ...p, niche: "all" }))} className="text-blue-400 hover:text-blue-600 ml-0.5"><IconX size={10} /></button></div>}
-          {filters.location !== "all" && <div className="flex items-center gap-1 bg-blue-50 rounded-full px-2 py-0.5 text-[10px]"><span className="text-blue-700">Location: {filters.location}</span><button onClick={() => setFilters(p => ({ ...p, location: "all" }))} className="text-blue-400 hover:text-blue-600 ml-0.5"><IconX size={10} /></button></div>}
-          {filters.gender !== "all" && <div className="flex items-center gap-1 bg-blue-50 rounded-full px-2 py-0.5 text-[10px]"><span className="text-blue-700">Gender: {filters.gender}</span><button onClick={() => setFilters(p => ({ ...p, gender: "all" }))} className="text-blue-400 hover:text-blue-600 ml-0.5"><IconX size={10} /></button></div>}
-          {filters.approval !== "all" && <div className="flex items-center gap-1 bg-purple-50 rounded-full px-2 py-0.5 text-[10px]"><span className="text-purple-700">Approval: {filters.approval}</span><button onClick={() => setFilters(p => ({ ...p, approval: "all" }))} className="text-purple-400 hover:text-purple-600 ml-0.5"><IconX size={10} /></button></div>}
-          {filters.dateFrom && <div className="flex items-center gap-1 bg-amber-50 rounded-full px-2 py-0.5 text-[10px]"><span className="text-amber-700">From: {filters.dateFrom}</span><button onClick={() => setFilters(p => ({ ...p, dateFrom: "" }))} className="text-amber-400 hover:text-amber-600 ml-0.5"><IconX size={10} /></button></div>}
-          {filters.dateTo && <div className="flex items-center gap-1 bg-amber-50 rounded-full px-2 py-0.5 text-[10px]"><span className="text-amber-700">To: {filters.dateTo}</span><button onClick={() => setFilters(p => ({ ...p, dateTo: "" }))} className="text-amber-400 hover:text-amber-600 ml-0.5"><IconX size={10} /></button></div>}
-          <button onClick={handleClearFilters} className="text-[10px] text-gray-400 hover:text-gray-600">Clear all</button>
+            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+          </div>
         </div>
       )}
 
-      {/* Bulk action bar */}
-      {!readOnly && someSelected && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl flex-wrap">
-          <div className="flex items-center gap-2 mr-1">
-            <span className="text-xs font-semibold text-blue-700">{selectedRowIds.size} selected</span>
+      {/* ── Bulk action bar ── */}
+      {someSelected && !readOnly && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg flex-wrap">
+          <div className="flex items-center gap-2 text-xs text-blue-700 font-medium">
+            <span>{selectedRowIds.size} selected</span>
             {selectedRowIds.size < filteredRows.length && (
               <button onClick={handleSelectAllFiltered} className="text-xs text-blue-600 hover:text-blue-800 underline font-medium transition">Select all {filteredRows.length}</button>
             )}

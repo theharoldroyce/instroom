@@ -243,20 +243,23 @@ export function OnboardingForm({
                 { emoji: '🎨', label: 'Services / personal brand', subtext: 'Coaching, agency, creator, consultant' },
                 { emoji: '🏪', label: 'Retail / physical store', subtext: 'Brick-and-mortar with online presence' },
                 { emoji: '🌐', label: 'Other', subtext: 'None of the above' },
-              ].map((option) => (
+              ].map((option) => {
+                const isDTC = option.label === 'eCommerce / DTC'
+                return (
                 <button
                   key={option.label}
-                  onClick={() => onFormChange('businessType', option.label)}
+                  disabled={!isDTC}
+                  onClick={() => isDTC && onFormChange('businessType', option.label)}
                   className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
                     formData.businessType === option.label
                       ? 'border-[#1FAE5B] bg-green-50'
                       : 'border-gray-200 bg-white hover:border-[#1FAE5B]'
-                  }`}
+                  } ${!isDTC ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
                 >
                   <p className="font-semibold text-gray-900 text-sm">{option.emoji} {option.label}</p>
                   <p className="text-xs text-gray-500 mt-1">{option.subtext}</p>
                 </button>
-              ))}
+              )})}
             </div>
           )}
 

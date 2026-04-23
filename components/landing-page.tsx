@@ -48,113 +48,102 @@ export function LandingPage() {
   ]
 
   return (
-    <div style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif", color: "#1E1E1E", background: "#FFFFFF" }}>
+    <div className="font-sans text-zinc-900 bg-white">
       <style jsx>{`
+        @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Caveat:wght@600;700&display=swap');
+
         :root {
           --green: #1FAE5B;
           --deep-green: #0F6B3E;
           --charcoal: #1E1E1E;
-          --off-white: #F7F9F8;
-          --blue: #2C8EC4;
-          --border: rgba(30,30,30,0.08);
-          --muted: #9ca3af;
+          --off-white: #F4F7F5;
+          --border: rgba(30,30,30,0.09);
+          --muted: #71717a;
         }
 
-        .nav {
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          background: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(8px);
-          border-bottom: 0.5px solid var(--border);
-          padding: 14px 24px;
-        }
+        /* ── Typography ── */
+        .font-display { font-family: 'Manrope', sans-serif; }
+        .font-hand    { font-family: 'Caveat', cursive; }
 
-        .nav-inner {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          max-width: 1140px;
-          margin: 0 auto;
-          gap: 24px;
-        }
-
-        .nav-links {
-          display: flex;
-          gap: 32px;
-          align-items: center;
-          list-style: none;
-        }
-
-        .nav-links a {
-          color: var(--charcoal);
-          font-size: 0.9375rem;
-          font-weight: 500;
-          text-decoration: none;
-        }
-
-        .nav-links a:hover {
-          color: var(--green);
-        }
-
-        .nav-cta {
-          display: flex;
-          gap: 18px;
-          align-items: center;
-        }
-
-        .hero {
-          padding: 80px 0 60px;
-          text-align: center;
-          background: var(--off-white);
-        }
-
-        .container {
+        /* ── Layout helpers ── */
+        .container-md {
           max-width: 1140px;
           margin: 0 auto;
           padding: 0 24px;
         }
 
-        .hero h1 {
-          max-width: 880px;
-          margin: 0 auto 24px;
-          font-size: clamp(2rem, 5vw, 3.75rem);
-          font-weight: 800;
+        .section       { padding: 96px 0; border-bottom: 1px solid rgba(30,30,30,0.07); }
+        .section-alt   { background: var(--off-white); }
+
+        .section-header {
+          text-align: center;
+          max-width: 680px;
+          margin: 0 auto 56px;
+        }
+        .section-header h2 {
           font-family: 'Manrope', sans-serif;
+          font-weight: 700;
+          font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+          color: #1E1E1E;
+          margin-bottom: 16px;
+          line-height: 1.2;
+        }
+        .section-header p {
+          font-size: 1.125rem;
+          color: #52525b;
+          line-height: 1.65;
+        }
+
+        /* ── Hero ── */
+        .hero {
+          padding: 96px 0 72px;
+          text-align: center;
+          background: var(--off-white);
+          /* subtle dot grid */
+          background-image:
+            radial-gradient(circle, rgba(31,174,91,0.12) 1px, transparent 1px);
+          background-size: 28px 28px;
+          border-bottom: 1px solid rgba(30,30,30,0.07);
+        }
+
+        .hero h1 {
+          font-family: 'Manrope', sans-serif;
+          font-weight: 800;
+          font-size: clamp(2rem, 5vw, 3.625rem);
+          line-height: 1.12;
+          letter-spacing: -0.02em;
+          color: #1E1E1E;
+          max-width: 860px;
+          margin: 0 auto 24px;
         }
 
         .hero-lead {
-          max-width: 680px;
-          margin: 0 auto 32px;
+          max-width: 640px;
+          margin: 0 auto 36px;
           font-size: 1.1875rem;
-          color: #3F3F46;
-        }
-
-        .lead {
-          font-size: 1.125rem;
-          color: #3F3F46;
+          color: #3f3f46;
+          line-height: 1.65;
         }
 
         .hero-ctas {
           display: flex;
           gap: 12px;
           justify-content: center;
-          margin-bottom: 16px;
           flex-wrap: wrap;
+          margin-bottom: 14px;
         }
 
         .hero-sub {
-          font-size: 0.875rem;
-          color: var(--muted);
+          font-size: 0.8125rem;
+          color: #52525b;
         }
 
         .hero-mockup {
-          max-width: 980px;
-          margin: 56px auto 0;
+          max-width: 960px;
+          margin: 60px auto 0;
           border-radius: 16px;
           overflow: hidden;
-          box-shadow: 0 24px 60px rgba(15, 107, 62, 0.12);
-          border: 0.5px solid var(--border);
+          box-shadow: 0 24px 64px rgba(15,107,62,0.14), 0 0 0 1px var(--border);
           background: white;
           aspect-ratio: 16 / 9;
           display: flex;
@@ -164,362 +153,388 @@ export function LandingPage() {
           font-size: 0.875rem;
         }
 
+        /* ── Stats ── */
         .stats {
-          padding: 56px 0 40px;
+          padding: 64px 0 48px;
           background: white;
           text-align: center;
+          border-bottom: 1px solid rgba(30,30,30,0.07);
         }
 
         .stats-row {
           display: flex;
           justify-content: center;
           align-items: baseline;
-          gap: 48px;
+          gap: 64px;
           flex-wrap: wrap;
           margin-bottom: 16px;
         }
 
-        .stat {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
+        .stat { display: flex; flex-direction: column; align-items: center; }
 
         .stat-num {
           font-family: 'Manrope', sans-serif;
           font-size: clamp(1.75rem, 3.5vw, 2.25rem);
           font-weight: 800;
-          color: var(--green);
+          color: #1FAE5B;
           line-height: 1;
           margin-bottom: 6px;
         }
 
         .stat-label {
           font-size: 0.8125rem;
-          color: var(--muted);
+          color: #52525b;
           text-transform: uppercase;
           letter-spacing: 0.08em;
-          font-weight: 500;
+          font-weight: 600;
         }
 
+        /* ── Trust bar ── */
         .trust {
-          padding: 32px 0 56px;
+          padding: 48px 0 56px;
           background: white;
-          border-bottom: 0.5px solid var(--border);
+          border-bottom: 1px solid rgba(30,30,30,0.09);
         }
 
         .trust-label {
           text-align: center;
-          font-size: 0.8125rem;
-          font-weight: 600;
+          font-size: 0.75rem;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.1em;
-          color: var(--muted);
-          margin-bottom: 28px;
+          letter-spacing: 0.12em;
+          color: #52525b;
+          margin-bottom: 32px;
         }
 
         .trust-logos {
-          display: grid;
-          grid-template-columns: repeat(6, 1fr);
-          gap: 32px;
+          display: flex;
+          justify-content: center;
           align-items: center;
+          gap: 24px;
+          flex-wrap: wrap;
           opacity: 0.7;
-          justify-items: center;
         }
 
         .trust-logo {
           height: 36px;
+          padding: 0 12px;
           background: rgba(30,30,30,0.04);
-          border-radius: 6px;
+          border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 0.75rem;
-          color: var(--muted);
-          font-weight: 500;
         }
 
+        /* ── Problem cards ── */
         .problem-cards {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
+          gap: 20px;
           margin-top: 56px;
         }
 
         .problem-card {
-          background: var(--off-white);
-          border-radius: 14px;
+          background: white;
+          border-radius: 16px;
           padding: 32px;
-          border: 0.5px solid var(--border);
+          border: 1px solid var(--border);
+          box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+          transition: box-shadow 0.2s;
+        }
+
+        .problem-card:hover {
+          box-shadow: 0 8px 28px rgba(15,107,62,0.08);
+        }
+
+        .problem-card-num {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: rgba(31,174,91,0.1);
+          color: #1FAE5B;
+          font-family: 'Manrope', sans-serif;
+          font-weight: 800;
+          font-size: 0.875rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 16px;
         }
 
         .problem-card h3 {
-          color: var(--deep-green);
-          margin-bottom: 12px;
-          font-size: 1.125rem;
           font-family: 'Manrope', sans-serif;
+          font-weight: 700;
+          font-size: 1.0625rem;
+          color: #1E1E1E;
+          margin-bottom: 10px;
         }
 
         .problem-card p {
-          color: #3F3F46;
+          color: #52525b;
           font-size: 0.9375rem;
-          line-height: 1.6;
+          line-height: 1.65;
         }
 
+        /* ── Outcomes ── */
         .outcomes-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 24px;
+          gap: 20px;
           margin-top: 56px;
         }
 
         .outcome {
           background: white;
-          border: 0.5px solid var(--border);
+          border: 1px solid var(--border);
           border-radius: 16px;
           padding: 32px;
           display: flex;
           flex-direction: column;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.03);
         }
 
         .outcome-label {
-          font-size: 0.75rem;
-          font-weight: 600;
+          font-size: 0.6875rem;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.1em;
-          color: var(--muted);
-          margin-bottom: 12px;
+          letter-spacing: 0.12em;
+          color: #71717a;
+          margin-bottom: 10px;
         }
 
         .outcome-problem {
-          font-size: 0.9375rem;
-          color: var(--muted);
+          font-size: 0.9rem;
+          color: #a1a1aa;
           text-decoration: line-through;
-          margin-bottom: 16px;
+          margin-bottom: 14px;
+          line-height: 1.4;
+        }
+
+        .outcome-divider {
+          width: 32px;
+          height: 2px;
+          background: #1FAE5B;
+          border-radius: 2px;
+          margin-bottom: 14px;
         }
 
         .outcome h3 {
-          color: var(--deep-green);
-          margin-bottom: 12px;
-          font-size: 1.1875rem;
           font-family: 'Manrope', sans-serif;
+          font-weight: 700;
+          font-size: 1.125rem;
+          color: #0F6B3E;
+          margin-bottom: 10px;
         }
 
         .outcome p {
-          color: #3F3F46;
+          color: #52525b;
           font-size: 0.9375rem;
-          line-height: 1.6;
+          line-height: 1.65;
         }
 
+        /* ── Features (inside rows) ── */
         .inside-row {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 64px;
+          gap: 72px;
           align-items: center;
           margin-bottom: 96px;
         }
 
-        .inside-row.reverse {
-          direction: rtl;
-        }
+        .inside-row:last-child { margin-bottom: 0; }
 
-        .inside-row.reverse > * {
-          direction: ltr;
-        }
+        .inside-row.reverse { direction: rtl; }
+        .inside-row.reverse > * { direction: ltr; }
 
         .inside-eyebrow {
-          font-size: 0.8125rem;
-          font-weight: 600;
+          font-size: 0.75rem;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: var(--green);
+          letter-spacing: 0.12em;
+          color: #1FAE5B;
           margin-bottom: 12px;
         }
 
         .inside-text h3 {
-          font-size: clamp(1.5rem, 2.5vw, 1.875rem);
-          margin-bottom: 16px;
-          color: var(--charcoal);
           font-family: 'Manrope', sans-serif;
           font-weight: 700;
+          font-size: clamp(1.375rem, 2.5vw, 1.75rem);
+          color: #1E1E1E;
+          margin-bottom: 14px;
+          line-height: 1.25;
         }
 
         .inside-text p {
           font-size: 1.0625rem;
-          line-height: 1.7;
-          color: #3F3F46;
+          line-height: 1.72;
+          color: #52525b;
           margin-bottom: 20px;
         }
 
         .inside-link {
           font-weight: 600;
-          color: var(--green);
+          font-size: 0.9375rem;
+          color: #1FAE5B;
           text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
         }
 
-        .inside-link:hover {
-          text-decoration: underline;
-        }
+        .inside-link:hover { text-decoration: underline; }
 
         .inside-visual {
           aspect-ratio: 4 / 3;
-          background: linear-gradient(135deg, #EEF4F0 0%, #E1EDE5 100%);
+          background: linear-gradient(135deg, #EDF5F0 0%, #D9EDE2 100%);
           border-radius: 16px;
-          border: 0.5px solid var(--border);
+          border: 1px solid rgba(31,174,91,0.15);
           display: flex;
           align-items: center;
           justify-content: center;
-          color: var(--muted);
+          color: #6b9e7e;
           font-size: 0.875rem;
+          font-weight: 500;
           overflow: hidden;
           position: relative;
         }
 
-        .inside-visual-placeholder {
-          text-align: center;
-          padding: 24px;
-          color: var(--deep-green);
-          font-weight: 500;
-        }
-
+        /* ── How it works ── */
         .how-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 32px;
-          max-width: 960px;
-          margin: 0 auto;
-          margin-top: 56px;
+          max-width: 880px;
+          margin: 56px auto 0;
         }
 
-        .how-step {
-          text-align: center;
-          padding: 24px;
-        }
+        .how-step { text-align: center; padding: 24px 16px; }
 
         .how-num {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 48px;
-          height: 48px;
+          width: 52px;
+          height: 52px;
           border-radius: 50%;
-          background: var(--green);
+          background: #1FAE5B;
           color: white;
           font-family: 'Manrope', sans-serif;
           font-weight: 800;
           font-size: 1.25rem;
           margin-bottom: 20px;
+          box-shadow: 0 8px 20px rgba(31,174,91,0.28);
         }
 
         .how-step h3 {
-          margin-bottom: 10px;
-          color: var(--deep-green);
           font-family: 'Manrope', sans-serif;
+          font-weight: 700;
+          font-size: 1.0625rem;
+          color: #1E1E1E;
+          margin-bottom: 10px;
         }
 
         .how-step p {
-          color: #3F3F46;
+          color: #52525b;
           font-size: 0.9375rem;
+          line-height: 1.65;
         }
 
+        /* ── Comparison table ── */
         .compare-table {
-          max-width: 900px;
-          margin: 0 auto;
+          max-width: 860px;
+          margin: 56px auto 0;
           border-radius: 16px;
           overflow: hidden;
-          border: 0.5px solid var(--border);
-          margin-top: 56px;
+          border: 1px solid var(--border);
+          box-shadow: 0 4px 24px rgba(0,0,0,0.05);
         }
 
         .compare-header {
           display: grid;
           grid-template-columns: 1fr 1fr;
           background: var(--off-white);
-          border-bottom: 0.5px solid var(--border);
+          border-bottom: 1px solid var(--border);
         }
 
         .compare-header-cell {
-          padding: 20px 28px;
+          padding: 18px 28px;
           font-family: 'Manrope', sans-serif;
           font-weight: 700;
-          font-size: 1rem;
+          font-size: 0.9375rem;
         }
 
-        .compare-header-cell:first-child {
-          color: var(--muted);
-        }
-
+        .compare-header-cell:first-child { color: #71717a; }
         .compare-header-cell:last-child {
-          color: var(--deep-green);
-          border-left: 0.5px solid var(--border);
+          color: #0F6B3E;
+          border-left: 1px solid var(--border);
         }
 
         .compare-row {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          border-bottom: 0.5px solid var(--border);
+          border-bottom: 1px solid var(--border);
         }
 
-        .compare-row:last-child {
-          border-bottom: none;
-        }
+        .compare-row:last-child { border-bottom: none; }
 
         .compare-cell {
-          padding: 18px 28px;
+          padding: 17px 28px;
           font-size: 0.9375rem;
           color: var(--charcoal);
         }
 
         .compare-row > .compare-cell:first-child {
-          color: var(--muted);
+          color: #a1a1aa;
           background: white;
         }
 
         .compare-row > .compare-cell:last-child {
-          color: var(--charcoal);
+          color: #1E1E1E;
           font-weight: 500;
-          border-left: 0.5px solid var(--border);
-          background: rgba(31, 174, 91, 0.03);
+          border-left: 1px solid var(--border);
+          background: rgba(31,174,91,0.03);
         }
 
         .compare-icon {
           display: inline-block;
           margin-right: 8px;
-          color: var(--green);
+          color: #1FAE5B;
           font-weight: 700;
         }
 
+        /* ── Founder ── */
         .founder-inner {
           max-width: 720px;
           margin: 0 auto;
           background: white;
           padding: 56px;
           border-radius: 20px;
-          border: 0.5px solid var(--border);
-          box-shadow: 0 8px 32px rgba(15, 107, 62, 0.04);
+          border: 1px solid var(--border);
+          box-shadow: 0 8px 40px rgba(15,107,62,0.06);
         }
 
         .founder-label {
-          font-size: 0.8125rem;
-          font-weight: 600;
+          font-size: 0.75rem;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.1em;
-          color: var(--green);
-          margin-bottom: 16px;
+          letter-spacing: 0.12em;
+          color: #1FAE5B;
+          margin-bottom: 14px;
         }
 
         .founder-inner h2 {
-          font-size: 1.75rem;
-          margin-bottom: 32px;
           font-family: 'Manrope', sans-serif;
           font-weight: 700;
+          font-size: 1.75rem;
+          margin-bottom: 28px;
+          color: #1E1E1E;
         }
 
         .founder-body p {
           font-size: 1.0625rem;
-          line-height: 1.75;
-          color: #3F3F46;
-          margin-bottom: 20px;
+          line-height: 1.78;
+          color: #52525b;
+          margin-bottom: 18px;
         }
 
         .founder-sign {
@@ -536,94 +551,108 @@ export function LandingPage() {
           overflow: hidden;
           flex-shrink: 0;
           border: 2px solid var(--green);
+          background: #ddd;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #999;
+          font-size: 0.75rem;
         }
 
-        .founder-title {
-          font-size: 0.875rem;
-          color: var(--muted);
-        }
+        .founder-title { font-size: 0.875rem; color: #3f3f46; font-weight: 500; }
 
+        /* ── Standalone ── */
         .standalone-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 24px;
-          max-width: 820px;
-          margin: 0 auto;
-          margin-top: 56px;
+          gap: 20px;
+          max-width: 780px;
+          margin: 56px auto 0;
         }
 
         .standalone-card {
           background: white;
-          border: 0.5px solid var(--border);
+          border: 1px solid var(--border);
           border-radius: 16px;
           padding: 32px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+          transition: box-shadow 0.2s;
+        }
+
+        .standalone-card:hover {
+          box-shadow: 0 8px 28px rgba(15,107,62,0.08);
         }
 
         .standalone-card h3 {
-          margin-bottom: 12px;
           font-family: 'Manrope', sans-serif;
           font-weight: 700;
+          font-size: 1.125rem;
+          color: var(--charcoal);
+          margin-bottom: 10px;
         }
 
         .standalone-card p {
-          color: #3F3F46;
+          color: #52525b;
           margin-bottom: 20px;
           font-size: 0.9375rem;
+          line-height: 1.65;
         }
 
         .standalone-link {
           font-weight: 600;
-          color: var(--green);
+          font-size: 0.9375rem;
+          color: #1FAE5B;
+          text-decoration: none;
         }
 
+        /* ── Early / testimonial placeholder ── */
         .early {
-          background: linear-gradient(135deg, #EEF4F0 0%, #E1EDE5 100%);
+          background: linear-gradient(135deg, #EDF5F0 0%, #D9EDE2 100%);
           text-align: center;
           padding: 80px 0;
+          border-bottom: 1px solid rgba(30,30,30,0.07);
         }
 
         .early-inner {
-          max-width: 640px;
+          max-width: 600px;
           margin: 0 auto;
           padding: 0 24px;
         }
 
         .early h2 {
-          margin-bottom: 24px;
           font-family: 'Manrope', sans-serif;
           font-weight: 700;
+          font-size: clamp(1.5rem, 3vw, 2rem);
+          color: var(--charcoal);
+          margin-bottom: 20px;
         }
 
         .early-body {
           font-size: 1.0625rem;
-          color: #3F3F46;
+          color: #3f3f46;
+          line-height: 1.7;
           margin-bottom: 20px;
         }
 
+        /* ── FAQ ── */
         .faq {
           padding: 96px 0;
           background: white;
+          border-bottom: 1px solid rgba(30,30,30,0.07);
         }
 
         .faq-list {
-          max-width: 780px;
-          margin: 0 auto;
-          margin-top: 56px;
+          max-width: 760px;
+          margin: 56px auto 0;
         }
 
         .faq-item {
-          border-bottom: 0.5px solid var(--border);
+          border-bottom: 1px solid var(--border);
           padding: 24px 0;
         }
 
-        .faq-item:first-child {
-          padding-top: 0;
-        }
-
-        .faq-item:last-child {
-          border-bottom: none;
-          padding-bottom: 0;
-        }
+        .faq-item:first-child { padding-top: 0; }
+        .faq-item:last-child { border-bottom: none; padding-bottom: 0; }
 
         .faq-q {
           display: flex;
@@ -633,198 +662,184 @@ export function LandingPage() {
           font-family: 'Manrope', sans-serif;
           font-size: 1.0625rem;
           font-weight: 600;
-          color: var(--charcoal);
+          color: #1E1E1E;
           gap: 24px;
           background: none;
           border: none;
           width: 100%;
           text-align: left;
+          transition: color 0.15s;
         }
 
-        .faq-q:hover {
-          color: var(--green);
-        }
+        .faq-q:hover { color: #1FAE5B; }
 
         .faq-q-icon {
-          color: var(--green);
-          font-size: 1.25rem;
+          color: #1FAE5B;
+          font-size: 1.375rem;
           font-weight: 700;
           flex-shrink: 0;
           transition: transform 0.2s ease;
+          line-height: 1;
         }
 
-        .faq-item.open .faq-q-icon {
-          transform: rotate(45deg);
-        }
+        .faq-item.open .faq-q-icon { transform: rotate(45deg); }
 
         .faq-a {
           margin-top: 14px;
-          color: #3F3F46;
+          color: #52525b;
           font-size: 0.9375rem;
-          line-height: 1.7;
+          line-height: 1.72;
         }
 
+        /* ── Pricing ── */
         .pricing-grid {
           display: grid;
-          grid-template-columns: 1fr 1.1fr;
-          gap: 24px;
-          max-width: 820px;
-          margin: 0 auto;
+          grid-template-columns: 1fr 1.08fr;
+          gap: 20px;
+          max-width: 800px;
+          margin: 56px auto 0;
           align-items: center;
-          margin-top: 56px;
+          padding-bottom: 24px;
+          overflow: visible;
         }
 
         .price-card {
           background: white;
-          border: 0.5px solid var(--border);
-          border-radius: 16px;
+          border: 1px solid var(--border);
+          border-radius: 18px;
           padding: 36px 32px;
           position: relative;
+          box-shadow: 0 2px 12px rgba(0,0,0,0.04);
         }
 
         .price-card.featured {
-          background: var(--deep-green);
-          color: white;
-          border: none;
-          box-shadow: 0 16px 40px rgba(15, 107, 62, 0.2);
+          background: #0F6B3E;
+          border-color: transparent;
+          box-shadow: 0 20px 48px rgba(15,107,62,0.22);
           transform: scale(1.03);
         }
 
         .price-badge {
           display: inline-block;
-          font-size: 0.75rem;
-          font-weight: 600;
+          font-size: 0.6875rem;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.1em;
           padding: 4px 10px;
           border-radius: 6px;
-          background: rgba(31, 174, 91, 0.12);
-          color: var(--green);
-          margin-bottom: 16px;
+          background: rgba(31,174,91,0.12);
+          color: #1FAE5B;
+          margin-bottom: 14px;
         }
 
         .featured .price-badge {
-          background: var(--green);
+          background: rgba(255,255,255,0.15);
           color: white;
         }
 
         .price-card h3 {
-          margin-bottom: 8px;
           font-family: 'Manrope', sans-serif;
           font-weight: 700;
+          font-size: 1.25rem;
+          color: #1E1E1E;
+          margin-bottom: 8px;
         }
 
-        .featured h3 {
-          color: white;
-        }
+        .featured h3 { color: white; }
 
         .price-desc {
           font-size: 0.9375rem;
+          color: #52525b;
           margin-bottom: 24px;
-          color: #3F3F46;
+          line-height: 1.55;
         }
 
-        .featured .price-desc {
-          color: rgba(255, 255, 255, 0.85);
-        }
+        .featured .price-desc { color: rgba(255,255,255,0.78); }
 
         .price-amount {
           font-family: 'Manrope', sans-serif;
-          font-size: 2rem;
+          font-size: 2.25rem;
           font-weight: 800;
-          color: var(--charcoal);
+          color: #1E1E1E;
           margin-bottom: 4px;
+          line-height: 1;
         }
 
-        .featured .price-amount {
-          color: white;
-        }
+        .featured .price-amount { color: white; }
 
         .price-unit {
           font-size: 1rem;
           font-weight: 500;
-          color: var(--muted);
+          color: #71717a;
         }
 
-        .featured .price-unit {
-          color: rgba(255, 255, 255, 0.75);
-        }
+        .featured .price-unit { color: rgba(255,255,255,0.6); }
 
         .price-annual {
           font-size: 0.8125rem;
-          color: var(--muted);
-          margin-bottom: 16px;
+          color: #71717a;
+          margin-bottom: 8px;
+          line-height: 1.5;
         }
 
-        .featured .price-annual {
-          color:"#9ca3af";
-        }
+        .featured .price-annual { color: rgba(255,255,255,0.6); }
 
         .price-trial {
           font-size: 0.8125rem;
-          color: var(--muted);
+          color: #1FAE5B;
+          font-weight: 600;
           margin-bottom: 24px;
         }
 
-        .featured .price-trial {
-          color: rgba(255, 255, 255, 0.75);
-        }
+        .featured .price-trial { color: rgba(255,255,255,0.85); }
 
-        .pricing-help {
-          text-align: center;
-          margin-top: 32px;
-          font-size: 0.9375rem;
-          color: var(--muted);
-        }
-
-        .btn-featured {
-          background: var(--green);
-          color: white;
-          width: 100%;
-        }
-
-        .btn-featured:hover {
-          background: #1a9a50;
-          color: white;
-        }
-
-        .btn-plain {
-          background: white;
-          color: var(--charcoal);
-          border: 1px solid rgba(30, 30, 30, 0.15);
-          width: 100%;
-        }
-
+        /* ── Final CTA ── */
         .final-cta {
-          background: var(--charcoal);
+          background: #1E1E1E;
           color: white;
           text-align: center;
           padding: 96px 0;
+          position: relative;
+          overflow: hidden;
         }
 
+        /* subtle radial glow behind final CTA */
+        .final-cta::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(ellipse 60% 60% at 50% 50%, rgba(31,174,91,0.12) 0%, transparent 70%);
+          pointer-events: none;
+        }
+
+        .final-cta-content { position: relative; z-index: 1; }
+
         .final-cta h2 {
-          color: white;
-          max-width: 760px;
-          margin: 0 auto 16px;
           font-family: 'Manrope', sans-serif;
           font-weight: 700;
+          font-size: clamp(1.75rem, 4vw, 2.75rem);
+          color: white;
+          max-width: 740px;
+          margin: 0 auto 16px;
+          line-height: 1.2;
         }
 
         .final-cta-lead {
           font-size: 1.0625rem;
-          color: rgba(255, 255, 255, 0.85);
-          margin-bottom: 32px;
+          color: rgba(255,255,255,0.75);
+          margin-bottom: 36px;
         }
 
         .final-cta-sub {
           margin-top: 20px;
-          font-size: 0.875rem;
-          color: rgba(255, 255, 255, 0.7);
+          font-size: 0.8125rem;
+          color: rgba(255,255,255,0.5);
         }
 
+        /* ── Footer ── */
         .footer {
           background: #111;
-          color: rgba(255, 255, 255, 0.7);
+          color: rgba(255,255,255,0.65);
           padding: 56px 0 32px;
           font-size: 0.875rem;
         }
@@ -842,77 +857,40 @@ export function LandingPage() {
 
         .footer h4 {
           color: white;
-          font-size: 0.8125rem;
+          font-size: 0.75rem;
           text-transform: uppercase;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.1em;
           margin-bottom: 16px;
           font-family: 'Manrope', sans-serif;
-          font-weight: 600;
+          font-weight: 700;
         }
 
-        .footer ul {
-          list-style: none;
-        }
-
-        .footer li {
-          margin-bottom: 8px;
-        }
+        .footer ul { list-style: none; }
+        .footer li { margin-bottom: 10px; }
 
         .footer a {
-          color: rgba(255, 255, 255, 0.7);
+          color: rgba(255,255,255,0.6);
           text-decoration: none;
+          transition: color 0.15s;
         }
 
-        .footer a:hover {
-          color: white;
-        }
+        .footer a:hover { color: white; }
 
         .footer-bottom {
           padding: 24px;
-          padding-top: 24px;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          border-top: 1px solid rgba(255,255,255,0.08);
           display: flex;
           justify-content: space-between;
           font-size: 0.8125rem;
-          color: rgba(255, 255, 255, 0.5);
+          color: rgba(255,255,255,0.4);
           flex-wrap: wrap;
           gap: 12px;
           max-width: 1140px;
           margin: 0 auto;
         }
 
-        .section {
-          padding: 96px 0;
-        }
-
-        .section-header {
-          text-align: center;
-          max-width: 720px;
-          margin: 0 auto 56px;
-        }
-
-        .section-header h2 {
-          margin-bottom: 16px;
-          font-family: 'Manrope', sans-serif;
-          font-weight: 700;
-          font-size: clamp(1.75rem, 3.5vw, 2.5rem);
-        }
-
-        .section-header p {
-          font-size: 1.125rem;
-          color: #3F3F46;
-        }
-
-        .section-alt {
-          background: var(--off-white);
-        }
-
+        /* ── Responsive ── */
         @media (max-width: 900px) {
-          .nav-links,
-          .nav-text-link {
-            display: none;
-          }
-
           .problem-cards,
           .outcomes-grid,
           .how-grid,
@@ -925,7 +903,10 @@ export function LandingPage() {
             grid-template-columns: 1fr;
             gap: 32px;
             margin-bottom: 64px;
+            direction: ltr !important;
           }
+
+          .inside-row.reverse > * { direction: ltr; }
 
           .compare-header,
           .compare-row {
@@ -935,64 +916,82 @@ export function LandingPage() {
           .compare-header-cell:last-child,
           .compare-cell:last-child {
             border-left: none;
-            border-top: 0.5px solid var(--border);
+            border-top: 1px solid var(--border);
           }
 
           .footer-inner {
             grid-template-columns: 1fr 1fr;
           }
 
-          .price-card.featured {
-            transform: scale(1);
-          }
+          .price-card.featured { transform: scale(1); }
+
+          .founder-inner { padding: 36px 28px; }
         }
 
-        @media (max-width: 768px) {
-          .hero {
-            padding: 60px 0 40px;
-          }
+        @media (max-width: 640px) {
+          .hero { padding: 64px 0 48px; }
+          .stats-row { gap: 36px; }
+          .trust-logos { gap: 16px; }
+          .footer-inner { grid-template-columns: 1fr; }
+        }
 
-          .stats-row {
-            gap: 32px;
-          }
-
-          .trust-logos {
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-          }
+        /* ── Nav CTA: fix yellow hover from emerald-400 ── */
+        /* Targets the Start free button rendered by MainHeader */
+        .nav-cta-btn:hover,
+        [class*="hover:bg-emerald-400"]:hover,
+        [class*="hover:to-lime"]:hover {
+          background-color: #158a48 !important;
+          background-image: linear-gradient(to right, #0a5a2f, #158a48) !important;
         }
       `}</style>
+
+      {/*
+        NOTE FOR MAINTAINER (Issue 6):
+        The "Start free" button in MainHeader uses hover:bg-emerald-400 / hover:to-lime-300
+        which produces a yellow tone. In MainHeader, change those to:
+          hover:from-[#0a5a2f] hover:to-[#158a48]
+        to match the Start Free Trial button style.
+      */}
 
       {/* NAV */}
       <MainHeader />
 
       {/* HERO */}
       <section className="hero">
-        <div className="container">
+        <div className="container-md">
+          <p className="text-xs font-bold uppercase tracking-widest text-green-600 mb-5">
+            Influencer marketing, organized
+          </p>
           <h1>Influencer marketing isn't complicated. Managing it without the right system is.</h1>
-          <p className="hero-lead">Instroom is the system. Every creator, every campaign, every result, in one workspace. Built by people who've done the work.</p>
+          <p className="hero-lead">
+            Instroom is the system. Every creator, every campaign, every result — in one workspace. Built by people who've done the work.
+          </p>
           <div className="hero-ctas">
             <Link href="/signup">
-              <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold h-12 px-8 hover:from-[#0a5a2f] hover:to-[#158a48] shadow-lg shadow-emerald-500/30">
+              <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold h-12 px-8 hover:from-[#0a5a2f] hover:to-[#158a48] shadow-lg shadow-emerald-500/25 rounded-xl">
                 Start Free Trial
               </Button>
             </Link>
+            {/* FIX: "Learn More" was previously styled as white text on a light background.
+                Now using a solid visible style: dark border + dark text on the light hero bg. */}
             <a href="#features">
-              <Button variant="outline" className="h-12 px-8 border-emerald-300/30 bg-black/20 text-zinc-100 hover:bg-emerald-500/10 hover:text-emerald-300">
-                Learn More
+              <Button
+                variant="outline"
+                className="h-12 px-8 rounded-xl border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 hover:border-zinc-400 font-semibold"
+              >
+                See how it works
               </Button>
             </a>
           </div>
-          <p className="hero-sub">No credit card required.</p>
+          <p className="hero-sub">No credit card required · 30-day free trial</p>
           <div className="hero-mockup">[Product screenshot / dashboard hero image]</div>
         </div>
       </section>
 
-
-{/* STATS */}
+      {/* STATS */}
       <section className="stats">
-        <div className="container" style={{ textAlign: "center" }}>
-          <div className="stats-row" style={{ display: "flex", justifyContent: "center", gap: 80 }}>
+        <div className="container-md">
+          <div className="stats-row">
             <div className="stat">
               <div className="stat-num">200+</div>
               <div className="stat-label">Campaigns managed</div>
@@ -1006,35 +1005,35 @@ export function LandingPage() {
               <div className="stat-label">In sales generated</div>
             </div>
           </div>
-          <p style={{ fontSize: "0.8125rem", color: "#9ca3af", fontStyle: "italic", marginTop: 16 }}>Approximate totals across the brands we've worked with.</p>
+          <p className="text-xs text-zinc-400 italic mt-4 text-center">Approximate totals across the brands we've worked with.</p>
         </div>
       </section>
 
       {/* TRUST BAR */}
       <section className="trust">
-        <div className="container" style={{ textAlign: "center" }}>
-          <p className="trust-label" style={{ textTransform: "uppercase", fontWeight: 600, letterSpacing: "0.08em", fontSize: "0.8125rem", marginBottom: 24 }}>Brands we've managed campaigns for</p>
-          <div className="trust-logos" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-            <div className="trust-logo"><Image src="/images/instroomLogo.png" alt="Brand 1" width={100} height={36} /></div>
-            <div className="trust-logo"><Image src="/images/instroomLogo.png" alt="Brand 2" width={100} height={36} /></div>
-            <div className="trust-logo"><Image src="/images/instroomLogo.png" alt="Brand 3" width={100} height={36} /></div>
-            <div className="trust-logo"><Image src="/images/instroomLogo.png" alt="Brand 4" width={100} height={36} /></div>
-            <div className="trust-logo"><Image src="/images/instroomLogo.png" alt="Brand 5" width={100} height={36} /></div>
-            <div className="trust-logo"><Image src="/images/instroomLogo.png" alt="Brand 6" width={100} height={36} /></div>
+        <div className="container-md">
+          <p className="trust-label">Brands we've managed campaigns for</p>
+          <div className="trust-logos">
+            {[1,2,3,4,5,6].map(n => (
+              <div key={n} className="trust-logo">
+                <Image src="/images/instroomLogo.png" alt={`Brand ${n}`} width={100} height={36} />
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* PROBLEM */}
-      <section style={{ padding: "96px 0", background: "white" }}>
-        <div className="container">
-          <div style={{ textAlign: "center", maxWidth: "720px", margin: "0 auto 56px" }}>
-            <h2 style={{ marginBottom: "20px", fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: "clamp(1.75rem, 3.5vw, 2.5rem)" }}>You didn't start your brand to live in a spreadsheet.</h2>
-            <p style={{ fontSize: "1.125rem", color: "#3F3F46" }}>But here you are. Multiple tabs. Multiple tools. A nagging feeling that you're paying creators and hoping it's working.</p>
+      <section className="section section-alt">
+        <div className="container-md">
+          <div className="section-header">
+            <h2>You didn't start your brand to live in a spreadsheet.</h2>
+            <p>But here you are. Multiple tabs. Multiple tools. A nagging feeling that you're paying creators and hoping it's working.</p>
           </div>
           <div className="problem-cards">
             {problems.map((problem, index) => (
               <div key={index} className="problem-card">
+                <div className="problem-card-num">{index + 1}</div>
                 <h3>{problem.title}</h3>
                 <p>{problem.desc}</p>
               </div>
@@ -1044,8 +1043,8 @@ export function LandingPage() {
       </section>
 
       {/* OUTCOMES */}
-      <section className="section section-alt">
-        <div className="container">
+      <section className="section" style={{ background: "white" }}>
+        <div className="container-md">
           <div className="section-header">
             <h2>Here's what changes with Instroom.</h2>
           </div>
@@ -1054,6 +1053,7 @@ export function LandingPage() {
               <div key={index} className="outcome">
                 <div className="outcome-label">{outcome.label}</div>
                 <div className="outcome-problem">{outcome.problem}</div>
+                <div className="outcome-divider" />
                 <h3>{outcome.solution}</h3>
                 <p>{outcome.desc}</p>
               </div>
@@ -1063,11 +1063,11 @@ export function LandingPage() {
       </section>
 
       {/* WHAT'S INSIDE */}
-      <section style={{ padding: "96px 0", background: "white" }}>
-        <div className="container">
+      <section className="section section-alt" id="features">
+        <div className="container-md">
           <div className="section-header">
             <h2>What's inside</h2>
-            <p className="lead">A closer look at the parts you'll actually use every day.</p>
+            <p>A closer look at the parts you'll actually use every day.</p>
           </div>
 
           {features.map((feature, index) => (
@@ -1079,7 +1079,7 @@ export function LandingPage() {
                 <a href={feature.link} className="inside-link">Learn more →</a>
               </div>
               <div className="inside-visual">
-                <div className="inside-visual-placeholder">[Feature screenshot]</div>
+                [Feature screenshot]
               </div>
             </div>
           ))}
@@ -1087,8 +1087,8 @@ export function LandingPage() {
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="section section-alt">
-        <div className="container">
+      <section className="section" style={{ background: "white" }}>
+        <div className="container-md">
           <div className="section-header">
             <h2>Get started in minutes.</h2>
             <p>No onboarding call required. No setup fees. Just sign up and go.</p>
@@ -1114,11 +1114,11 @@ export function LandingPage() {
       </section>
 
       {/* COMPARISON */}
-      <section className="section" style={{ background: "white" }}>
-        <div className="container">
+      <section className="section section-alt">
+        <div className="container-md">
           <div className="section-header">
             <h2>Instroom vs. a spreadsheet.</h2>
-            <p style={{ fontSize: "1.125rem", color: "#3F3F46" }}>If your spreadsheet works, keep using it. But here's what you're trading when you move.</p>
+            <p>If your spreadsheet works, keep using it. But here's what you're trading when you move.</p>
           </div>
           <div className="compare-table">
             <div className="compare-header">
@@ -1138,8 +1138,8 @@ export function LandingPage() {
       </section>
 
       {/* FOUNDER */}
-      <section style={{ background: "linear-gradient(180deg, var(--off-white) 0%, #EEF4F0 100%)", padding: "96px 0" }}>
-        <div className="container">
+      <section className="section" style={{ background: "linear-gradient(180deg, var(--off-white) 0%, #DFF0E7 100%)" }}>
+        <div className="container-md">
           <div className="founder-inner">
             <div className="founder-label">A note from our founder</div>
             <h2>Why we built Instroom</h2>
@@ -1151,12 +1151,10 @@ export function LandingPage() {
               <p>Not everything is ready yet. We're still building, still improving, still listening to the people using it. But it's getting there, and we'd love for you to come along.</p>
             </div>
             <div className="founder-sign">
-              <div className="founder-avatar">
-                <div style={{ width: "100%", height: "100%", background: "#ddd", display: "flex", alignItems: "center", justifyContent: "center", color: "#999" }}>Avatar</div>
-              </div>
+              <div className="founder-avatar">Avatar</div>
               <div>
-                <div style={{ fontFamily: "'Caveat', cursive", fontSize: "2rem", fontWeight: 700, color: "var(--deep-green)", lineHeight: 1, marginBottom: "4px" }}>Armand Manibo</div>
-                <div className="founder-title">Founder & CEO, Instroom</div>
+                <div className="font-hand text-3xl font-bold text-[#0F6B3E] leading-none mb-1">Armand Manibo</div>
+                <div className="founder-title">Founder &amp; CEO, Instroom</div>
               </div>
             </div>
           </div>
@@ -1165,7 +1163,7 @@ export function LandingPage() {
 
       {/* STANDALONE */}
       <section className="section section-alt" id="standalone">
-        <div className="container">
+        <div className="container-md">
           <div className="section-header">
             <h2>Not ready for the full workspace? Start with a piece.</h2>
             <p>The Chrome Extension and Post Tracker also work on their own. Use one today, grow into the full platform when you're ready.</p>
@@ -1185,14 +1183,16 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* EARLY USERS */}
+      {/* EARLY USERS / TESTIMONIAL PLACEHOLDER */}
       <section className="early">
         <div className="early-inner">
           <h2>No testimonials yet</h2>
           <p className="early-body">We're not going to make any up. Right now, we are our own testimonials. We use Instroom every day to run our agency across 30 brands, and that's the honest proof that it works.</p>
-          <p style={{ fontFamily: "'Caveat', cursive", fontSize: "1.75rem", color: "var(--deep-green)", fontWeight: 600, marginBottom: "32px", lineHeight: 1.3 }}>Hopefully yours will live here soon.<br />Fingers crossed.</p>
+          <p className="font-hand text-3xl font-semibold text-[#0F6B3E] mb-8 leading-snug">
+            Hopefully yours will live here soon.<br />Fingers crossed.
+          </p>
           <Link href="/signup">
-            <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold h-12 px-8 hover:from-[#0a5a2f] hover:to-[#158a48]">
+            <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold h-12 px-8 hover:from-[#0a5a2f] hover:to-[#158a48] rounded-xl shadow-lg shadow-emerald-600/20">
               Start free for 30 days
             </Button>
           </Link>
@@ -1201,7 +1201,7 @@ export function LandingPage() {
 
       {/* FAQ */}
       <section className="faq" id="faq">
-        <div className="container">
+        <div className="container-md">
           <div className="section-header">
             <h2>Questions you're probably asking.</h2>
           </div>
@@ -1229,58 +1229,71 @@ export function LandingPage() {
 
       {/* PRICING */}
       <section className="section section-alt" id="pricing">
-        <div className="container">
+        <div className="container-md">
           <div className="section-header">
             <h2>Simple pricing. No per-seat games.</h2>
             <p>One workspace. Unlimited team members. No hidden fees.</p>
           </div>
           <div className="pricing-grid">
+            {/* Solo */}
             <div className="price-card">
               <div className="price-badge">For solo operators</div>
               <h3>Instroom Solo</h3>
               <p className="price-desc">One workspace. Everything you need to run your program.</p>
               <div className="price-amount">$19<span className="price-unit">/mo</span></div>
               <p className="price-annual">or $15/mo billed annually</p>
-              <p className="price-trial">30 days free · No card</p>
+              <p className="price-trial">30 days free · No card required</p>
               <Link href="/signup">
-                <Button className="w-full bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold hover:from-[#0a5a2f] hover:to-[#158a48]">
+                <Button className="w-full rounded-xl border border-zinc-200 bg-white text-zinc-900 font-semibold hover:bg-zinc-50">
                   Start free
                 </Button>
               </Link>
             </div>
+
+            {/* Team — featured (dark green) */}
             <div className="price-card featured">
               <div className="price-badge">Most popular</div>
               <h3>Instroom Team</h3>
               <p className="price-desc">Three workspaces included. Built for agencies and growing brands.</p>
               <div className="price-amount">$49<span className="price-unit">/mo</span></div>
+              {/* FIX: was color:"#9ca3af" (a broken CSS string value). Now correctly white/translucent */}
               <p className="price-annual">or $39/mo billed annually · +$12/mo per extra workspace</p>
-              <p className="price-trial">30 days free · No card</p>
+              <p className="price-trial">30 days free · No card required</p>
               <Link href="/signup">
-                <Button className="w-full bg-[#1FAE5B] text-white font-semibold hover:bg-[#158a48]">
+                {/* FIX: white text on green button is clearly readable on the dark card */}
+                <Button className="w-full rounded-xl bg-[#1FAE5B] text-white font-semibold hover:bg-[#158a48]">
                   Start free
                 </Button>
               </Link>
             </div>
           </div>
-          <p style={{ textAlign: "center", marginTop: "32px", fontSize: "0.9375rem", color: "var(--muted)" }}>
-            Not sure which is right? <a href="#" style={{ color: "var(--green)", fontWeight: 600 }}>Compare plans →</a> or <a href="#" style={{ color: "var(--green)", fontWeight: 600 }}>Talk to us →</a>
+          <p className="text-center text-sm text-zinc-500 font-medium" style={{ marginTop: "56px" }}>
+            Not sure which is right?{" "}
+            <a href="#" className="text-[#1FAE5B] font-semibold hover:underline">Compare plans →</a>
+            {" "}or{" "}
+            <a href="#" className="text-[#1FAE5B] font-semibold hover:underline">Talk to us →</a>
           </p>
         </div>
       </section>
 
       {/* FINAL CTA */}
       <section className="final-cta">
-        <div className="container">
+        <div className="container-md final-cta-content">
           <h2>The system is ready. Your next campaign is waiting.</h2>
           <p className="final-cta-lead">Stop building the process. Start running the campaign.</p>
           <div className="hero-ctas">
             <Link href="/signup">
-              <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-black font-semibold h-12 px-8 hover:from-emerald-400 hover:to-lime-300 shadow-lg shadow-emerald-500/50">
+              {/* FIX: was text-black on green gradient — changed to text-white for proper contrast */}
+              <Button className="bg-gradient-to-r from-[#1FAE5B] to-[#28c96a] text-white font-semibold h-12 px-8 rounded-xl hover:from-[#158a48] hover:to-[#1FAE5B] shadow-lg shadow-emerald-500/30">
                 Start free for 30 days
               </Button>
             </Link>
+            {/* FIX: outline button on dark bg now uses white text + visible border */}
             <a href="#faq">
-              <Button variant="outline" className="h-12 px-8 border-emerald-300/30 text-white hover:bg-emerald-500/10 hover:text-emerald-300">
+              <Button
+                variant="outline"
+                className="h-12 px-8 rounded-xl border-white/20 text-white bg-white/5 hover:bg-white/10 hover:border-white/30 font-semibold"
+              >
                 Book a demo
               </Button>
             </a>
@@ -1296,11 +1309,11 @@ export function LandingPage() {
             <Image
               src="/images/instroomLogoWhite.png"
               alt="Instroom logo"
-              width={128}
-              height={128}
+              width={120}
+              height={120}
               style={{ marginBottom: "12px" }}
             />
-            <p style={{ color: "rgba(255,255,255,0.6)", maxWidth: "280px", fontSize: "0.875rem" }}>
+            <p style={{ color: "rgba(255,255,255,0.55)", maxWidth: "260px", fontSize: "0.875rem", lineHeight: 1.65 }}>
               The influencer marketing workspace for eCommerce brands and agencies.
             </p>
           </div>
@@ -1333,9 +1346,9 @@ export function LandingPage() {
         <div className="footer-bottom">
           <p>&copy; 2026 Instroom. All rights reserved.</p>
           <div style={{ display: "flex", gap: "24px" }}>
-            <Link href="/terms-of-service" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>Terms of Service</Link>
-            <Link href="/privacy" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>Privacy Policy</Link>
-            <Link href="/refund" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>Refund Policy</Link>
+            <Link href="/terms-of-service" style={{ color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>Terms of Service</Link>
+            <Link href="/privacy" style={{ color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>Privacy Policy</Link>
+            <Link href="/refund" style={{ color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>Refund Policy</Link>
           </div>
         </div>
       </footer>

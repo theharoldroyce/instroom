@@ -6,6 +6,8 @@ import { sendWelcomeEmail } from "./email"
 import { syncBrandActivityWithSubscription } from "./subscription-limits"
 import bcrypt from "bcryptjs"
 
+const INACTIVITY_TIMEOUT = 30 * 60 // 30 minutes in seconds
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -14,8 +16,9 @@ declare module "next-auth" {
       name?: string | null
       image?: string | null
     }
-    accessToken?: string  // ← Gmail access token exposed on session
+    accessToken?: string
     error?: string
+    expiresAt?: number // ms timestamp — client uses this to auto-logout
   }
 }
 
@@ -27,16 +30,12 @@ const nextAuthConfig = {
       allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
-          // Added: Gmail scopes so inbox can read and send emails
-          scope: [
-            "openid",
-            "email",
-            "profile",
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.send",
-          ].join(" "),
-          access_type: "offline",  // ensures we get a refresh_token
-          prompt: "consent",       // always show consent so refresh_token is returned
+          // Basic scopes only at login — no Gmail access requested here.
+          // Gmail scopes are requested later, inside the Inbox, via the
+          // "Connect Gmail" button which calls signIn("google", { prompt: "consent", scope: "...gmail..." })
+          // This keeps the login/signup flow clean and non-scary for users.
+          scope: "openid email profile",
+          access_type: "offline",
         },
       },
     }),
@@ -183,18 +182,19 @@ const nextAuthConfig = {
     },
     
     jwt({ token, user, account }: any) {
-      // Existing user fields
+      // On first sign-in, populate token and set initial activity timestamp
       if (user) {
         token.id = user.id
         token.email = user.email
         if (user.isNewUser !== undefined) {
           token.isNewUser = user.isNewUser
         }
-        token.iat = Math.floor(Date.now() / 1000)
-        token.exp = Math.floor(Date.now() / 1000) + 30 * 60
+        token.lastActivity = Math.floor(Date.now() / 1000)
+        token.exp = Math.floor(Date.now() / 1000) + INACTIVITY_TIMEOUT
       }
 
-      // Added: store Google access/refresh tokens for Gmail API calls
+      // Store Google tokens whenever they come in — covers both initial login
+      // and the Gmail re-consent flow triggered from the Inbox.
       if (account?.provider === "google") {
         token.accessToken = account.access_token
         token.refreshToken = account.refresh_token
@@ -203,10 +203,32 @@ const nextAuthConfig = {
           : Date.now() + 3600 * 1000
       }
 
+      // ── Inactivity check ──────────────────────────────────────────────────
+      // On every session check, compare now vs lastActivity.
+      // If idle > 30 min → invalidate. Otherwise → slide the window forward.
+      const now = Math.floor(Date.now() / 1000)
+      const lastActivity = (token.lastActivity as number) || now
+      const idleSeconds = now - lastActivity
+
+      if (idleSeconds > INACTIVITY_TIMEOUT) {
+        // Mark token as expired due to inactivity — client will sign out
+        return { ...token, error: "InactivityTimeout" }
+      }
+
+      // Still active — slide expiry window forward (true inactivity timer)
+      token.lastActivity = now
+      token.exp = now + INACTIVITY_TIMEOUT
+
       return token
     },
     
     async session({ session, token }: any) {
+      // If token was invalidated due to inactivity, signal the client to log out
+      if (token.error === "InactivityTimeout") {
+        session.error = "InactivityTimeout"
+        return session
+      }
+
       if (session?.user) {
         session.user.id = token.id as string
         if (token.name) session.user.name = token.name as string
@@ -216,7 +238,10 @@ const nextAuthConfig = {
         await syncBrandActivityWithSubscription(session.user.id)
       }
 
-      // Added: expose Gmail access token to server-side API routes
+      // Expose expiry time to client (ms) so InactivityProvider can countdown
+      session.expiresAt = (token.exp as number) * 1000
+
+      // Expose Gmail access token to server-side API routes
       if (token.accessToken) {
         session.accessToken = token.accessToken
       }

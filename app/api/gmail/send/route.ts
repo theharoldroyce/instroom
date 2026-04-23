@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// ─── Token helper (same pattern as threads route) ─────────────────────────────
+// ─── Token helper ─────────────────────────────────────────────────────────────
 
 async function getAccessToken(session: any): Promise<string | null> {
   // 1. Try session first (Google OAuth login)
@@ -93,7 +93,6 @@ function buildRawEmail({
   ]
 
   const raw = lines.join("\r\n")
-  // Base64url encode
   return Buffer.from(raw)
     .toString("base64")
     .replace(/\+/g, "-")
@@ -114,7 +113,7 @@ export async function POST(req: NextRequest) {
 
   if (!accessToken) {
     return NextResponse.json(
-      { error: "No Google account linked. Please sign in with Google to send emails.", reauth: true },
+      { error: "No Google account linked. Please connect your Gmail account.", reauth: true },
       { status: 403 }
     )
   }
@@ -128,14 +127,10 @@ export async function POST(req: NextRequest) {
   try {
     const raw = buildRawEmail({ to, from, subject: subject || "", body, threadId, inReplyTo })
 
-    const url = threadId
-      ? `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`
-      : `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`
-
     const payload: any = { raw }
     if (threadId) payload.threadId = threadId
 
-    const sendRes = await fetch(url, {
+    const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,

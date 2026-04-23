@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { signIn } from "next-auth/react"
 import {
   IconMail,
   IconSearch,
@@ -31,6 +32,7 @@ import {
   IconBell,
   IconUser,
   IconClock,
+  IconLock,
   IconCheck,
   IconMailForward,
   IconLayoutSidebar,
@@ -53,7 +55,7 @@ type PipelineStage =
   | "COMPLETED"
   | "REJECTED"
 
-type GmailSyncState = "loading" | "syncing" | "connected" | "error" | "reauth"
+type GmailSyncState = "checking" | "not_connected" | "connecting" | "syncing" | "connected" | "error"
 
 type Email = {
   id: number | string
@@ -190,7 +192,7 @@ export default function InboxPage() {
   const [isMobile, setIsMobile] = useState(false)
 
   // Gmail sync state — no connect screen needed, user is already Google-authenticated
-  const [gmailSyncState, setGmailSyncState] = useState<GmailSyncState>("loading")
+  const [gmailSyncState, setGmailSyncState] = useState<GmailSyncState>("checking")
   const [gmailError, setGmailError] = useState<string | undefined>()
   const [gmailConnected, setGmailConnected] = useState(false)
 
@@ -209,8 +211,8 @@ export default function InboxPage() {
     const checkMobile = () => setIsMobile(window.innerWidth < 768)
     checkMobile()
     window.addEventListener("resize", checkMobile)
-    // Load Gmail threads automatically — user is already authenticated via Google
-    loadGmailThreads()
+    // On mount, check if Gmail is already connected
+    checkGmailConnection()
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
 
@@ -224,6 +226,32 @@ export default function InboxPage() {
   // No connect flow needed — accessToken comes from the user's existing Google login.
   // If the Gmail scope is missing (old session), we show a one-time re-login nudge.
 
+  const checkGmailConnection = async () => {
+    try {
+      const res = await fetch("/api/gmail/threads")
+      if (res.ok) {
+        const data = await res.json()
+        const mappedEmails = (data.threads || []).map((t: any, i: number) => mapGmailThreadToEmail(t, i))
+        setEmails(mappedEmails)
+        setGmailConnected(true)
+        setGmailSyncState("connected")
+      } else {
+        setGmailSyncState("not_connected")
+      }
+    } catch {
+      setGmailSyncState("not_connected")
+    }
+  }
+
+  const handleConnectGmail = () => {
+    setGmailSyncState("connecting")
+    signIn("google", { callbackUrl: window.location.href }, {
+      scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send",
+      access_type: "offline",
+      prompt: "consent",
+    })
+  }
+
   const loadGmailThreads = async () => {
     setGmailSyncState("syncing")
     try {
@@ -233,7 +261,7 @@ export default function InboxPage() {
       if (!res.ok) {
         if (data?.reauth) {
           // Scope missing or token fully expired — user needs to sign out/in once
-          setGmailSyncState("reauth")
+          setGmailSyncState("not_connected")
           return
         }
         throw new Error(data?.error || "Failed to fetch Gmail threads")
@@ -410,8 +438,8 @@ export default function InboxPage() {
 
   const currentStageConfig = selectedStage !== "ALL" ? stageConfigs.find((s) => s.id === selectedStage) : null
   const isGmailReady = gmailConnected && gmailSyncState === "connected"
-  const isLoading = gmailSyncState === "loading" || gmailSyncState === "syncing"
-  const needsReauth = gmailSyncState === "reauth"
+  const isLoading = gmailSyncState === "checking" || gmailSyncState === "syncing" || gmailSyncState === "connecting"
+  const needsConnect = gmailSyncState === "not_connected"
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -519,12 +547,16 @@ export default function InboxPage() {
               <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all ${
                 isGmailReady
                   ? "bg-green-50 border-green-200 text-green-700"
+                  : needsConnect
+                  ? "bg-yellow-50 border-yellow-200 text-yellow-700 cursor-pointer hover:bg-yellow-100"
                   : isLoading
                   ? "bg-gray-50 border-gray-200 text-gray-400"
                   : "bg-red-50 border-red-200 text-red-500"
-              }`}>
+              }`}
+              onClick={needsConnect ? handleConnectGmail : undefined}
+              >
                 <IconBrandGmail size={11} />
-                <span>{isGmailReady ? "Gmail synced" : isLoading ? "Syncing…" : "Sync error"}</span>
+                <span>{isGmailReady ? "Gmail synced" : needsConnect ? "Connect Gmail" : isLoading ? "Connecting…" : "Sync error"}</span>
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <span className="hidden sm:inline">Current:</span>
@@ -543,32 +575,42 @@ export default function InboxPage() {
         {/* ── CONTACT LIST PANEL ── */}
         <div className="w-80 border-r border-gray-200 flex flex-col bg-white flex-shrink-0 shadow-sm">
           {isLoading ? (
-            // ── Loading skeleton while fetching Gmail ──
+            // ── Checking / syncing / connecting ──
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-400 p-6">
               <div className="relative w-10 h-10">
                 <div className="absolute inset-0 rounded-full border-4 border-gray-100" />
                 <div className="absolute inset-0 rounded-full border-4 border-t-[#1FAE5B] animate-spin" />
               </div>
-              <p className="text-sm text-gray-500 font-medium">Loading your inbox…</p>
+              <p className="text-sm text-gray-500 font-medium">
+                {gmailSyncState === "connecting" ? "Redirecting to Google…" : "Loading your inbox…"}
+              </p>
             </div>
-          ) : needsReauth ? (
-            // ── One-time re-auth nudge (Gmail scope missing from old session) ──
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-yellow-50 flex items-center justify-center">
-                <IconBrandGmail size={24} className="text-[#EA4335]" />
+          ) : needsConnect ? (
+            // ── One-time Gmail connect prompt ──
+            <div className="flex-1 flex flex-col items-center justify-center gap-5 p-6 text-center">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-full bg-red-100 blur-xl opacity-50 scale-150" />
+                <div className="relative w-14 h-14 rounded-2xl bg-white shadow-md border border-gray-100 flex items-center justify-center">
+                  <IconBrandGmail size={28} className="text-[#EA4335]" />
+                </div>
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-800">One more step</p>
-                <p className="text-xs text-gray-500 mt-1 max-w-[200px] leading-relaxed">
-                  Sign out and back in to grant Gmail access. This only happens once.
+                <p className="text-sm font-semibold text-gray-900">Connect your Gmail</p>
+                <p className="text-xs text-gray-500 mt-1.5 max-w-[200px] leading-relaxed">
+                  Allow access once and your inbox will always load automatically.
                 </p>
               </div>
-              <a
-                href="/api/auth/signout"
-                className="px-4 py-2 bg-[#1FAE5B] text-white text-sm rounded-xl hover:bg-[#0F6B3E] transition font-medium"
+              <button
+                onClick={handleConnectGmail}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1FAE5B] text-white text-sm rounded-xl hover:bg-[#0F6B3E] transition font-semibold shadow-md"
               >
-                Sign out &amp; reconnect
-              </a>
+                <IconBrandGmail size={15} />
+                Connect Gmail — it's free
+              </button>
+              <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                <IconLock size={10} />
+                Only asked once • Read &amp; send access
+              </p>
             </div>
           ) : gmailSyncState === "error" ? (
             // ── Error state ──
@@ -684,13 +726,13 @@ export default function InboxPage() {
 
         {/* ── CHAT / MESSAGE AREA ── */}
         <div className="flex-1 flex flex-col bg-white">
-          {isLoading || needsReauth || gmailSyncState === "error" ? (
+          {isLoading || needsConnect || gmailSyncState === "error" ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-300 bg-gray-50 p-4">
               <div className="bg-white rounded-full p-6 mb-4 shadow-sm border border-gray-100">
                 <IconBrandGmail size={48} stroke={1} className="text-gray-200" />
               </div>
               <p className="text-sm font-medium text-gray-400">
-                {isLoading ? "Loading your inbox…" : needsReauth ? "Re-authentication needed" : "Could not load inbox"}
+                {isLoading ? "Loading your inbox…" : needsConnect ? "Connect Gmail to get started" : "Could not load inbox"}
               </p>
             </div>
           ) : selectedEmail ? (
