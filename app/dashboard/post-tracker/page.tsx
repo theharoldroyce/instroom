@@ -932,6 +932,7 @@ export default function ClosedPage() {
     } else {
       showToast("Failed to update campaign type")
     }
+    return success
   }, [updateCampaignType])
 
   const handleColumnClick = (column: typeof COLUMNS[0]) => {
