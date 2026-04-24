@@ -5,15 +5,42 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-function pipelineStatusToFields(pipelineStatus: string): { contact_status: string; stage: number } {
+function pipelineStatusToFields(
+  pipelineStatus: string
+): {
+  contact_status: string
+  stage: number
+  approval_status?: string
+} {
   switch (pipelineStatus) {
-    case "For Outreach":       return { contact_status: "pending",             stage: 1 }
-    case "Contacted":          return { contact_status: "contacted",            stage: 2 }
-    case "In Conversation":    return { contact_status: "negotiating",          stage: 3 }
-    case "Deal Agreed":        return { contact_status: "agreed",               stage: 4 }
-    case "For Order Creation": return { contact_status: "for_order_creation",   stage: 5 } // ✅ NEW
-    case "Not Interested":     return { contact_status: "not_interested",        stage: 0 }
-    default:                   return { contact_status: "pending",              stage: 1 }
+    case "For Outreach":
+      return { contact_status: "pending", stage: 1 }
+
+    case "Contacted":
+      return { contact_status: "contacted", stage: 2 }
+
+    case "In Conversation":
+      return { contact_status: "negotiating", stage: 3 }
+
+    case "Deal Agreed":
+      return { contact_status: "agreed", stage: 4 }
+
+    case "For Order Creation":
+      return {
+        contact_status: "for_order_creation",
+        stage: 5,
+        approval_status: "Approved",
+      }
+
+    case "Not Interested":
+      return {
+        contact_status: "not_interested",
+        stage: 0,
+        approval_status: "Declined",
+      }
+
+    default:
+      return { contact_status: "pending", stage: 1 }
   }
 }
 
@@ -64,10 +91,14 @@ export async function PATCH(
         contact_status: fields.contact_status,
         stage: fields.stage,
 
-        // ✅ Only for Not Interested
+        // ✅ FINAL FIX (auto fallback if missing)
+        approval_status:
+          fields.approval_status ??
+          (fields.stage >= 5 ? "Approved" : null),
+
+        // ✅ only for Not Interested
         ...(pipelineStatus === "Not Interested"
           ? {
-              approval_status: "Declined",
               approval_notes: niReason || "Not interested",
             }
           : {}),

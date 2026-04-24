@@ -903,6 +903,9 @@ export default function ClosedPage() {
     filteredData = filteredData.filter(inf => inf.niche === filters.niche)
   }
 
+  // Log filtered data to check if data is being filtered correctly
+  console.log("Filtered Data:", filteredData)
+
   const hasActiveFilters = filters.influencer !== "" || filters.handle !== "" || filters.location !== "all" || filters.niche !== "all" || search !== "" || selectedColumnStatus !== null
 
   const activeInf = activeId ? data.find(d => d.id === activeId) : null
@@ -934,6 +937,7 @@ export default function ClosedPage() {
   const handleColumnClick = (column: typeof COLUMNS[0]) => {
     setSelectedColumnStatus(column.key)
     setView("list")
+    console.log(`Showing ${column.title} column`)
     showToast(`Showing "${column.title}"`)
   }
 
@@ -942,7 +946,8 @@ export default function ClosedPage() {
     showToast("Showing all influencers")
   }
 
-  const getItemsByColumn = (columnKey: ClosedColumn) => data.filter(item => item.closedStatus === columnKey)
+  const getItemsByColumn = (columnKey: ClosedColumn) =>
+    filteredData.filter(item => item.closedStatus === columnKey)
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-64">
@@ -959,6 +964,8 @@ export default function ClosedPage() {
 
   return (
     <div className="flex flex-col gap-4 p-6">
+      {error && <div className="text-red-500 text-sm">{error}</div>}
+      
       {toastMsg && (
         <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2">
           {toastMsg}
@@ -972,7 +979,7 @@ export default function ClosedPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search influencer..."
             className="w-full pl-9 pr-3 h-10 border border-[#0F6B3E]/20 rounded-lg outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm" />
         </div>
-        <span className="text-sm text-gray-500 whitespace-nowrap">{data.length} influencer{data.length !== 1 ? "s" : ""}</span>
+        <span className="text-sm text-gray-500 whitespace-nowrap">{filteredData.length} of {data.length} influencer{data.length !== 1 ? "s" : ""}</span>
       </div>
 
       {/* Toolbar */}
@@ -1046,6 +1053,7 @@ export default function ClosedPage() {
               {/* MAIN COLUMNS (non-exit) */}
               {COLUMNS.filter(c => c.key !== "No post").map(col => {
                 const items = getItemsByColumn(col.key)
+                console.log(`${col.title} Items:`, items) // Log the items for each column
                 return (
                   <div key={col.key} className="w-[240px] flex-shrink-0">
                     <DroppableColumn id={col.key}>
@@ -1060,40 +1068,41 @@ export default function ClosedPage() {
                         <p className="text-[10px] text-gray-400">{col.description}</p>
                       </div>
                       <div className="flex flex-col gap-2 min-h-[400px]">
-                        {items.map(inf => (
-                          <DraggableCard
-                            key={inf.id}
-                            id={inf.id}
-                            onClick={() => setSelectedInf(inf)}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
-                              </div>
-                              <CampaignBadge type={inf.campaignType} />
-                            </div>
-                            <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
-                              <span>{inf.platform || "Instagram"}</span>
-                              <span>•</span>
-                              <span>{inf.followers} followers</span>
-                            </div>
-                            {inf.closedStatus === "Delivered" && !inf.postedAt && (
-                              <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded-lg px-2 py-1 inline-block">
-                                ⚠️ Awaiting content
-                              </div>
-                            )}
-                            {inf.closedStatus === "Posted" && inf.postUrl && (
-                              <div className="mt-2 text-[10px] text-green-600 truncate">
-                                🔗 {inf.postUrl}
-                              </div>
-                            )}
-                          </DraggableCard>
-                        ))}
-                        {items.length === 0 && (
+                        {items.length === 0 ? (
                           <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-xs text-gray-400">
                             Drop here
                           </div>
+                        ) : (
+                          items.map(inf => (
+                            <DraggableCard
+                              key={inf.id}
+                              id={inf.id}
+                              onClick={() => setSelectedInf(inf)}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
+                                  <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
+                                </div>
+                                <CampaignBadge type={inf.campaignType} />
+                              </div>
+                              <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
+                                <span>{inf.platform || "Instagram"}</span>
+                                <span>•</span>
+                                <span>{inf.followers} followers</span>
+                              </div>
+                              {inf.closedStatus === "Delivered" && !inf.postedAt && (
+                                <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded-lg px-2 py-1 inline-block">
+                                  ⚠️ Awaiting content
+                                </div>
+                              )}
+                              {inf.closedStatus === "Posted" && inf.postUrl && (
+                                <div className="mt-2 text-[10px] text-green-600 truncate">
+                                  🔗 {inf.postUrl}
+                                </div>
+                              )}
+                            </DraggableCard>
+                          ))
                         )}
                       </div>
                     </DroppableColumn>
@@ -1112,6 +1121,7 @@ export default function ClosedPage() {
               {(() => {
                 const col = COLUMNS.find(c => c.key === "No post")!
                 const items = getItemsByColumn(col.key)
+                console.log(`${col.title} Items:`, items) // Log the items for this column
                 return (
                   <div className="w-[240px] flex-shrink-0">
                     <DroppableColumn id={col.key} isExit={true}>
@@ -1123,33 +1133,34 @@ export default function ClosedPage() {
                         <p className="text-[10px] text-red-400">{col.description}</p>
                       </div>
                       <div className="flex flex-col gap-2 min-h-[400px]">
-                        {items.map(inf => (
-                          <DraggableCard
-                            key={inf.id}
-                            id={inf.id}
-                            onClick={() => setSelectedInf(inf)}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
-                              </div>
-                              <CampaignBadge type={inf.campaignType} />
-                            </div>
-                            <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
-                              <span>{inf.platform || "Instagram"}</span>
-                              <span>•</span>
-                              <span>{inf.followers} followers</span>
-                            </div>
-                            <div className="mt-2 text-[10px] text-red-500 bg-red-50 rounded-lg px-2 py-1 inline-block">
-                              ✕ No content published
-                            </div>
-                          </DraggableCard>
-                        ))}
-                        {items.length === 0 && (
+                        {items.length === 0 ? (
                           <div className="border-2 border-dashed border-red-200 rounded-xl p-6 text-center text-xs text-gray-400">
                             Drop here
                           </div>
+                        ) : (
+                          items.map(inf => (
+                            <DraggableCard
+                              key={inf.id}
+                              id={inf.id}
+                              onClick={() => setSelectedInf(inf)}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
+                                  <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
+                                </div>
+                                <CampaignBadge type={inf.campaignType} />
+                              </div>
+                              <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
+                                <span>{inf.platform || "Instagram"}</span>
+                                <span>•</span>
+                                <span>{inf.followers} followers</span>
+                              </div>
+                              <div className="mt-2 text-[10px] text-red-500 bg-red-50 rounded-lg px-2 py-1 inline-block">
+                                ✕ No content published
+                              </div>
+                            </DraggableCard>
+                          ))
                         )}
                       </div>
                     </DroppableColumn>
@@ -1255,6 +1266,17 @@ export default function ClosedPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Profile Drawer */}
+      {selectedInf && (
+        <ProfileDrawer
+          inf={selectedInf}
+          onClose={() => setSelectedInf(null)}
+          onColumnChange={updateColumn}
+          onPaidCollabSave={updatePaidCollab}
+          onCampaignTypeChange={handleCampaignTypeChange}
+        />
       )}
     </div>
   )

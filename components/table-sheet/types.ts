@@ -11,6 +11,14 @@ export type InfluencerRow = {
   tier?: string; community_status?: string; bio?: string; profile_image_url?: string;
   avg_likes?: string | number; avg_comments?: string | number; avg_views?: string | number;
   created_at?: string;
+  updated_at?: string;
+  post_url?: string | null;
+  post_caption?: string | null;
+  likes_count?: number | string;
+  comments_count?: number | string;
+  engagement_count?: number | string;
+  posted_at?: string | null;
+  content_posted?: boolean;
 }
 
 export type CustomColumn = {

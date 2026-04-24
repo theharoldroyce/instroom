@@ -19,33 +19,22 @@ function deriveClosedStatus(
   contentPosted: boolean,
   approvalStatus: string | null
 ): ClosedColumn {
-  // 1. Hard exits
+
+  // EXIT
   if (approvalStatus === "Declined" || contactStatus === "not_interested") {
     return "No post"
   }
 
-  // 2. Content done
-  if (contentPosted) {
-    return "Posted"
-  }
+  // CONTENT DONE
+  if (contentPosted) return "Posted"
 
-  // 3. Order status priority
-  if (orderStatus === "delivered") return "Delivered"
-  if (orderStatus === "shipped") return "In-Transit"
-  if (orderStatus === "pending") return "For Order Creation"
+  // ✅ FIXED ORDER
+  if (stage >= 8) return "Posted"
+  if (stage >= 7) return "Delivered"
+  if (stage >= 6) return "In-Transit"
+  if (stage >= 5) return "For Order Creation"
 
-  // 4. Stage logic (FIXED ORDER)
-  if (stage >= 4) return "Delivered"
-  if (stage >= 3) return "In-Transit"
-
-  if (
-    stage >= 5 ||
-    contactStatus === "for_order_creation" ||
-    contactStatus === "agreed"
-  ) {
-    return "For Order Creation"
-  }
-
+  // fallback
   return "For Order Creation"
 }
 
@@ -91,19 +80,17 @@ export async function GET(
       select: { id: true },
     })
 
-    if (!brand) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    // if (!brand) {
+    //   return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    // }
 
     // Fetch data
     const rows = await prisma.brandInfluencer.findMany({
       where: {
         brand_id: brandId,
-        OR: [
-          { approval_status: "Approved" },
-          { approval_status: "Declined" },
-          { contact_status: "not_interested" },
-        ],
+        stage: {
+          gte: 5, // ✅ FIXED
+        },
       },
       include: {
         influencer: true,

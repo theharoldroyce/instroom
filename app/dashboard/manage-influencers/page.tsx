@@ -321,49 +321,50 @@ function InfluencersContent() {
   // ONLY save if the row is ALREADY in dbIds (i.e. it existed before the fetch).
   // If the row is new (not yet in DB), createRow will handle saving it when
   // the user finishes typing — we must NOT trigger a second create here.
-  const handleFetchComplete = useCallback(
-    (row: InfluencerRow) => {
-      if (!brandId || !rowHasHandle(row)) return
+const handleFetchComplete = useCallback(
+  (row: InfluencerRow) => {
+    if (!brandId || !rowHasHandle(row)) return
 
-      if (dbIds.current.has(row.id)) {
-        // Row already exists — just update the enriched fields
-        const existing = updateTimers.current.get(row.id)
-        if (existing) clearTimeout(existing)
-        putQueue.current.enqueue({
-          url: `/api/brand/${brandId}/influencers/${row.id}`,
-          payload: JSON.stringify(buildUpdatePayload(row)),
-        })
-      }
-      // If NOT in dbIds: this is a new row mid-creation. The handle-blur in
-      // applyCellValue will trigger createRow via handleRowsChange once the
-      // platform is also set. Don't double-create here.
-    },
-    [brandId]
-  )
+    if (dbIds.current.has(row.id)) {
+      // Row already exists — just update the enriched fields
+      const existing = updateTimers.current.get(row.id)
+      if (existing) clearTimeout(existing)
+      putQueue.current.enqueue({
+        url: `/api/brand/${brandId}/influencers/${row.id}`,
+        payload: JSON.stringify(buildUpdatePayload(row)),
+      })
+    } else {
+      // New row that was just enriched by Instroom — create it now
+      // We have all the data (handle, platform, stats) so save immediately
+      createRow(row)
+    }
+  },
+  [brandId, createRow]
+)
 
   // ── onRowsChange — user edited something in the table ─────────────────────
-  const handleRowsChange = useCallback(
-    (updatedRows: InfluencerRow[]) => {
-      if (!readyToSave.current) return
+    const handleRowsChange = useCallback(
+      (updatedRows: InfluencerRow[]) => {
+        if (!readyToSave.current) return
 
-      updatedRows.forEach((row) => {
-        if (!rowHasHandle(row)) return
+        updatedRows.forEach((row) => {
+          if (!rowHasHandle(row)) return
 
-        if (dbIds.current.has(row.id)) {
-          scheduleUpdate(row)
-        } else {
-          // FIX 1: Only auto-create for non-API platforms (youtube, twitter, other).
-          // For instagram/tiktok, autoFetchInfluencer fires first; createRow is
-          // called from handleFetchComplete ONLY after the API enriches the row.
-          // This prevents the double-create race condition.
-          const isApiPlatform =
-            row.platform === "instagram" || row.platform === "tiktok"
-          if (!isApiPlatform) createRow(row)
-        }
-      })
-    },
-    [scheduleUpdate, createRow]
-  )
+          if (dbIds.current.has(row.id)) {
+            scheduleUpdate(row)
+          } else {
+            // For non-API platforms, create immediately
+            // For Instagram/TikTok, handleFetchComplete will trigger createRow after enrichment
+            const isApiPlatform = row.platform === "instagram" || row.platform === "tiktok"
+            if (!isApiPlatform) {
+              createRow(row)
+            }
+            // Instagram/TikTok rows will be saved by handleFetchComplete after Instroom enriches them
+          }
+        })
+      },
+      [scheduleUpdate, createRow]
+    )
 
   // ── FIX 3: onImportRows — batch save all imported rows ───────────────────
   // Import bypasses readyToSave and the platform guard because imported rows

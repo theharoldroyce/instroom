@@ -154,6 +154,8 @@ export function useClosedData(brandId?: string): UseClosedDataReturn {
       }
 
       const json = await res.json()
+      console.log("API Response Data:", json.data); // Log to verify API response
+
       const raw = json.data || []
 
       const validStatuses: ClosedColumn[] = [
@@ -165,17 +167,30 @@ export function useClosedData(brandId?: string): UseClosedDataReturn {
       ]
 
       const mapped = raw.map((inf: any) => {
-        let closedStatus = validStatuses.includes(inf.closedStatus)
-          ? inf.closedStatus
-          : "For Order Creation"
+        let closedStatus: ClosedColumn = "For Order Creation"
 
-        return {
+        if (inf.contact_status === "not_interested") {
+          closedStatus = "No post"
+        } else if (inf.stage === 5) {
+          closedStatus = "For Order Creation"
+        } else if (inf.stage === 6) {
+          closedStatus = "In-Transit"
+        } else if (inf.stage === 7) {
+          closedStatus = "Delivered"
+        } else if (inf.stage === 8) {
+          closedStatus = "Posted"
+        }
+
+        const mappedItem = {
           ...inf,
           closedStatus,
           ...inferContentStatuses(inf),
         }
+
+        return mappedItem
       })
 
+      console.log("Mapped Data:", mapped); // Log the mapped data
       setData(mapped)
     } catch (err: any) {
       console.error("Fetch error:", err)
