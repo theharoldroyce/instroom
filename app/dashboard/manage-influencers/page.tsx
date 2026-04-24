@@ -4,6 +4,8 @@
 import { useState, useRef, Suspense, useCallback, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { useSession } from "next-auth/react"
+import { SubscriptionGate } from "@/components/ui/subscription-gate"
 
 import TableSheet, {
   type InfluencerRow,
@@ -126,11 +128,64 @@ function createPutQueue() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// NoBrandSelected — empty state shown when no brandId is in the URL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function NoBrandSelected() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex flex-col items-center gap-5 max-w-sm w-full px-6 text-center">
+        {/* Icon */}
+        <div className="w-14 h-14 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">
+          <svg
+            className="w-7 h-7 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
+            />
+          </svg>
+        </div>
+
+        {/* Text */}
+        <div className="flex flex-col gap-1.5">
+          <h2 className="text-base font-semibold text-gray-900">No brand selected</h2>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            Choose a brand from the dropdown above to view and manage its influencers.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function InfluencersContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const rawBrandId = searchParams.get("brandId")
+  const { data: session } = useSession()
+
+  // ── Subscription gate ──────────────────────────────────────────────────────
+  // null = still loading (no flash), true/false = resolved
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (!session?.user?.id) return
+    fetch("/api/subscription/status")
+      .then(res => res.json())
+      .then(data => {
+        setIsSubscribed(data.status === "active" && !data.isExpired)
+      })
+      .catch(() => setIsSubscribed(false))
+  }, [session?.user?.id])
+  // ──────────────────────────────────────────────────────────────────────────
   const brandId = rawBrandId?.trim() || null
 
   const { rows, customColumns, isLoading, error, setCustomColumns } =
@@ -196,12 +251,9 @@ function InfluencersContent() {
   }, [isLoading, rows, brandId])
 
   // ── Prevent PUT storm on mount ────────────────────────────────────────────
-  // FIX 1: readyToSave only gates EDIT-triggered saves, not import saves.
-  // We expose a separate importSave path that bypasses this guard.
   const readyToSave = useRef(false)
   useEffect(() => {
     if (!isLoading) {
-      // Wait a tick after loading finishes — whether there are rows or not.
       const t = setTimeout(() => {
         readyToSave.current = true
       }, 800)
@@ -215,9 +267,6 @@ function InfluencersContent() {
   // per-row debounce timers
   const updateTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
-  // FIX 1: Track which handles we've ALREADY created so the Instroom API
-  // re-fetch (autoFetchInfluencer) doesn't re-create a row that was just
-  // fetched on load.  Key = "handle@platform".
   const createdHandles = useRef<Set<string>>(new Set())
   const idSwapCallback = useRef<((tempId: string, realId: string) => void) | null>(null)
 
@@ -290,7 +339,6 @@ function InfluencersContent() {
           if (!skipToast) toast.success(`@${handle} added`)
           return realId
         } else if (res.status === 409) {
-          // Already exists globally — link it to this brand
           const body = await res.json().catch(() => ({}))
           const existingId: string = body.id || body.influencer_id || row.id
           dbIds.current.add(existingId)
@@ -317,58 +365,44 @@ function InfluencersContent() {
     [brandId]
   )
 
-  // ── FIX 1: onFetchComplete — Instroom API enriched a row ─────────────────
-  // ONLY save if the row is ALREADY in dbIds (i.e. it existed before the fetch).
-  // If the row is new (not yet in DB), createRow will handle saving it when
-  // the user finishes typing — we must NOT trigger a second create here.
-const handleFetchComplete = useCallback(
-  (row: InfluencerRow) => {
-    if (!brandId || !rowHasHandle(row)) return
+  // ── onFetchComplete ───────────────────────────────────────────────────────
+  const handleFetchComplete = useCallback(
+    (row: InfluencerRow) => {
+      if (!brandId || !rowHasHandle(row)) return
 
-    if (dbIds.current.has(row.id)) {
-      // Row already exists — just update the enriched fields
-      const existing = updateTimers.current.get(row.id)
-      if (existing) clearTimeout(existing)
-      putQueue.current.enqueue({
-        url: `/api/brand/${brandId}/influencers/${row.id}`,
-        payload: JSON.stringify(buildUpdatePayload(row)),
-      })
-    } else {
-      // New row that was just enriched by Instroom — create it now
-      // We have all the data (handle, platform, stats) so save immediately
-      createRow(row)
-    }
-  },
-  [brandId, createRow]
-)
-
-  // ── onRowsChange — user edited something in the table ─────────────────────
-    const handleRowsChange = useCallback(
-      (updatedRows: InfluencerRow[]) => {
-        if (!readyToSave.current) return
-
-        updatedRows.forEach((row) => {
-          if (!rowHasHandle(row)) return
-
-          if (dbIds.current.has(row.id)) {
-            scheduleUpdate(row)
-          } else {
-            // For non-API platforms, create immediately
-            // For Instagram/TikTok, handleFetchComplete will trigger createRow after enrichment
-            const isApiPlatform = row.platform === "instagram" || row.platform === "tiktok"
-            if (!isApiPlatform) {
-              createRow(row)
-            }
-            // Instagram/TikTok rows will be saved by handleFetchComplete after Instroom enriches them
-          }
+      if (dbIds.current.has(row.id)) {
+        const existing = updateTimers.current.get(row.id)
+        if (existing) clearTimeout(existing)
+        putQueue.current.enqueue({
+          url: `/api/brand/${brandId}/influencers/${row.id}`,
+          payload: JSON.stringify(buildUpdatePayload(row)),
         })
-      },
-      [scheduleUpdate, createRow]
-    )
+      }
+    },
+    [brandId]
+  )
 
-  // ── FIX 3: onImportRows — batch save all imported rows ───────────────────
-  // Import bypasses readyToSave and the platform guard because imported rows
-  // already have a handle and we want them all saved immediately.
+  // ── onRowsChange ──────────────────────────────────────────────────────────
+  const handleRowsChange = useCallback(
+    (updatedRows: InfluencerRow[]) => {
+      if (!readyToSave.current) return
+
+      updatedRows.forEach((row) => {
+        if (!rowHasHandle(row)) return
+
+        if (dbIds.current.has(row.id)) {
+          scheduleUpdate(row)
+        } else {
+          const isApiPlatform =
+            row.platform === "instagram" || row.platform === "tiktok"
+          if (!isApiPlatform) createRow(row)
+        }
+      })
+    },
+    [scheduleUpdate, createRow]
+  )
+
+  // ── onImportRows ──────────────────────────────────────────────────────────
   const handleImportRows = useCallback(
     async (importedRows: InfluencerRow[]) => {
       if (!brandId) return
@@ -379,13 +413,12 @@ const handleFetchComplete = useCallback(
       let savedCount = 0
       let skippedCount = 0
 
-      // Save concurrently in batches of 5 to avoid overwhelming the server
       const BATCH = 5
       for (let i = 0; i < validRows.length; i += BATCH) {
         const batch = validRows.slice(i, i + BATCH)
         await Promise.all(
           batch.map(async (row) => {
-            const realId = await createRow(row, true /* skipToast */)
+            const realId = await createRow(row, true)
             if (realId) {
               savedCount++
             } else {
@@ -458,20 +491,7 @@ const handleFetchComplete = useCallback(
   // ─────────────────────────────────────────────────────────────────────────
 
   if (!brandId) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-gray-600 mb-2 font-medium">No brand selected</p>
-          <p className="text-sm text-gray-500">
-            Add{" "}
-            <code className="bg-gray-100 px-1 rounded text-xs">
-              ?brandId=your-brand-id
-            </code>{" "}
-            to the URL
-          </p>
-        </div>
-      </div>
-    )
+    return <NoBrandSelected />
   }
 
   if (error) {
@@ -536,6 +556,11 @@ const handleFetchComplete = useCallback(
   }
 
   return (
+    <SubscriptionGate
+      isSubscribed={isSubscribed}
+      featureName="the influencers list"
+      plans={["Solo", "Team"]}
+    >
     <div className="flex flex-col gap-4 p-4">
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
@@ -578,6 +603,7 @@ const handleFetchComplete = useCallback(
         workspaceName={selectedBrandName}
       />
     </div>
+    </SubscriptionGate>
   )
 }
 

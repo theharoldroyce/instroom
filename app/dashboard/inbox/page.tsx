@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { signIn } from "next-auth/react"
+import { signIn, useSession } from "next-auth/react"
+import { SubscriptionGate } from "@/components/ui/subscription-gate"
 import {
   IconMail,
   IconSearch,
@@ -68,7 +69,7 @@ type Email = {
   message: string
   date: string
   timestamp: string
-  status: PipelineStage
+  status: PipelineStage | null
   read: boolean
   starred: boolean
   orderId?: string
@@ -109,6 +110,29 @@ const stageConfigs: StageConfig[] = [
   { id: "REJECTED", label: "Rejected", icon: <IconReject size={16} />, color: "text-red-700", bgColor: "bg-red-100", activeBgColor: "bg-red-600", hoverBgColor: "hover:bg-red-500", borderColor: "border-red-300", arrowColor: "#fee2e2" },
 ]
 
+// ─── Pipeline Status Resolver ─────────────────────────────────────────────────
+
+function getPipelineStatus(bi?: {
+  contact_status?: string | null
+  content_posted?: boolean | null
+  stage?: number | null
+  order_status?: string | null
+} | null): PipelineStage | null {
+  if (!bi) return null
+  const { contact_status, content_posted, stage, order_status } = bi
+  if (contact_status && ["not_interested", "no_response", "email_error"].includes(contact_status)) return "REJECTED"
+  if (content_posted) return "POSTED"
+  if (stage === 4) return "COMPLETED"
+  if (order_status === "delivered") return "DELIVERED"
+  if (order_status === "in_transit") return "IN_TRANSIT"
+  if (order_status && ["not_sent", "sent_to_email"].includes(order_status)) return "FOR_ORDER_CREATION"
+  if (contact_status === "agreed") return "ONBOARDED"
+  if (contact_status && ["responded", "replied", "negotiating"].includes(contact_status)) return "IN_CONVERSATION"
+  if (contact_status === "contacted") return "REACHED_OUT"
+  if (stage === 1) return "PROSPECT"
+  return null
+}
+
 // ─── Gmail Thread → Email Mapper ──────────────────────────────────────────────
 
 function mapGmailThreadToEmail(thread: any, index: number): Email {
@@ -136,8 +160,7 @@ function mapGmailThreadToEmail(thread: any, index: number): Email {
     }
   })
 
-  const stages: PipelineStage[] = ["PROSPECT", "REACHED_OUT", "IN_CONVERSATION", "ONBOARDED", "COMPLETED"]
-  const status: PipelineStage = stages[index % stages.length]
+  const status = getPipelineStatus(thread.brandInfluencer)
 
   const timestamp = firstMsg.date || new Date().toISOString()
 
@@ -178,6 +201,23 @@ function formatRelativeDate(timestamp: string): string {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function InboxPage() {
+  const { data: session } = useSession()
+
+  // ── Subscription gate ──────────────────────────────────────────────────────
+  // null = still loading (no flash), true/false = resolved
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (!session?.user?.id) return
+    fetch("/api/subscription/status")
+      .then(res => res.json())
+      .then(data => {
+        setIsSubscribed(data.status === "active" && !data.isExpired)
+      })
+      .catch(() => setIsSubscribed(false))
+  }, [session?.user?.id])
+  // ──────────────────────────────────────────────────────────────────────────
+
   const [emails, setEmails] = useState<Email[]>([])
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
   const [selectedStage, setSelectedStage] = useState<PipelineStage | "ALL">("ALL")
@@ -341,12 +381,30 @@ export default function InboxPage() {
     setEmails((prev) => prev.map((email) => (email.id === id ? { ...email, read: true } : email)))
   }
 
-  const updateEmailStage = (emailId: number | string, newStage: PipelineStage) => {
+  const updateEmailStage = async (emailId: number | string, newStage: PipelineStage) => {
+    // 1. Optimistically update UI
     setEmails((prev) => prev.map((email) => (email.id === emailId ? { ...email, status: newStage } : email)))
     if (selectedEmail?.id === emailId) {
       setSelectedEmail((prev) => (prev ? { ...prev, status: newStage } : null))
     }
     setUpdateStageModal({ open: false, email: null })
+
+    // 2. Persist to DB
+    const email = emails.find((e) => e.id === emailId)
+    if (!email?.fromEmail) return
+    try {
+      const res = await fetch("/api/inbox/stage", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderEmail: email.fromEmail, stage: newStage }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        console.error("Failed to save stage:", data?.error)
+      }
+    } catch (err) {
+      console.error("Failed to save stage:", err)
+    }
   }
 
   const sendReply = async () => {
@@ -426,12 +484,14 @@ export default function InboxPage() {
     }
   }
 
-  const getStatusBadge = (status: PipelineStage) => {
+  const getStatusBadge = (status: PipelineStage | null) => {
+    if (!status) return null
     const config = stageConfigs.find((s) => s.id === status)
+    if (!config) return null
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${config?.bgColor} ${config?.color}`}>
-        {config?.icon}
-        {config?.label}
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${config.bgColor} ${config.color}`}>
+        {config.icon}
+        {config.label}
       </span>
     )
   }
@@ -444,6 +504,11 @@ export default function InboxPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
+    <SubscriptionGate
+      isSubscribed={isSubscribed}
+      featureName="the inbox"
+      plans={["Solo", "Team"]}
+    >
     <div className="flex flex-col h-screen bg-gray-50">
 
       {/* ── PIPELINE BAR ── */}
@@ -706,7 +771,7 @@ export default function InboxPage() {
                           {email.subject}
                         </p>
                         <p className="text-xs text-gray-400 truncate mt-0.5">{email.preview}</p>
-                        <div className="mt-1.5">{getStatusBadge(email.status)}</div>
+                        {getStatusBadge(email.status) && <div className="mt-1.5">{getStatusBadge(email.status)}</div>}
                       </div>
 
                       <button onClick={(e) => toggleStar(email.id, e)} className="flex-shrink-0 mt-0.5 transition-opacity hover:opacity-80">
@@ -761,18 +826,7 @@ export default function InboxPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button className="hidden sm:block p-2 rounded-lg hover:bg-gray-100 transition-colors"><IconPhone size={18} className="text-gray-600" /></button>
-                    <button className="hidden sm:block p-2 rounded-lg hover:bg-gray-100 transition-colors"><IconVideo size={18} className="text-gray-600" /></button>
-                    <div className="hidden sm:block w-px h-6 bg-gray-200 mx-1" />
-                    <button className="hidden sm:block p-2 rounded-lg hover:bg-gray-100 transition-colors"><IconArchive size={18} className="text-gray-600" /></button>
-                    <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors"><IconTrash size={18} className="text-gray-600" /></button>
-                    <button className="hidden sm:block p-2 rounded-lg hover:bg-gray-100 transition-colors"><IconMail size={18} className="text-gray-600" /></button>
-                    <div className="w-px h-6 bg-gray-200 mx-1 hidden sm:block" />
-                    <button onClick={() => setShowActions(!showActions)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors relative">
-                      <IconDotsVertical size={18} className="text-gray-600" />
-                    </button>
-                  </div>
+                  {/* Action buttons hidden — no functions yet */}
                 </div>
 
                 <div className="px-4 md:px-6 py-2 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center gap-2">
@@ -780,18 +834,7 @@ export default function InboxPage() {
                     <IconUserCheck size={14} />
                     <span className="hidden sm:inline">Update Stage</span>
                   </button>
-                  <button className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                    <IconBell size={14} />
-                    <span className="hidden sm:inline">Reminder</span>
-                  </button>
-                  <button className="hidden sm:flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                    <IconFlag size={14} />
-                    Label
-                  </button>
-                  <button className="hidden md:flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                    <IconMailForward size={14} />
-                    Forward
-                  </button>
+                  {/* Reminder, Label, Forward hidden — no functions yet */}
                 </div>
 
                 {showActions && (
@@ -1041,5 +1084,6 @@ export default function InboxPage() {
         .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
       `}</style>
     </div>
+    </SubscriptionGate>
   )
 }

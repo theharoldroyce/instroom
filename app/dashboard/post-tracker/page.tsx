@@ -2,8 +2,9 @@
 
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import {
   DndContext,
   DragOverlay,
@@ -42,6 +43,7 @@ import {
   type PaidCollabData,
   type CollabDeliverable,
 } from "@/hooks/useClosedData"
+import { SubscriptionGate } from "@/components/ui/subscription-gate"
 
 // ─── Filter constants ────────────────────────────────────────────────────────
 const NICHES = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech", "Fashion", "Travel"]
@@ -111,7 +113,6 @@ function getAvatarColor(name: string) {
 
 function formatNumber(num: number | string | null | undefined): string {
   if (!num && num !== 0) return "—"
-  
   let numericValue: number
   if (typeof num === "string") {
     const cleaned = num.replace(/[^0-9.]/g, "")
@@ -119,13 +120,11 @@ function formatNumber(num: number | string | null | undefined): string {
   } else {
     numericValue = num
   }
-  
   if (isNaN(numericValue)) return "—"
-  
-  return numericValue >= 1000000 
-    ? (numericValue / 1000000).toFixed(1) + "M" 
-    : numericValue >= 1000 
-      ? (numericValue / 1000).toFixed(0) + "K" 
+  return numericValue >= 1000000
+    ? (numericValue / 1000000).toFixed(1) + "M"
+    : numericValue >= 1000
+      ? (numericValue / 1000).toFixed(0) + "K"
       : numericValue.toString()
 }
 
@@ -137,8 +136,8 @@ function getFollowerNumber(inf: ClosedInfluencer): number {
 function DroppableColumn({ id, children, isExit }: { id: string; children: React.ReactNode; isExit?: boolean }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div 
-      ref={setNodeRef} 
+    <div
+      ref={setNodeRef}
       className={`flex flex-col gap-3 transition-all rounded-lg ${isOver ? (isExit ? "bg-red-50 ring-2 ring-red-300" : "bg-green-50 ring-2 ring-[#1FAE5B]") : ""}`}
     >
       {children}
@@ -863,6 +862,22 @@ function ProfileDrawer({
 export default function ClosedPage() {
   const params  = useParams()
   const brandId = params?.brandId as string | undefined
+  const { data: session } = useSession()
+
+  // ── Subscription gate ──────────────────────────────────────────────────────
+  // null = still loading (no flash), true/false = resolved
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (!session?.user?.id) return
+    fetch("/api/subscription/status")
+      .then(res => res.json())
+      .then(data => {
+        setIsSubscribed(data.status === "active" && !data.isExpired)
+      })
+      .catch(() => setIsSubscribed(false))
+  }, [session?.user?.id])
+  // ──────────────────────────────────────────────────────────────────────────
 
   const { data, isLoading, error, updateColumn, updatePaidCollab, updateCampaignType, refetch } = useClosedData(brandId)
 
@@ -887,24 +902,11 @@ export default function ClosedPage() {
     inf.handle.toLowerCase().includes(search.toLowerCase())
   )
 
-  if (selectedColumnStatus) {
-    filteredData = filteredData.filter(inf => inf.closedStatus === selectedColumnStatus)
-  }
-  if (filters.influencer) {
-    filteredData = filteredData.filter(inf => inf.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
-  }
-  if (filters.handle) {
-    filteredData = filteredData.filter(inf => inf.handle.toLowerCase().includes(filters.handle.toLowerCase()))
-  }
-  if (filters.location !== "all") {
-    filteredData = filteredData.filter(inf => inf.location === filters.location)
-  }
-  if (filters.niche !== "all") {
-    filteredData = filteredData.filter(inf => inf.niche === filters.niche)
-  }
-
-  // Log filtered data to check if data is being filtered correctly
-  console.log("Filtered Data:", filteredData)
+  if (selectedColumnStatus) filteredData = filteredData.filter(inf => inf.closedStatus === selectedColumnStatus)
+  if (filters.influencer)   filteredData = filteredData.filter(inf => inf.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
+  if (filters.handle)       filteredData = filteredData.filter(inf => inf.handle.toLowerCase().includes(filters.handle.toLowerCase()))
+  if (filters.location !== "all") filteredData = filteredData.filter(inf => inf.location === filters.location)
+  if (filters.niche !== "all")    filteredData = filteredData.filter(inf => inf.niche === filters.niche)
 
   const hasActiveFilters = filters.influencer !== "" || filters.handle !== "" || filters.location !== "all" || filters.niche !== "all" || search !== "" || selectedColumnStatus !== null
 
@@ -938,7 +940,6 @@ export default function ClosedPage() {
   const handleColumnClick = (column: typeof COLUMNS[0]) => {
     setSelectedColumnStatus(column.key)
     setView("list")
-    console.log(`Showing ${column.title} column`)
     showToast(`Showing "${column.title}"`)
   }
 
@@ -963,322 +964,327 @@ export default function ClosedPage() {
     </div>
   )
 
+  // ── Everything below is wrapped in SubscriptionGate ───────────────────────
   return (
-    <div className="flex flex-col gap-4 p-6">
-      {error && <div className="text-red-500 text-sm">{error}</div>}
-      
-      {toastMsg && (
-        <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2">
-          {toastMsg}
-        </div>
-      )}
+    <SubscriptionGate
+      isSubscribed={isSubscribed}
+      featureName="Post Tracker"
+      plans={["Solo", "Team"]}
+    >
+      <div className="flex flex-col gap-4 p-6">
+        {error && <div className="text-red-500 text-sm">{error}</div>}
 
-      {/* Search */}
-      <div className="flex items-center gap-3">
-        <div className="relative w-full max-w-md">
-          <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search influencer..."
-            className="w-full pl-9 pr-3 h-10 border border-[#0F6B3E]/20 rounded-lg outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm" />
-        </div>
-        <span className="text-sm text-gray-500 whitespace-nowrap">{filteredData.length} of {data.length} influencer{data.length !== 1 ? "s" : ""}</span>
-      </div>
+        {toastMsg && (
+          <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2">
+            {toastMsg}
+          </div>
+        )}
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
-          <div className="bg-gray-100 text-gray-700 px-4 py-1.5 rounded-full text-sm font-medium">Follow up 0</div>
+        {/* Search */}
+        <div className="flex items-center gap-3">
+          <div className="relative w-full max-w-md">
+            <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search influencer..."
+              className="w-full pl-9 pr-3 h-10 border border-[#0F6B3E]/20 rounded-lg outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm" />
+          </div>
+          <span className="text-sm text-gray-500 whitespace-nowrap">{filteredData.length} of {data.length} influencer{data.length !== 1 ? "s" : ""}</span>
         </div>
-        <div className="flex gap-2">
-          <div className="relative">
-            <button onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 border ${hasActiveFilters ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20"}`}>
-              <IconFilter size={16} /> Filters
-            </button>
-            {showFilterPanel && (
-              <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[340px] p-5">
-                <div className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Filter by</div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Influencer</label>
-                    <input type="text" value={filters.influencer} onChange={(e) => setFilters((p) => ({ ...p, influencer: e.target.value }))} placeholder="Search by name..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Handle</label>
-                    <input type="text" value={filters.handle} onChange={(e) => setFilters((p) => ({ ...p, handle: e.target.value }))} placeholder="@username..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Location</label>
-                    <select value={filters.location} onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
-                      <option value="all">All Locations</option>
-                      {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Niche</label>
-                    <select value={filters.niche} onChange={(e) => setFilters((p) => ({ ...p, niche: e.target.value }))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
-                      <option value="all">All Niches</option>
-                      {NICHES.map((n) => <option key={n}>{n}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-3 mt-5">
-                  <button className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition" onClick={() => setFilters({ influencer: "", handle: "", location: "all", niche: "all" })}>Clear all</button>
-                  <button className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition" onClick={() => setShowFilterPanel(false)}>Apply</button>
-                </div>
-              </div>
-            )}
+
+        {/* Toolbar */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="bg-gray-100 text-gray-700 px-4 py-1.5 rounded-full text-sm font-medium">Follow up 0</div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => { setView("Board"); setSelectedColumnStatus(null) }}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "Board" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
-              <IconLayoutKanban size={16} /> Board
-            </button>
-            <button onClick={() => { setView("list"); setSelectedColumnStatus(null) }}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "list" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
-              <IconList size={16} /> List
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* KANBAN VIEW */}
-      {view === "Board" && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
-            <div className="flex gap-4 min-w-max">
-              {/* MAIN COLUMNS (non-exit) */}
-              {COLUMNS.filter(c => c.key !== "No post").map(col => {
-                const items = getItemsByColumn(col.key)
-                console.log(`${col.title} Items:`, items) // Log the items for each column
-                return (
-                  <div key={col.key} className="w-[240px] flex-shrink-0">
-                    <DroppableColumn id={col.key}>
-                      <div
-                        onClick={() => handleColumnClick(col)}
-                        className={`${col.color} text-white rounded-xl px-3 py-2.5 text-sm font-semibold cursor-pointer hover:opacity-90 transition flex items-center justify-between`}
-                      >
-                        <span>{col.title}</span>
-                        <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
-                      </div>
-                      <div className="mt-1 mb-2">
-                        <p className="text-[10px] text-gray-400">{col.description}</p>
-                      </div>
-                      <div className="flex flex-col gap-2 min-h-[400px]">
-                        {items.length === 0 ? (
-                          <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-xs text-gray-400">
-                            Drop here
-                          </div>
-                        ) : (
-                          items.map(inf => (
-                            <DraggableCard
-                              key={inf.id}
-                              id={inf.id}
-                              onClick={() => setSelectedInf(inf)}
-                            >
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
-                                  <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
-                                </div>
-                                <CampaignBadge type={inf.campaignType} />
-                              </div>
-                              <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
-                                <span>{inf.platform || "Instagram"}</span>
-                                <span>•</span>
-                                <span>{inf.followers} followers</span>
-                              </div>
-                              {inf.closedStatus === "Delivered" && !inf.postedAt && (
-                                <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded-lg px-2 py-1 inline-block">
-                                  ⚠️ Awaiting content
-                                </div>
-                              )}
-                              {inf.closedStatus === "Posted" && inf.postUrl && (
-                                <div className="mt-2 text-[10px] text-green-600 truncate">
-                                  🔗 {inf.postUrl}
-                                </div>
-                              )}
-                            </DraggableCard>
-                          ))
-                        )}
-                      </div>
-                    </DroppableColumn>
+            <div className="relative">
+              <button onClick={() => setShowFilterPanel(!showFilterPanel)}
+                className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 border ${hasActiveFilters ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20"}`}>
+                <IconFilter size={16} /> Filters
+              </button>
+              {showFilterPanel && (
+                <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[340px] p-5">
+                  <div className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Filter by</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-gray-500">Influencer</label>
+                      <input type="text" value={filters.influencer} onChange={(e) => setFilters((p) => ({ ...p, influencer: e.target.value }))} placeholder="Search by name..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-gray-500">Handle</label>
+                      <input type="text" value={filters.handle} onChange={(e) => setFilters((p) => ({ ...p, handle: e.target.value }))} placeholder="@username..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-gray-500">Location</label>
+                      <select value={filters.location} onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
+                        <option value="all">All Locations</option>
+                        {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-gray-500">Niche</label>
+                      <select value={filters.niche} onChange={(e) => setFilters((p) => ({ ...p, niche: e.target.value }))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
+                        <option value="all">All Niches</option>
+                        {NICHES.map((n) => <option key={n}>{n}</option>)}
+                      </select>
+                    </div>
                   </div>
-                )
-              })}
-
-              {/* EXIT SEPARATOR */}
-              <div className="flex flex-col items-center justify-center px-3 flex-shrink-0">
-                <div className="h-16 w-px bg-gray-300"></div>
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider py-2">exits</span>
-                <div className="h-16 w-px bg-gray-300"></div>
-              </div>
-
-              {/* NO POST COLUMN (exit) */}
-              {(() => {
-                const col = COLUMNS.find(c => c.key === "No post")!
-                const items = getItemsByColumn(col.key)
-                console.log(`${col.title} Items:`, items) // Log the items for this column
-                return (
-                  <div className="w-[240px] flex-shrink-0">
-                    <DroppableColumn id={col.key} isExit={true}>
-                      <div className="bg-red-100 text-red-700 rounded-xl px-3 py-2.5 text-sm font-semibold flex items-center justify-between border border-red-200">
-                        <span>{col.title}</span>
-                        <span className="bg-red-200 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
-                      </div>
-                      <div className="mt-1 mb-2">
-                        <p className="text-[10px] text-red-400">{col.description}</p>
-                      </div>
-                      <div className="flex flex-col gap-2 min-h-[400px]">
-                        {items.length === 0 ? (
-                          <div className="border-2 border-dashed border-red-200 rounded-xl p-6 text-center text-xs text-gray-400">
-                            Drop here
-                          </div>
-                        ) : (
-                          items.map(inf => (
-                            <DraggableCard
-                              key={inf.id}
-                              id={inf.id}
-                              onClick={() => setSelectedInf(inf)}
-                            >
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
-                                  <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
-                                </div>
-                                <CampaignBadge type={inf.campaignType} />
-                              </div>
-                              <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
-                                <span>{inf.platform || "Instagram"}</span>
-                                <span>•</span>
-                                <span>{inf.followers} followers</span>
-                              </div>
-                              <div className="mt-2 text-[10px] text-red-500 bg-red-50 rounded-lg px-2 py-1 inline-block">
-                                ✕ No content published
-                              </div>
-                            </DraggableCard>
-                          ))
-                        )}
-                      </div>
-                    </DroppableColumn>
+                  <div className="flex items-center justify-end gap-3 mt-5">
+                    <button className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition" onClick={() => setFilters({ influencer: "", handle: "", location: "all", niche: "all" })}>Clear all</button>
+                    <button className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition" onClick={() => setShowFilterPanel(false)}>Apply</button>
                   </div>
-                )
-              })()}
+                </div>
+              )}
             </div>
-          </div>
-
-          {/* DRAG OVERLAY */}
-          <DragOverlay>
-            {activeInf && (
-              <div className="bg-white border border-[#1FAE5B] rounded-xl p-3 shadow-lg w-[220px] ring-2 ring-[#1FAE5B]/20">
-                <div className="font-semibold text-sm text-gray-900">{activeInf.influencer}</div>
-                <div className="text-xs text-gray-500 mt-0.5">@{activeInf.handle}</div>
-                <div className="text-[11px] text-gray-400 mt-1">{activeInf.platform}</div>
-              </div>
-            )}
-          </DragOverlay>
-        </DndContext>
-      )}
-
-      {/* LIST VIEW */}
-      {view === "list" && (
-        <div className="bg-white border rounded-xl overflow-hidden">
-          {selectedColumnStatus && selectedColumnInfo && (
-            <div className={`${selectedColumnInfo.color} px-4 py-3 text-white flex items-center justify-between`}>
-              <div className="flex items-center gap-2">
-                <IconLayoutList size={20} />
-                <span className="font-semibold">{selectedColumnInfo.title} Column</span>
-                <span className="text-sm bg-white/20 px-2 py-1 rounded">{filteredData.length} influencers</span>
-              </div>
-              <button onClick={clearColumnFilter} className="text-white hover:bg-white/20 px-2 py-1 rounded transition flex items-center gap-1">
-                <IconX size={16} /> Clear filter
+            <div className="flex gap-2">
+              <button onClick={() => { setView("Board"); setSelectedColumnStatus(null) }}
+                className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "Board" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
+                <IconLayoutKanban size={16} /> Board
+              </button>
+              <button onClick={() => { setView("list"); setSelectedColumnStatus(null) }}
+                className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "list" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
+                <IconList size={16} /> List
               </button>
             </div>
-          )}
-          <div style={{ overflowX: "auto" }}>
-            <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Influencer</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Platform</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Handle</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Followers</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Engagement</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Niche</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Type</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredData.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No influencers found matching your filters</td></tr>
-                ) : (
-                  filteredData.map(inf => (
-                    <tr key={inf.id} className="border-t hover:bg-gray-50 cursor-pointer transition" onClick={() => setSelectedInf(inf)}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          {inf.profileImageUrl ? (
-                            <img src={inf.profileImageUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                          ) : (
-                            <div className={`w-8 h-8 rounded-full flex-shrink-0 ${getAvatarColor(inf.influencer)} bg-opacity-20 flex items-center justify-center text-[#0F6B3E] font-semibold text-xs`}>
-                              {inf.influencer.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <span className="font-medium">{inf.influencer}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3"><span>{inf.platform || "Instagram"}</span></td>
-                      <td className="px-4 py-3 text-[#0F6B3E] font-medium">@{inf.handle}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1"><IconLocation size={14} className="text-gray-400" />{inf.location || "—"}</div>
-                      </td>
-                      <td className="px-4 py-3">{inf.followers}</td>
-                      <td className="px-4 py-3">{inf.engagementRate || "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">{inf.niche || "—"}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <CampaignBadge type={inf.campaignType} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <select
-                            className="text-[11px] px-2 py-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 font-medium outline-none cursor-pointer"
-                            value={inf.closedStatus}
-                            onChange={async (e) => {
-                              const newStatus = e.target.value as ClosedColumn
-                              const ok = await updateColumn(inf.id, newStatus)
-                              if (ok) showToast(`${inf.influencer} moved to ${newStatus}`)
-                            }}
-                          >
-                            {COLUMNS.map(c => <option key={c.key} value={c.key}>{c.title}</option>)}
-                          </select>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
         </div>
-      )}
 
-      {/* Profile Drawer */}
-      {selectedInf && (
-        <ProfileDrawer
-          inf={selectedInf}
-          onClose={() => setSelectedInf(null)}
-          onColumnChange={updateColumn}
-          onPaidCollabSave={updatePaidCollab}
-          onCampaignTypeChange={handleCampaignTypeChange}
-        />
-      )}
-    </div>
+        {/* KANBAN VIEW */}
+        {view === "Board" && (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
+              <div className="flex gap-4 min-w-max">
+                {/* MAIN COLUMNS (non-exit) */}
+                {COLUMNS.filter(c => c.key !== "No post").map(col => {
+                  const items = getItemsByColumn(col.key)
+                  return (
+                    <div key={col.key} className="w-[240px] flex-shrink-0">
+                      <DroppableColumn id={col.key}>
+                        <div
+                          onClick={() => handleColumnClick(col)}
+                          className={`${col.color} text-white rounded-xl px-3 py-2.5 text-sm font-semibold cursor-pointer hover:opacity-90 transition flex items-center justify-between`}
+                        >
+                          <span>{col.title}</span>
+                          <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                        </div>
+                        <div className="mt-1 mb-2">
+                          <p className="text-[10px] text-gray-400">{col.description}</p>
+                        </div>
+                        <div className="flex flex-col gap-2 min-h-[400px]">
+                          {items.length === 0 ? (
+                            <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-xs text-gray-400">
+                              Drop here
+                            </div>
+                          ) : (
+                            items.map(inf => (
+                              <DraggableCard
+                                key={inf.id}
+                                id={inf.id}
+                                onClick={() => setSelectedInf(inf)}
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
+                                    <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
+                                  </div>
+                                  <CampaignBadge type={inf.campaignType} />
+                                </div>
+                                <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
+                                  <span>{inf.platform || "Instagram"}</span>
+                                  <span>•</span>
+                                  <span>{inf.followers} followers</span>
+                                </div>
+                                {inf.closedStatus === "Delivered" && !inf.postedAt && (
+                                  <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded-lg px-2 py-1 inline-block">
+                                    ⚠️ Awaiting content
+                                  </div>
+                                )}
+                                {inf.closedStatus === "Posted" && inf.postUrl && (
+                                  <div className="mt-2 text-[10px] text-green-600 truncate">
+                                    🔗 {inf.postUrl}
+                                  </div>
+                                )}
+                              </DraggableCard>
+                            ))
+                          )}
+                        </div>
+                      </DroppableColumn>
+                    </div>
+                  )
+                })}
+
+                {/* EXIT SEPARATOR */}
+                <div className="flex flex-col items-center justify-center px-3 flex-shrink-0">
+                  <div className="h-16 w-px bg-gray-300"></div>
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider py-2">exits</span>
+                  <div className="h-16 w-px bg-gray-300"></div>
+                </div>
+
+                {/* NO POST COLUMN (exit) */}
+                {(() => {
+                  const col = COLUMNS.find(c => c.key === "No post")!
+                  const items = getItemsByColumn(col.key)
+                  return (
+                    <div className="w-[240px] flex-shrink-0">
+                      <DroppableColumn id={col.key} isExit={true}>
+                        <div className="bg-red-100 text-red-700 rounded-xl px-3 py-2.5 text-sm font-semibold flex items-center justify-between border border-red-200">
+                          <span>{col.title}</span>
+                          <span className="bg-red-200 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                        </div>
+                        <div className="mt-1 mb-2">
+                          <p className="text-[10px] text-red-400">{col.description}</p>
+                        </div>
+                        <div className="flex flex-col gap-2 min-h-[400px]">
+                          {items.length === 0 ? (
+                            <div className="border-2 border-dashed border-red-200 rounded-xl p-6 text-center text-xs text-gray-400">
+                              Drop here
+                            </div>
+                          ) : (
+                            items.map(inf => (
+                              <DraggableCard
+                                key={inf.id}
+                                id={inf.id}
+                                onClick={() => setSelectedInf(inf)}
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <div className="font-semibold text-sm text-gray-900">{inf.influencer}</div>
+                                    <div className="text-xs text-gray-500 mt-0.5">@{inf.handle}</div>
+                                  </div>
+                                  <CampaignBadge type={inf.campaignType} />
+                                </div>
+                                <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
+                                  <span>{inf.platform || "Instagram"}</span>
+                                  <span>•</span>
+                                  <span>{inf.followers} followers</span>
+                                </div>
+                                <div className="mt-2 text-[10px] text-red-500 bg-red-50 rounded-lg px-2 py-1 inline-block">
+                                  ✕ No content published
+                                </div>
+                              </DraggableCard>
+                            ))
+                          )}
+                        </div>
+                      </DroppableColumn>
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+
+            {/* DRAG OVERLAY */}
+            <DragOverlay>
+              {activeInf && (
+                <div className="bg-white border border-[#1FAE5B] rounded-xl p-3 shadow-lg w-[220px] ring-2 ring-[#1FAE5B]/20">
+                  <div className="font-semibold text-sm text-gray-900">{activeInf.influencer}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">@{activeInf.handle}</div>
+                  <div className="text-[11px] text-gray-400 mt-1">{activeInf.platform}</div>
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+        )}
+
+        {/* LIST VIEW */}
+        {view === "list" && (
+          <div className="bg-white border rounded-xl overflow-hidden">
+            {selectedColumnStatus && selectedColumnInfo && (
+              <div className={`${selectedColumnInfo.color} px-4 py-3 text-white flex items-center justify-between`}>
+                <div className="flex items-center gap-2">
+                  <IconLayoutList size={20} />
+                  <span className="font-semibold">{selectedColumnInfo.title} Column</span>
+                  <span className="text-sm bg-white/20 px-2 py-1 rounded">{filteredData.length} influencers</span>
+                </div>
+                <button onClick={clearColumnFilter} className="text-white hover:bg-white/20 px-2 py-1 rounded transition flex items-center gap-1">
+                  <IconX size={16} /> Clear filter
+                </button>
+              </div>
+            )}
+            <div style={{ overflowX: "auto" }}>
+              <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Influencer</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Platform</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Handle</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Location</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Followers</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Engagement</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Niche</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Type</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredData.length === 0 ? (
+                    <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">No influencers found matching your filters</td></tr>
+                  ) : (
+                    filteredData.map(inf => (
+                      <tr key={inf.id} className="border-t hover:bg-gray-50 cursor-pointer transition" onClick={() => setSelectedInf(inf)}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            {inf.profileImageUrl ? (
+                              <img src={inf.profileImageUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                            ) : (
+                              <div className={`w-8 h-8 rounded-full flex-shrink-0 ${getAvatarColor(inf.influencer)} bg-opacity-20 flex items-center justify-center text-[#0F6B3E] font-semibold text-xs`}>
+                                {inf.influencer.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="font-medium">{inf.influencer}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3"><span>{inf.platform || "Instagram"}</span></td>
+                        <td className="px-4 py-3 text-[#0F6B3E] font-medium">@{inf.handle}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1"><IconLocation size={14} className="text-gray-400" />{inf.location || "—"}</div>
+                        </td>
+                        <td className="px-4 py-3">{inf.followers}</td>
+                        <td className="px-4 py-3">{inf.engagementRate || "—"}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">{inf.niche || "—"}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <CampaignBadge type={inf.campaignType} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <select
+                              className="text-[11px] px-2 py-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 font-medium outline-none cursor-pointer"
+                              value={inf.closedStatus}
+                              onChange={async (e) => {
+                                const newStatus = e.target.value as ClosedColumn
+                                const ok = await updateColumn(inf.id, newStatus)
+                                if (ok) showToast(`${inf.influencer} moved to ${newStatus}`)
+                              }}
+                            >
+                              {COLUMNS.map(c => <option key={c.key} value={c.key}>{c.title}</option>)}
+                            </select>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Drawer */}
+        {selectedInf && (
+          <ProfileDrawer
+            inf={selectedInf}
+            onClose={() => setSelectedInf(null)}
+            onColumnChange={updateColumn}
+            onPaidCollabSave={updatePaidCollab}
+            onCampaignTypeChange={handleCampaignTypeChange}
+          />
+        )}
+      </div>
+    </SubscriptionGate>
   )
 }
