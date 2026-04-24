@@ -24,6 +24,7 @@ model User {
 
   onboarding   Onboarding?
   subscription UserSubscription?
+  brandMembers BrandMember[]
 }
 
 model Account {
@@ -177,6 +178,8 @@ model Brand {
 
   members      BrandMember[]
   locations    BrandLocation[]
+  influencers  BrandInfluencer[]
+  campaigns    Campaign[]
 
   @@index([owner_id])
   @@index([slug])
@@ -192,6 +195,7 @@ model BrandMember {
   updated_at DateTime @updatedAt
 
   brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([brand_id, user_id])
   @@index([user_id])
@@ -236,6 +240,8 @@ model Influencer {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
+  brandInfluencers BrandInfluencer[]
+
   @@unique([handle, platform])
   @@index([handle])
   @@index([platform])
@@ -251,6 +257,9 @@ model Campaign {
   status      String   @default("draft") @db.VarChar(20)
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
+
+  brand            Brand             @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  brandInfluencers BrandInfluencer[]
 
   @@index([brand_id])
 }
@@ -285,6 +294,10 @@ model BrandInfluencer {
   transferred_date DateTime?
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
+
+  brand      Brand      @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  influencer Influencer @relation(fields: [influencer_id], references: [id], onDelete: Cascade)
+  campaign   Campaign?  @relation(fields: [campaign_id], references: [id], onDelete: SetNull)
 
   @@unique([brand_id, influencer_id])
   @@index([brand_id])
