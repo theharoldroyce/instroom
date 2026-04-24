@@ -19,12 +19,12 @@ model User {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  onboarding Onboarding?
-  brandMembers BrandMember[]
-  sentInvitations BrandInvitation[]
-
   @@index([email])
   @@index([platform_role])
+
+  onboarding   Onboarding?
+  subscription UserSubscription?
+  brandMembers BrandMember[]
 }
 
 model Account {
@@ -128,11 +128,12 @@ model UserSubscription {
   updated_at              DateTime  @updatedAt
 
   plan SubscriptionPlan @relation(fields: [plan_id], references: [id])
+  user User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
   @@index([status])
   @@index([payment_subscription_id])
-  @@index([plan_id], map: "UserSubscription_plan_id_fkey")
+  @@index([plan_id])
 }
 
 model BrandSeatOverride {
@@ -175,10 +176,10 @@ model Brand {
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
-  members BrandMember[]
-  influencers BrandInfluencer[]
-  invitations BrandInvitation[]
-  campaigns Campaign[]
+  members      BrandMember[]
+  locations    BrandLocation[]
+  influencers  BrandInfluencer[]
+  campaigns    Campaign[]
 
   @@index([owner_id])
   @@index([slug])
@@ -194,7 +195,7 @@ model BrandMember {
   updated_at DateTime @updatedAt
 
   brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([brand_id, user_id])
   @@index([user_id])
@@ -212,9 +213,6 @@ model BrandInvitation {
   expires_at    DateTime
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
-
-  brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
-  invitedBy User @relation(fields: [invited_by_id], references: [id], onDelete: Cascade)
 
   @@unique([brand_id, email])
   @@index([token])
@@ -242,7 +240,7 @@ model Influencer {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
-  brands BrandInfluencer[]
+  brandInfluencers BrandInfluencer[]
 
   @@unique([handle, platform])
   @@index([handle])
@@ -260,8 +258,8 @@ model Campaign {
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
-  brand       Brand             @relation(fields: [brand_id], references: [id], onDelete: Cascade)
-  influencers BrandInfluencer[]
+  brand            Brand             @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  brandInfluencers BrandInfluencer[]
 
   @@index([brand_id])
 }
@@ -297,9 +295,9 @@ model BrandInfluencer {
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
 
-  brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  brand      Brand      @relation(fields: [brand_id], references: [id], onDelete: Cascade)
   influencer Influencer @relation(fields: [influencer_id], references: [id], onDelete: Cascade)
-  campaign Campaign? @relation(fields: [campaign_id], references: [id], onDelete: SetNull)
+  campaign   Campaign?  @relation(fields: [campaign_id], references: [id], onDelete: SetNull)
 
   @@unique([brand_id, influencer_id])
   @@index([brand_id])
@@ -415,4 +413,26 @@ model BrandInfluencerCustomValue {
   @@index([brand_influencer_id])
   @@index([custom_field_id])
   @@index([custom_field_id, value(length: 191)])
+}
+
+model BrandLocation {
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  brand_id   String   @db.VarChar(30)
+  name       String   @db.VarChar(150)
+  created_at DateTime @default(now()) @db.DateTime(0)
+
+  brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+
+  @@unique([brand_id, name])
+  @@index([brand_id])
+}
+
+model BrandNiche {
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  brand_id   String   @db.VarChar(30)
+  name       String   @db.VarChar(100)
+  created_at DateTime @default(now()) @db.DateTime(0)
+
+  @@unique([brand_id, name])
+  @@index([brand_id])
 }

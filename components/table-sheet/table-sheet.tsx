@@ -32,6 +32,7 @@ import {
 } from "./modals"
 import { ToastContainer } from "./toast"
 import ProfileSidebar from "./profile-sidebar"
+import { useBrandTaxonomy } from "@/hooks/useBrandTaxonomy"
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    INSTROOM API — Auto-fetch influencer data
@@ -184,9 +185,27 @@ export default function TableSheet({
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [sidebarRowId, setSidebarRowId]     = useState<string | null>(null)
 
-  // ── Options ─────────────────────────────────────────────────────────────────
-  const [nicheOptions, setNicheOptions]       = useState<string[]>(DEFAULT_NICHES)
+  // ── Options (DB-backed via useBrandTaxonomy) ─────────────────────────────────
+  const {
+    niches: dbNiches,
+    locations: dbLocations,
+    addNiche: dbAddNiche,
+    removeNiche: dbRemoveNiche,
+    addLocation: dbAddLocation,
+    removeLocation: dbRemoveLocation,
+  } = useBrandTaxonomy(brandId ?? null)
+
+  // Merge DB entries with DEFAULT fallbacks so dropdowns always have options.
+  const [nicheOptions, setNicheOptions] = useState<string[]>(DEFAULT_NICHES)
   const [locationOptions, setLocationOptions] = useState<string[]>(DEFAULT_LOCATIONS)
+
+  useEffect(() => {
+    if (dbNiches.length > 0) setNicheOptions(dbNiches.map(n => n.name))
+  }, [dbNiches])
+
+  useEffect(() => {
+    if (dbLocations.length > 0) setLocationOptions(dbLocations.map(l => l.name))
+  }, [dbLocations])
 
   // ── API fetch state ─────────────────────────────────────────────────────────
   const [fetchingRows, setFetchingRows]           = useState<Set<string>>(new Set())
@@ -698,8 +717,8 @@ export default function TableSheet({
         const uk = customCols.filter(c => c.field_type === "url").map(c => c.field_key)
         if (uk.length) { row.custom = { ...row.custom }; uk.forEach(fk => { const c = row.custom[fk] ?? ""; if (!c || c === oU) row.custom[fk] = fU }) }
       }
-      if (colKey === "niche" && cleanedValue && !nicheOptions.includes(cleanedValue)) setNicheOptions(p => [...p, cleanedValue])
-      if (colKey === "location" && cleanedValue && !locationOptions.includes(cleanedValue)) setLocationOptions(p => [...p, cleanedValue])
+      if (colKey === "niche" && cleanedValue && !nicheOptions.includes(cleanedValue)) { setNicheOptions(p => [...p, cleanedValue]); dbAddNiche(cleanedValue) }
+      if (colKey === "location" && cleanedValue && !locationOptions.includes(cleanedValue)) { setLocationOptions(p => [...p, cleanedValue]); dbAddLocation(cleanedValue) }
       next[actualRowIdx] = row; onRowsChange?.(next); return next
     })
     if (shouldFetch) autoFetchInfluencer(fetchRowId, fetchHandle, fetchPlatform)
@@ -898,8 +917,8 @@ export default function TableSheet({
           <PlatformEditor value={value} onChange={v => applyCellValue(rowIdx, col.key, v)} onClose={closeP} />
         </td>
       )
-      if (col.key === "niche") return <td key={col.key} className={`border border-gray-200 px-1.5 py-1 text-xs relative ${ringCls}`} style={{ minWidth: col.minWidth }}>{value ? <span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span> : <span className="text-gray-300">—</span>}<DropdownEditor value={value} options={nicheOptions} onChange={v => applyCellValue(rowIdx, col.key, v)} onClose={closeP} onAddOption={v => setNicheOptions(p => [...p, v])} /></td>
-      if (col.key === "location") return <td key={col.key} className={`border border-gray-200 px-1.5 py-1 text-xs relative ${ringCls}`} style={{ minWidth: col.minWidth }}>{value ? <span className="truncate block text-sm">{value}</span> : <span className="text-gray-300">—</span>}<DropdownEditor value={value} options={locationOptions} onChange={v => applyCellValue(rowIdx, col.key, v)} onClose={closeP} onAddOption={v => setLocationOptions(p => [...p, v])} /></td>
+      if (col.key === "niche") return <td key={col.key} className={`border border-gray-200 px-1.5 py-1 text-xs relative ${ringCls}`} style={{ minWidth: col.minWidth }}>{value ? <span className="inline-block px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium truncate max-w-full">{value}</span> : <span className="text-gray-300">—</span>}<DropdownEditor value={value} options={nicheOptions} onChange={v => applyCellValue(rowIdx, col.key, v)} onClose={closeP} onAddOption={v => { setNicheOptions(p => [...p, v]); dbAddNiche(v) }} /></td>
+      if (col.key === "location") return <td key={col.key} className={`border border-gray-200 px-1.5 py-1 text-xs relative ${ringCls}`} style={{ minWidth: col.minWidth }}>{value ? <span className="truncate block text-sm">{value}</span> : <span className="text-gray-300">—</span>}<DropdownEditor value={value} options={locationOptions} onChange={v => applyCellValue(rowIdx, col.key, v)} onClose={closeP} onAddOption={v => { setLocationOptions(p => [...p, v]); dbAddLocation(v) }} /></td>
       if (col.key === "approval_status") return <td key={col.key} className={`border border-gray-200 px-1.5 py-1 text-xs relative ${ringCls}`} style={{ minWidth: col.minWidth }}><ApprovalBadge value={value} /><FloatingPopup onClose={closeP}><div className="w-52 max-h-60 overflow-auto py-1">{(["Approved", "Declined", "Pending"] as const).map(o => (<button key={o} onMouseDown={e => e.preventDefault()} onClick={() => { applyCellValue(rowIdx, col.key, o); closeP() }} className={`flex items-center gap-2 w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-50 transition ${value === o ? "font-medium bg-gray-50" : "text-gray-700"}`}>{value === o && <IconCheck size={12} className="text-indigo-600 flex-shrink-0" />}<span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${APPROVAL_STYLE[o] ?? ""}`}>{o}</span></button>))}</div></FloatingPopup></td>
       if (col.key === "contact_status") return <td key={col.key} className={`border border-gray-200 px-1.5 py-1 text-xs relative ${ringCls}`} style={{ minWidth: col.minWidth }}><StatusBadge value={value} /><FloatingPopup onClose={closeP}><div className="w-52 max-h-60 overflow-auto py-1">{DEFAULT_CONTACT_STATUSES.map(o => (<button key={o.value} onMouseDown={e => e.preventDefault()} onClick={() => { applyCellValue(rowIdx, col.key, o.value); closeP() }} className={`flex items-center gap-2 w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-50 transition ${value === o.value ? "font-medium bg-gray-50" : "text-gray-700"}`}>{value === o.value && <IconCheck size={12} className="text-indigo-600 flex-shrink-0" />}<span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_STYLE[o.value] ?? ""}`}>{o.label}</span></button>))}</div></FloatingPopup></td>
       if (col.key === "gender") return <td key={col.key} className={`border border-gray-200 px-1.5 py-1 text-xs relative ${ringCls}`} style={{ minWidth: col.minWidth }}><span className="block truncate">{value || <span className="text-gray-300">—</span>}</span><FloatingPopup onClose={closeP}><div className="w-52 max-h-60 overflow-auto py-1"><button onMouseDown={e => e.preventDefault()} onClick={() => { applyCellValue(rowIdx, col.key, ""); closeP() }} className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 transition ${!value ? "text-indigo-600 font-medium" : "text-gray-400"}`}>— None —</button>{DEFAULT_GENDERS.map(g => (<button key={g} onMouseDown={e => e.preventDefault()} onClick={() => { applyCellValue(rowIdx, col.key, g); closeP() }} className={`flex items-center gap-2 w-full text-left px-2.5 py-1.5 text-xs hover:bg-gray-50 transition ${value === g ? "text-indigo-700 font-medium bg-indigo-50" : "text-gray-700"}`}>{value === g && <IconCheck size={12} className="text-indigo-600 flex-shrink-0" />}{g}</button>))}</div></FloatingPopup></td>
@@ -987,7 +1006,15 @@ export default function TableSheet({
         <ManageOptionsModal
           isOpen={showManageNiches}
           title="Manage Niches" options={nicheOptions}
-          onSave={opts => { setNicheOptions(opts); setShowManageNiches(false) }}
+          onAdd={async (name) => {
+            await dbAddNiche(name)
+            setNicheOptions(p => [...p, name])
+          }}
+          onRemove={async (name) => {
+            const match = dbNiches.find(n => n.name === name)
+            if (match) await dbRemoveNiche(match.id)
+            setNicheOptions(p => p.filter(n => n !== name))
+          }}
           onClose={() => setShowManageNiches(false)}
         />
       )}
@@ -996,7 +1023,15 @@ export default function TableSheet({
         <ManageOptionsModal
           isOpen={showManageLocations}
           title="Manage Locations" options={locationOptions}
-          onSave={opts => { setLocationOptions(opts); setShowManageLocations(false) }}
+          onAdd={async (name) => {
+            await dbAddLocation(name)
+            setLocationOptions(p => [...p, name])
+          }}
+          onRemove={async (name) => {
+            const match = dbLocations.find(l => l.name === name)
+            if (match) await dbRemoveLocation(match.id)
+            setLocationOptions(p => p.filter(l => l !== name))
+          }}
           onClose={() => setShowManageLocations(false)}
         />
       )}
@@ -1125,7 +1160,7 @@ export default function TableSheet({
       {sidebarRow && (
         <ProfileSidebar row={sidebarRow} customCols={customCols} onUpdate={handleUpdateRow} onClose={() => setSidebarRowId(null)}
           readOnly={readOnly} niches={nicheOptions} locations={locationOptions}
-          onAddNiche={v => setNicheOptions(p => [...p, v])} onAddLocation={v => setLocationOptions(p => [...p, v])}
+          onAddNiche={v => { setNicheOptions(p => [...p, v]); dbAddNiche(v) }} onAddLocation={v => { setLocationOptions(p => [...p, v]); dbAddLocation(v) }}
           onToast={addToast} brandId={brandId} />
       )}
 

@@ -1,6 +1,10 @@
 // hooks/usePipelineData.ts
+// FIXED:
+//   1. refetch() no longer sets isLoading=true (eliminates board flicker)
+//   2. On successful PATCH, we update local state directly — no refetch needed
+//   3. Only refetch (silently) on failure to restore correct server state
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 
 export interface PipelineInfluencer {
   id: string
@@ -21,10 +25,11 @@ export interface PipelineInfluencer {
   bio: string
   pipelineStatus: string
   contactStatus: string
-  stage: number
+  stage: number | null
+  orderStatus: string | null
+  contentPosted: boolean
   approvalStatus: string | null
   approvalNotes: string | null
-  // ✅ FIX: added missing fields
   niReason?: string
   addressReceived?: boolean
   agreedRate: number | null
@@ -45,89 +50,166 @@ interface UsePipelineDataReturn {
   refetch: () => void
 }
 
-// ✅ DB → UI mapping — includes For Order Creation (stage 5)
-function mapToPipelineStatus(contactStatus: string, stage: number): string {
-  if (contactStatus === "not_interested")    return "Not Interested"
-  if (contactStatus === "for_order_creation" || stage === 5) return "For Order Creation"
+function mapItem(item: any): PipelineInfluencer {
+  return {
+    id:              item.id,
+    influencerId:    item.influencerId,
+    campaignId:      item.campaignId,
+    campaignName:    item.campaignName,
+    influencer:      item.influencer,
+    instagramHandle: item.instagramHandle,
+    handle:          item.handle,
+    platform:        item.platform,
+    followers:       item.followers,
+    followerCount:   item.followerCount,
+    engagementRate:  item.engagementRate,
+    niche:           item.niche,
+    location:        item.location,
+    email:           item.email,
+    profileImageUrl: item.profileImageUrl,
+    bio:             item.bio,
+    pipelineStatus:  item.pipelineStatus,
+    contactStatus:   item.contactStatus  || item.contact_status  || "",
+    stage:           item.stage          ?? null,
+    orderStatus:     item.orderStatus    ?? null,
+    contentPosted:   item.contentPosted  ?? false,
+    approvalStatus:  item.approvalStatus ?? null,
+    approvalNotes:   item.approvalNotes  ?? null,
+    niReason:        item.approvalNotes  || undefined,
+    addressReceived: false,
+    agreedRate:      item.agreedRate     ?? null,
+    currency:        item.currency       ?? null,
+    deliverables:    item.deliverables   ?? null,
+    deadline:        item.deadline       ?? null,
+    notes:           item.notes          || "",
+    internalRating:  item.internalRating ?? null,
+    lastContact:     item.lastContact,
+    createdAt:       item.createdAt,
+  }
+}
 
-  switch (stage) {
-    case 1:  return "For Outreach"
-    case 2:  return "Contacted"
-    case 3:  return "In Conversation"
-    case 4:  return "Deal Agreed"
-    default: return "For Outreach"
+// Derives what the local state should look like after a status change,
+// matching what the server will persist (so no refetch is needed on success)
+function applyStatusChange(
+  item: PipelineInfluencer,
+  newStatus: string,
+  niReason?: string
+): PipelineInfluencer {
+  const base: Partial<PipelineInfluencer> = { pipelineStatus: newStatus }
+
+  switch (newStatus) {
+    case "For Outreach":
+      return { ...item, ...base, contactStatus: "pending",           stage: 1, approvalStatus: "Approved" }
+    case "Contacted":
+      return { ...item, ...base, contactStatus: "contacted",         stage: 2, approvalStatus: "Approved" }
+    case "In Conversation":
+      return { ...item, ...base, contactStatus: "negotiating",       stage: 3, approvalStatus: "Approved" }
+    case "Deal Agreed":
+      return { ...item, ...base, contactStatus: "agreed",            stage: 4, approvalStatus: "Approved" }
+    case "For Order Creation":
+      return { ...item, ...base, contactStatus: "for_order_creation",stage: 5, approvalStatus: "Approved" }
+    case "Not Interested":
+      return {
+        ...item, ...base,
+        contactStatus:  "not_interested",
+        stage:          0,
+        approvalStatus: "Declined",
+        approvalNotes:  niReason || "Not interested",
+        niReason:       niReason || "Not interested",
+      }
+    default:
+      return { ...item, ...base }
   }
 }
 
 export function usePipelineData(brandId?: string): UsePipelineDataReturn {
-  const [data, setData] = useState<PipelineInfluencer[]>([])
+  const [data,      setData]      = useState<PipelineInfluencer[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error,     setError]     = useState<string | null>(null)
 
-  const fetchData = useCallback(async () => {
+  // Track in-flight PATCH requests so we don't refetch while one is pending
+  const pendingRef = useRef(0)
+
+  // ── Initial fetch (shows spinner) ─────────────────────────────────────────
+  const fetchData = useCallback(async (showSpinner = true) => {
     if (!brandId) { setIsLoading(false); return }
 
     try {
-      setIsLoading(true)
+      if (showSpinner) setIsLoading(true)
       setError(null)
+
       const res = await fetch(`/api/brand/${brandId}/pipeline`)
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error || "Failed to fetch pipeline data")
       }
+
       const json = await res.json()
-      const mapped = json.data.map((item: any) => ({
-        ...item,
-        pipelineStatus: mapToPipelineStatus(item.contact_status, item.stage),
-        contactStatus:  item.contact_status,
-        // ✅ FIX: map niReason from DB approval_notes
-        niReason:       item.approval_notes ?? undefined,
-        addressReceived: false,
-      }))
+      const mapped = (json.data || []).map(mapItem)
       setData(mapped)
     } catch (err: unknown) {
       const e = err as { message?: string }
       setError(e?.message || "Something went wrong")
     } finally {
-      setIsLoading(false)
+      if (showSpinner) setIsLoading(false)
     }
   }, [brandId])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { fetchData(true) }, [fetchData])
 
+  // ── Status update — optimistic, no loading flicker ────────────────────────
   const updateStatus = useCallback(
     async (id: string, newStatus: string, extra?: { niReason?: string }): Promise<boolean> => {
       if (!brandId) return false
 
-      // ✅ Optimistic UI update
-      setData((prev) =>
-        prev.map((item) => {
-          if (item.id !== id) return item
-          if (newStatus === "Not Interested") {
-            return { ...item, pipelineStatus: newStatus, approvalStatus: "Declined", approvalNotes: extra?.niReason || "Not interested", niReason: extra?.niReason }
-          }
-          return { ...item, pipelineStatus: newStatus }
-        })
-      )
+      // 1. Save snapshot for rollback
+      let snapshot: PipelineInfluencer[] = []
+
+      // 2. Apply optimistic update immediately (no spinner)
+      setData((prev) => {
+        snapshot = prev
+        return prev.map((item) =>
+          item.id === id ? applyStatusChange(item, newStatus, extra?.niReason) : item
+        )
+      })
+
+      pendingRef.current += 1
 
       try {
         const res = await fetch(`/api/brand/${brandId}/pipeline/${id}`, {
-          method: "PATCH",
+          method:  "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             pipelineStatus: newStatus,
             ...(extra?.niReason ? { niReason: extra.niReason } : {}),
           }),
         })
-        if (!res.ok) { await fetchData(); return false }
+
+        if (!res.ok) {
+          // Server rejected — rollback silently
+          setData(snapshot)
+          return false
+        }
+
+        // Success — state is already correct from optimistic update.
+        // No refetch needed, no spinner.
         return true
       } catch {
-        await fetchData()
+        setData(snapshot)
         return false
+      } finally {
+        pendingRef.current -= 1
       }
     },
-    [brandId, fetchData]
+    [brandId]
   )
 
-  return { data, isLoading, error, updateStatus, refetch: fetchData }
+  return {
+    data,
+    isLoading,
+    error,
+    updateStatus,
+    // Public refetch (e.g. retry button) — no spinner so board stays visible
+    refetch: () => fetchData(false),
+  }
 }

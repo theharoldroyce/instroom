@@ -140,17 +140,37 @@ export function DeclineConfirmationModal({ isOpen, onClose, onConfirm, influence
 
 // ── ManageOptionsModal ────────────────────────────────────────────────────────
 
-export function ManageOptionsModal({ isOpen, onClose, title, options, onSave }: {
-  isOpen: boolean; onClose: () => void; title: string; options: string[]; onSave: (o: string[]) => void
+export function ManageOptionsModal({ isOpen, onClose, title, options, onAdd, onRemove }: {
+  isOpen: boolean; onClose: () => void; title: string; options: string[]
+  onAdd: (name: string) => Promise<void>
+  onRemove: (name: string) => Promise<void>
 }) {
   const [lo, setLo] = useState<string[]>(options)
   const [no, setNo] = useState("")
   const [ei, setEi] = useState<number | null>(null)
   const [ev, setEv] = useState("")
+  const [busy, setBusy] = useState(false)
   const ir = useRef<HTMLInputElement>(null)
+
   useEffect(() => { if (isOpen) { setLo([...options]); setNo(""); setEi(null) } }, [isOpen, options])
   if (!isOpen) return null
-  const add = () => { const v = no.trim(); if (!v || lo.includes(v)) return; setLo(p => [...p, v]); setNo(""); ir.current?.focus() }
+
+  const add = async () => {
+    const v = no.trim()
+    if (!v || lo.includes(v)) return
+    setBusy(true)
+    await onAdd(v)
+    setLo(p => [...p, v])
+    setNo("")
+    setBusy(false)
+    ir.current?.focus()
+  }
+
+  const remove = async (name: string, idx: number) => {
+    setLo(p => p.filter((_, i) => i !== idx))
+    await onRemove(name)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-white rounded-xl shadow-xl w-[380px] p-5 max-h-[80vh] flex flex-col">
@@ -161,17 +181,17 @@ export function ManageOptionsModal({ isOpen, onClose, title, options, onSave }: 
         <div className="flex gap-1.5 mb-3">
           <input ref={ir} type="text" value={no} onChange={e => setNo(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add() }}
             placeholder={`Add new ${title.toLowerCase()}…`}
-            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none" />
-          <button onClick={add} disabled={!no.trim()} className="px-2.5 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition"><IconPlus size={12} /></button>
+            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-400 outline-none" />
+          <button onClick={add} disabled={!no.trim() || busy} className="px-2.5 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-40 transition"><IconPlus size={12} /></button>
         </div>
         <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
           {lo.map((opt, idx) => (
-            <div key={idx} className="flex items-center gap-2 group px-2 py-1.5 rounded-lg hover:bg-gray-50">
+            <div key={opt} className="flex items-center gap-2 group px-2 py-1.5 rounded-lg hover:bg-gray-50">
               {ei === idx ? (
                 <>
                   <input type="text" value={ev} onChange={e => setEv(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") { const v = ev.trim(); if (v) setLo(p => p.map((o, i) => i === ei ? v : o)); setEi(null) }; if (e.key === "Escape") setEi(null) }}
-                    className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded outline-none" autoFocus />
+                    className="flex-1 px-2 py-1 text-sm border border-green-300 rounded outline-none" autoFocus />
                   <button onClick={() => { const v = ev.trim(); if (v) setLo(p => p.map((o, i) => i === ei ? v : o)); setEi(null) }} className="p-1 text-green-600"><IconCheck size={12} /></button>
                   <button onClick={() => setEi(null)} className="p-1 text-gray-400"><IconX size={12} /></button>
                 </>
@@ -179,7 +199,7 @@ export function ManageOptionsModal({ isOpen, onClose, title, options, onSave }: 
                 <>
                   <span className="flex-1 text-sm text-gray-700">{opt}</span>
                   <button onClick={() => { setEi(idx); setEv(lo[idx]) }} className="p-1 text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100"><IconEdit size={12} /></button>
-                  <button onClick={() => setLo(p => p.filter((_, i) => i !== idx))} className="p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"><IconTrash size={12} /></button>
+                  <button onClick={() => remove(opt, idx)} className="p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"><IconTrash size={12} /></button>
                 </>
               )}
             </div>
@@ -188,7 +208,7 @@ export function ManageOptionsModal({ isOpen, onClose, title, options, onSave }: 
         </div>
         <div className="flex gap-3 mt-3 pt-4 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>
-          <button onClick={() => { onSave(lo); onClose() }} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition">Save</button>
+          <button onClick={onClose} className="flex-1 px-4 py-2 rounded-lg bg-green-600 text-white text-sm hover:bg-green-700 transition">Done</button>
         </div>
       </div>
     </div>

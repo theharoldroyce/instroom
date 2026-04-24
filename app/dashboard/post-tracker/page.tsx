@@ -327,7 +327,7 @@ function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampa
 
   return (
     <>
-      <div className="fixed inset-0 z-[400] bg-black/40 backdrop-blur-sm" onClick={onClose}/>
+      <div className="fixed inset-0 z-[400]" onClick={onClose}/>
       <div className="fixed top-0 right-0 w-[560px] max-w-full h-full bg-white shadow-2xl z-[500] flex flex-col font-sans overflow-hidden animate-in slide-in-from-right duration-300">
         {/* Header */}
         <div className="px-6 pt-5 pb-0 border-b border-gray-100 bg-white sticky top-0 z-10">

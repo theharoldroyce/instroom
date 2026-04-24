@@ -168,8 +168,8 @@ export async function GET(req: NextRequest) {
       )
     )
 
-    // 3. Shape threads
-    const threads = threadDetails.map((thread) => {
+    // 3. Shape threads + extract sender emails
+    const shapedThreads = threadDetails.map((thread) => {
       const messages = (thread.messages || []).map((msg: any) => {
         const headers = msg.payload?.headers || []
         return {
@@ -187,14 +187,67 @@ export async function GET(req: NextRequest) {
       const firstMsg = messages[0] || {}
       const labelIds: string[] = thread.messages?.[0]?.labelIds || []
 
+      // Parse sender email from "Name <email>" or plain "email"
+      const fromHeader: string = firstMsg.from || ""
+      const emailMatch = fromHeader.match(/<([^>]+)>/)
+      const senderEmail = (emailMatch ? emailMatch[1] : fromHeader).toLowerCase().trim()
+
       return {
         id: thread.id,
         subject: firstMsg.subject || "(No subject)",
         snippet: thread.snippet || firstMsg.snippet || "",
         unread: labelIds.includes("UNREAD"),
         messages,
+        senderEmail,
       }
     })
+
+    // 4. Look up BrandInfluencer records for all sender emails in one Prisma query
+    const userId = session.user?.id
+    const brandMember = userId
+      ? await prisma.brandMember.findFirst({
+          where: { user_id: userId },
+          select: { brand_id: true },
+          orderBy: { created_at: "desc" },
+        })
+      : null
+
+    const senderEmails = [...new Set(shapedThreads.map((t) => t.senderEmail).filter(Boolean))]
+
+    type BrandInfluencerRow = {
+      contact_status: string
+      content_posted: boolean
+      stage: number
+      order_status: string | null
+      influencer: { email: string | null }
+    }
+
+    const brandInfluencers: BrandInfluencerRow[] = brandMember
+      ? await prisma.brandInfluencer.findMany({
+          where: {
+            brand_id: brandMember.brand_id,
+            influencer: { email: { in: senderEmails } },
+          },
+          select: {
+            contact_status: true,
+            content_posted: true,
+            stage: true,
+            order_status: true,
+            influencer: { select: { email: true } },
+          },
+        })
+      : []
+
+    // Build email → brandInfluencer map
+    const biByEmail = new Map(
+      brandInfluencers.map((bi) => [bi.influencer.email?.toLowerCase(), bi])
+    )
+
+    // 5. Attach brandInfluencer to each thread (null for unknown senders → falls back to PROSPECT)
+    const threads = shapedThreads.map(({ senderEmail, ...thread }) => ({
+      ...thread,
+      brandInfluencer: biByEmail.get(senderEmail) ?? null,
+    }))
 
     return NextResponse.json({ threads })
   } catch (err: any) {
