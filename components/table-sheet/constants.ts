@@ -4,11 +4,8 @@
 import React from "react"
 
 export const DEFAULT_PLATFORMS = ["Instagram", "YouTube", "TikTok", "X (Twitter)"]
-export const DEFAULT_NICHES = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech", "Travel", "Fashion", "Gaming"]
-export const DEFAULT_LOCATIONS = [
-  "Philippines", "Singapore", "United States", "Australia",
-  "United Kingdom", "Malaysia", "Indonesia", "Thailand", "Vietnam",
-]
+export const DEFAULT_NICHES: string[] = []
+export const DEFAULT_LOCATIONS: string[] = []
 export const DEFAULT_GENDERS = ["Male", "Female", "Non-binary", "Other"]
 export const DEFAULT_CONTACT_STATUSES = [
   { value: "not_contacted", label: "Not Contacted" },
@@ -103,7 +100,7 @@ export const IMPORT_FIELDS = [
   { key: "gender",          label: "Gender" },
   { key: "location",        label: "Location" },
   { key: "follower_count",  label: "Follower Count" },
-  { key: "engagement_rate", label: "Engagement" },
+  { key: "engagement_rate", label: "Engagement Rate" },  
   { key: "social_link",     label: "Social Link" },
   { key: "contact_info",    label: "Contact Info" },
 ]
@@ -111,18 +108,17 @@ export const IMPORT_FIELDS = [
 export const CSV_EXPORT_FIELDS = [
   { key: "handle",           label: "Handle" },
   { key: "platform",         label: "Platform" },
-  { key: "full_name",        label: "Full Name" },
   { key: "first_name",       label: "First Name" },
   { key: "email",            label: "Email" },
   { key: "niche",            label: "Niche" },
   { key: "gender",           label: "Gender" },
   { key: "location",         label: "Location" },
   { key: "follower_count",   label: "Follower Count" },
-  { key: "engagement_rate",  label: "Engagement" },
+  { key: "engagement_rate",  label: "Engagement Rate" },  // UPDATED from "Engagement"
   { key: "social_link",      label: "Social Link" },
   { key: "contact_info",     label: "Contact Email" },
   { key: "approval_status",  label: "Approval Status" },
-  { key: "transferred_date", label: "Transferred" },
+  { key: "transferred_date", label: "Date Reviewed" },     // UPDATED from "Transferred"
   { key: "approval_notes",   label: "Approval Notes" },
   { key: "contact_status",   label: "Contact Status" },
   { key: "agreed_rate",      label: "Agreed Rate ($)" },

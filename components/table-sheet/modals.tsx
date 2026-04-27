@@ -45,52 +45,112 @@ export function ConfirmationDialog({ isOpen, onClose, onConfirm, title, message,
 
 // ── AddRowsModal ──────────────────────────────────────────────────────────────
 
-export function AddRowsModal({ isOpen, onClose, onAdd, selectedCount }: {
-  isOpen: boolean; onClose: () => void; onAdd: (count: number) => void; selectedCount: number
+export function AddRowsModal({
+  isOpen, onClose, onAdd, selectedCount,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onAdd: (count: number, position: "end" | "after-selection") => void  // ✅ pass position
+  selectedCount: number
 }) {
   const [count, setCount] = useState(5)
-  const [insertPosition, setInsertPosition] = useState<"end" | "after-selection">(selectedCount > 0 ? "after-selection" : "end")
+  const [insertPosition, setInsertPosition] = useState<"end" | "after-selection">(
+    selectedCount > 0 ? "after-selection" : "end"
+  )
+
+  // Reset position when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setInsertPosition(selectedCount > 0 ? "after-selection" : "end")
+    }
+  }, [isOpen, selectedCount])
+
   if (!isOpen) return null
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
       <div className="bg-white rounded-xl shadow-xl w-[380px] p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-gray-900">Add Multiple Rows</h3>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600"><IconX size={20} /></button>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition rounded">
+            <IconX size={20} />
+          </button>
         </div>
-        <div className="space-y-2.5">
+
+        <div className="space-y-4">
+          {/* Count */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">Number of rows</label>
             <div className="flex items-center gap-2">
-              <input type="number" min="1" max="100" value={count}
-                onChange={e => setCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
-                className="w-24 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none text-center" />
+              <button
+                onClick={() => setCount(c => Math.max(1, c - 1))}
+                className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 transition font-medium text-base leading-none"
+              >−</button>
+              <input
+                type="number" min="1" max="500" value={count}
+                onChange={e => setCount(Math.min(500, Math.max(1, parseInt(e.target.value) || 1)))}
+                className="w-20 px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none text-center text-sm"
+              />
+              <button
+                onClick={() => setCount(c => Math.min(500, c + 1))}
+                className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-50 transition font-medium text-base leading-none"
+              >+</button>
               <span className="text-sm text-gray-500">rows</span>
             </div>
           </div>
+
+          {/* Insert position */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">Insert position</label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="position" value="end" checked={insertPosition === "end"} onChange={() => setInsertPosition("end")} className="w-4 h-4 text-blue-600" />
-                <span className="text-sm text-gray-700">At the end</span>
-              </label>
-              <label className={`flex items-center gap-2 ${selectedCount === 0 ? "opacity-50" : "cursor-pointer"}`}>
-                <input type="radio" name="position" value="after-selection" checked={insertPosition === "after-selection"} onChange={() => setInsertPosition("after-selection")} disabled={selectedCount === 0} className="w-4 h-4 text-blue-600" />
-                <span className="text-sm text-gray-700">After selected rows</span>
-              </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setInsertPosition("end")}
+                className={`flex-1 py-2.5 px-3 rounded-lg border text-sm font-medium transition ${
+                  insertPosition === "end"
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                At the end
+              </button>
+              <button
+                onClick={() => { if (selectedCount > 0) setInsertPosition("after-selection") }}
+                disabled={selectedCount === 0}
+                className={`flex-1 py-2.5 px-3 rounded-lg border text-sm font-medium transition ${
+                  insertPosition === "after-selection"
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : selectedCount === 0
+                    ? "border-gray-100 text-gray-300 cursor-not-allowed bg-gray-50"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                After selected{selectedCount > 0 ? ` (${selectedCount})` : ""}
+              </button>
             </div>
           </div>
         </div>
-        <div className="flex gap-3 mt-3">
-          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>
-          <button onClick={() => { onAdd(count); onClose() }} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition">Add {count} Rows</button>
+
+        <div className="flex gap-3 mt-5">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => { onAdd(count, insertPosition); onClose() }}  // ✅ pass position
+            className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition font-medium"
+          >
+            Add {count} Row{count !== 1 ? "s" : ""}
+          </button>
         </div>
       </div>
     </div>
   )
 }
-
 // ── DeclineConfirmationModal ──────────────────────────────────────────────────
 
 export function DeclineConfirmationModal({ isOpen, onClose, onConfirm, influencerName }: {
@@ -175,7 +235,7 @@ export function ManageOptionsModal({ isOpen, onClose, title, options, onAdd, onR
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-white rounded-xl shadow-xl w-[380px] p-5 max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-gray-900">Manage {title}</h3>
+          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600"><IconX size={20} /></button>
         </div>
         <div className="flex gap-1.5 mb-3">

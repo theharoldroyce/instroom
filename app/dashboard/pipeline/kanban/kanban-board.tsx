@@ -2,6 +2,8 @@
 // FIXED: For Order Creation and Not Interested cards persist on refresh
 // For Order Creation shows a "Moved to Post Tracker" badge, no forward actions
 // Not Interested shows the NI reason pill, no forward actions
+// ADDED: Column info tooltips (ⓘ) on all column headers
+// ADDED: Niche + Location tag-based multi-select filters
 
 "use client"
 
@@ -31,7 +33,6 @@ import {
   IconChevronDown,
   IconLoader2,
   IconAlertCircle,
-  IconCheck,
   IconArrowRight,
 } from "@tabler/icons-react"
 
@@ -81,7 +82,6 @@ const NI_REASONS = [
 ]
 
 // ─── Column definitions ──────────────────────────────────────────────────────
-// "For Order Creation" is the bridge column — cards here also appear in Post Tracker
 const columns = [
   { key: "for-outreach",       title: "For Outreach",       color: "bg-yellow-400", status: "For Outreach"       },
   { key: "contacted",          title: "Contacted",           color: "bg-orange-400", status: "Contacted"          },
@@ -91,10 +91,70 @@ const columns = [
   { key: "not-interested",     title: "Not Interested",      color: "bg-red-500",    status: "Not Interested"     },
 ]
 
-const isExitStage  = (status: string) => status === "Not Interested" || status === "For Order Creation"
-const isTerminal   = (status: string) => status === "Not Interested" || status === "For Order Creation"
+// ─── Column tooltip descriptions ─────────────────────────────────────────────
+const COLUMN_INFO: Record<string, { short: string; move?: string; terminal?: boolean }> = {
+  "For Outreach": {
+    short: "Influencers you've identified and want to contact. No message sent yet — this is your ready-to-contact queue.",
+    move:  "Move to Contacted once you've sent the first message, or Not Interested to skip them.",
+  },
+  "Contacted": {
+    short: "Initial outreach sent via email, DM, or phone. Waiting for their reply — the ball is in their court.",
+    move:  "Move to In Conversation when they reply, or Not Interested if they decline or go cold.",
+  },
+  "In Conversation": {
+    short: "They replied and you're actively negotiating — rate, deliverables, timeline, or product fit.",
+    move:  "Move to Deal Agreed when terms are locked, or Not Interested if negotiations fall apart.",
+  },
+  "Deal Agreed": {
+    short: "Terms confirmed. Now collect their shipping address before the product can be sent.",
+    move:  "Check off \"Shipping address received\" on the card, then click Move to Post Tracker.",
+  },
+  "For Order Creation": {
+    short: "Address confirmed — ready to order and ship the product. Cards here also appear in Post Tracker for your fulfilment team.",
+    terminal: true,
+  },
+  "Not Interested": {
+    short: "Collaboration didn't happen. Moving here requires a reason: Hard pass (don't contact again) or Soft pass (follow up next campaign).",
+    terminal: true,
+  },
+}
 
-const getStatusFromColumnKey = (key: string) => columns.find((c) => c.key === key)?.status ?? key
+// ─── Column info tooltip component ───────────────────────────────────────────
+function ColumnInfoTooltip({ status, variant }: { status: string; variant: "light" | "dark" }) {
+  const info = COLUMN_INFO[status]
+  if (!info) return null
+
+  const borderColor = variant === "dark" ? "border-white/60" : "border-red-400/60"
+  const textColor   = variant === "dark" ? "text-white"      : "text-red-700"
+
+  return (
+    <div className="relative group/info flex-shrink-0">
+      <span
+        className={`text-[10px] font-medium border ${borderColor} ${textColor} rounded-full w-4 h-4 flex items-center justify-center opacity-70 cursor-default select-none hover:opacity-100 transition-opacity`}
+      >
+        i
+      </span>
+      {/* Tooltip panel */}
+      <div className="absolute top-full right-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl p-3 text-xs text-gray-700 leading-relaxed z-[60] hidden group-hover/info:block shadow-lg pointer-events-none">
+        <p className="font-semibold text-gray-900 mb-1 text-[11px]">{status}</p>
+        <p className="text-gray-600">{info.short}</p>
+        {info.move && (
+          <p className="mt-1.5 text-gray-400 border-t border-gray-100 pt-1.5">
+            <span className="font-medium text-gray-500">Next → </span>{info.move}
+          </p>
+        )}
+        {info.terminal && (
+          <p className="mt-1.5 text-[10px] font-medium text-red-500 border-t border-gray-100 pt-1.5 uppercase tracking-wide">
+            Terminal — cannot be moved
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const isTerminal            = (status: string) => status === "Not Interested" || status === "For Order Creation"
+const getStatusFromColumnKey = (key: string)   => columns.find((c) => c.key === key)?.status ?? key
 
 const getStatusColor = (status: string) => {
   const col = columns.find((c) => c.status === status)
@@ -110,9 +170,9 @@ const getStatusColor = (status: string) => {
   return map[col.color] ?? "bg-gray-100 text-gray-700 border-gray-300"
 }
 
-const getOptionDotColor  = (status: string) => columns.find((c) => c.status === status)?.color ?? "bg-gray-400"
-const getPlatformIcon    = (platform?: string): ReactNode => PLATFORM_ICONS[platform ?? ""] || PLATFORM_ICONS.Instagram
-const getAvatarColor     = (name: string) => {
+const getOptionDotColor = (status: string) => columns.find((c) => c.status === status)?.color ?? "bg-gray-400"
+const getPlatformIcon   = (platform?: string): ReactNode => PLATFORM_ICONS[platform ?? ""] || PLATFORM_ICONS.Instagram
+const getAvatarColor    = (name: string) => {
   const colors = ["bg-pink-500","bg-purple-500","bg-indigo-500","bg-blue-500","bg-cyan-500","bg-teal-500","bg-green-500","bg-yellow-500","bg-orange-500","bg-red-500","bg-rose-500"]
   return colors[name.charCodeAt(0) % colors.length]
 }
@@ -122,8 +182,7 @@ const getNextStages = (currentStatus: string): string[] => {
     case "For Outreach":    return ["Contacted", "Not Interested"]
     case "Contacted":       return ["In Conversation", "Not Interested"]
     case "In Conversation": return ["Deal Agreed", "Not Interested"]
-    case "Deal Agreed":     return []   // checklist handles the move to For Order Creation
-    // Terminal — no forward actions
+    case "Deal Agreed":     return []
     case "For Order Creation":
     case "Not Interested":  return []
     default:                return []
@@ -178,6 +237,63 @@ function influencerToPartner(inf: PipelineInfluencer): Partner {
     hCVR:         0,
     hPosts:       0,
   }
+}
+
+// ─── Tag Multi-Select ─────────────────────────────────────────────────────────
+// Reusable tag pill selector used for Niche and Location filters
+interface TagSelectProps {
+  label: string
+  options: string[]
+  selected: string[]
+  onChange: (values: string[]) => void
+  colorClass?: string // Tailwind bg+text classes for selected pill
+}
+
+function TagSelect({ label, options, selected, onChange, colorClass = "bg-[#1FAE5B]/10 text-[#0F6B3E] border-[#1FAE5B]/30" }: TagSelectProps) {
+  const toggle = (option: string) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter((s) => s !== option))
+    } else {
+      onChange([...selected, option])
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-gray-600">{label}</label>
+        {selected.length > 0 && (
+          <button
+            onClick={() => onChange([])}
+            className="text-[10px] text-gray-400 hover:text-gray-600 transition underline underline-offset-2"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((option) => {
+          const isSelected = selected.includes(option)
+          return (
+            <button
+              key={option}
+              onClick={() => toggle(option)}
+              className={`px-2.5 py-1 rounded-full text-xs border transition-all font-medium ${
+                isSelected
+                  ? `${colorClass} border-transparent`
+                  : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-100"
+              }`}
+            >
+              {isSelected && (
+                <span className="mr-1 text-[9px]">✓</span>
+              )}
+              {option}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 // ─── Not Interested Modal ─────────────────────────────────────────────────────
@@ -280,41 +396,28 @@ function NotInterestedModal({ influencer, onConfirm, onCancel }: NIModalProps) {
 }
 
 // ─── Deal Agreed Checklist ────────────────────────────────────────────────────
-function DealAgreedChecklist({ influencerId, addressReceived, onAddressToggle, onMarkOrderPlaced }: {
+function DealAgreedChecklist({ influencerId, onMarkOrderPlaced }: {
   influencerId: string
-  addressReceived: boolean
-  onAddressToggle: (id: string) => void
   onMarkOrderPlaced: (id: string) => void
 }) {
   return (
     <div className="mt-3 pt-3 border-t border-gray-100">
-      <div onClick={(e) => { e.stopPropagation(); onAddressToggle(influencerId) }}
-        className="flex items-center gap-2 cursor-pointer group mb-2">
-        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0 ${addressReceived ? "bg-green-500 border-green-500" : "border-gray-300 bg-white group-hover:border-green-400"}`}>
-          {addressReceived && <IconCheck size={10} className="text-white" />}
-        </div>
-        <span className={`text-xs ${addressReceived ? "text-gray-400 line-through" : "text-gray-600"}`}>
-          Shipping address received
-        </span>
-      </div>
       <button
-        onClick={(e) => { e.stopPropagation(); if (addressReceived) onMarkOrderPlaced(influencerId) }}
-        disabled={!addressReceived}
-        className={`w-full text-xs font-medium py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${addressReceived ? "bg-[#1FAE5B] text-white hover:bg-[#0f6b3e]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+        onClick={(e) => { e.stopPropagation(); onMarkOrderPlaced(influencerId) }}
+        className="w-full text-xs font-medium py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 bg-[#1FAE5B] text-white hover:bg-[#0f6b3e]"
       >
         <IconArrowRight size={12} />
-        {addressReceived ? "Move to Post Tracker" : "Mark For Order Creation"}
+        Mark For Order Creation
       </button>
     </div>
   )
 }
 
 // ─── Pipeline Card ────────────────────────────────────────────────────────────
-function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onAddressToggle, onMarkOrderPlaced }: {
-  influencer: PipelineInfluencer & { addressReceived?: boolean }
+function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onMarkOrderPlaced }: {
+  influencer: PipelineInfluencer
   onOpenSidebar: (inf: PipelineInfluencer) => void
   onStatusChange: (id: string, newStatus: string) => void
-  onAddressToggle?: (id: string) => void
   onMarkOrderPlaced?: (id: string) => void
 }) {
   const nextStages = getNextStages(influencer.pipelineStatus)
@@ -327,33 +430,24 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onAddressTogg
       "border-gray-200"
     }`}>
       <div className="cursor-pointer" onClick={() => onOpenSidebar(influencer)}>
-        {/* Name + handle */}
         <div className="flex flex-col text-sm mb-2">
           <span className="font-medium text-gray-900">{influencer.influencer}</span>
           <span className="text-xs text-gray-500">{influencer.instagramHandle}</span>
         </div>
-
-        {/* Platform + location */}
         <div className="flex items-center gap-2 text-xs text-gray-500 mb-1.5">
           <span className="flex items-center gap-1">{getPlatformIcon(influencer.platform)}{influencer.platform || "Instagram"}</span>
           <span>•</span>
           <span>{influencer.location || "—"}</span>
         </div>
-
-        {/* Stats */}
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{influencer.followerCount?.toLocaleString() || influencer.followers || "—"} followers</span>
           <span>{influencer.engagementRate || "—"}% eng</span>
         </div>
-
-        {/* NI reason pill */}
         {influencer.pipelineStatus === "Not Interested" && influencer.niReason && (
           <div className="mt-2 text-xs text-red-600 bg-red-100 rounded-full px-2.5 py-1 inline-block font-medium">
             {influencer.niReason}
           </div>
         )}
-
-        {/* For Order Creation badge */}
         {influencer.pipelineStatus === "For Order Creation" && (
           <div className="mt-2 flex items-center gap-1 text-xs text-emerald-700 bg-emerald-100 rounded-full px-2.5 py-1 inline-flex font-medium">
             <IconArrowRight size={11} />
@@ -361,18 +455,12 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onAddressTogg
           </div>
         )}
       </div>
-
-      {/* Deal Agreed checklist */}
-      {influencer.pipelineStatus === "Deal Agreed" && onAddressToggle && onMarkOrderPlaced && (
+      {influencer.pipelineStatus === "Deal Agreed" && onMarkOrderPlaced && (
         <DealAgreedChecklist
           influencerId={influencer.id}
-          addressReceived={influencer.addressReceived ?? false}
-          onAddressToggle={onAddressToggle}
           onMarkOrderPlaced={onMarkOrderPlaced}
         />
       )}
-
-      {/* Forward action buttons — hidden for terminal stages */}
       {nextStages.length > 0 && !terminal && (
         <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
           {nextStages.map((stage) => (
@@ -478,6 +566,21 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
   )
 }
 
+// ─── Filter state type ────────────────────────────────────────────────────────
+interface FilterState {
+  influencer: string
+  handle:     string
+  locations:  string[]   // multi-select
+  niches:     string[]   // multi-select
+}
+
+const EMPTY_FILTERS: FilterState = {
+  influencer: "",
+  handle:     "",
+  locations:  [],
+  niches:     [],
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 interface PipelinePageProps { brandId?: string }
 
@@ -490,40 +593,22 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
   const [selectedPartner,      setSelectedPartner]      = useState<Partner | null>(null)
   const [selectedColumnStatus, setSelectedColumnStatus] = useState<string | null>(null)
   const [showFilterPanel,      setShowFilterPanel]      = useState(false)
-  const [filters,              setFilters]              = useState({ influencer: "", handle: "", location: "all", niche: "all" })
+  const [filters,              setFilters]              = useState<FilterState>(EMPTY_FILTERS)
   const [niModalInfluencer,    setNiModalInfluencer]    = useState<PipelineInfluencer | null>(null)
   const [pendingNiId,          setPendingNiId]          = useState<string | null>(null)
-  const [addressReceivedState, setAddressReceivedState] = useState<Record<string, boolean>>({})
+  const [sortOrder,            setSortOrder]            = useState<"newest"|"oldest">("newest")
 
   const { data, isLoading, error, updateStatus, refetch } = usePipelineData(brandId)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
-
-  useEffect(() => {
-    if (data.length > 0) {
-      setAddressReceivedState((prev) => {
-        const next = { ...prev }
-        data.forEach((item) => { if (!(item.id in next)) next[item.id] = false })
-        return next
-      })
-    }
-  }, [data])
 
   const toast = (msg: string, duration = 3000) => {
     setShowSuccessMessage(msg)
     setTimeout(() => setShowSuccessMessage(null), duration)
   }
 
-  const handleAddressToggle = (id: string) => {
-    setAddressReceivedState((prev) => {
-      const next = { ...prev, [id]: !prev[id] }
-      toast(`Address ${next[id] ? "confirmed ✓" : "unchecked"}`, 2000)
-      return next
-    })
-  }
-
   const handleMarkOrderPlaced = async (id: string) => {
     const influencer = data.find((i) => i.id === id)
-    if (!influencer || !addressReceivedState[id]) return
+    if (!influencer) return
     const success = await updateStatus(id, "For Order Creation")
     toast(
       success
@@ -539,15 +624,14 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     setActiveId(null)
     if (!over) return
 
-    const draggedId  = active.id as string
-    const destKey    = over.id as string
-    const dragged    = data.find((item) => item.id === draggedId)
+    const draggedId = active.id as string
+    const destKey   = over.id as string
+    const dragged   = data.find((item) => item.id === draggedId)
     if (!dragged) return
 
     const newStatus = getStatusFromColumnKey(destKey)
     if (dragged.pipelineStatus === newStatus) return
 
-    // Block dragging out of terminal columns
     if (isTerminal(dragged.pipelineStatus)) {
       toast(`Cannot move from "${dragged.pipelineStatus}"`, 2000)
       return
@@ -619,22 +703,37 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     )
     .filter((d) => selectedColumnStatus ? d.pipelineStatus === selectedColumnStatus : true)
 
-  if (filters.influencer)         filteredData = filteredData.filter((p) => p.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
-  if (filters.handle)             filteredData = filteredData.filter((p) => p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase()))
-  if (filters.location !== "all") filteredData = filteredData.filter((p) => p.location === filters.location)
-  if (filters.niche !== "all")    filteredData = filteredData.filter((p) => p.niche === filters.niche)
+  if (filters.influencer)          filteredData = filteredData.filter((p) => p.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
+  if (filters.handle)              filteredData = filteredData.filter((p) => p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase()))
+  if (filters.locations.length > 0) filteredData = filteredData.filter((p) => filters.locations.includes(p.location ?? ""))
+  if (filters.niches.length > 0)    filteredData = filteredData.filter((p) => filters.niches.includes(p.niche ?? ""))
+  filteredData = [...filteredData].sort((a, b) => {
+    const da = new Date(a.createdAt ?? 0).getTime()
+    const db = new Date(b.createdAt ?? 0).getTime()
+    return sortOrder === "newest" ? db - da : da - db
+  })
 
-  const getItemsByColumn  = (columnKey: string) => filteredData.filter((item) => item.pipelineStatus === getStatusFromColumnKey(columnKey))
-  const hasActiveFilters  = filters.influencer !== "" || filters.handle !== "" || filters.location !== "all" || filters.niche !== "all" || search !== "" || selectedColumnStatus !== null
-  const activeInfluencer  = activeId ? data.find((item) => item.id === activeId) : null
-  const selectedColumnInfo = selectedColumnStatus ? columns.find((col) => col.status === selectedColumnStatus) : null
+  // Count active filters for badge
+  const activeFilterCount =
+    (filters.influencer ? 1 : 0) +
+    (filters.handle ? 1 : 0) +
+    filters.locations.length +
+    filters.niches.length +
+    (search ? 1 : 0) +
+    (selectedColumnStatus ? 1 : 0)
+
+  const hasActiveFilters      = activeFilterCount > 0
+  const activeInfluencer      = activeId ? data.find((item) => item.id === activeId) : null
+  const selectedColumnInfo    = selectedColumnStatus ? columns.find((col) => col.status === selectedColumnStatus) : null
+
+  const getItemsByColumn = (columnKey: string) =>
+    filteredData.filter((item) => item.pipelineStatus === getStatusFromColumnKey(columnKey))
 
   const renderCard = (inf: PipelineInfluencer) => (
     <PipelineCard
-      influencer={{ ...inf, addressReceived: addressReceivedState[inf.id] ?? false }}
+      influencer={inf}
       onOpenSidebar={openSidebar}
       onStatusChange={handleStatusUpdate}
-      onAddressToggle={handleAddressToggle}
       onMarkOrderPlaced={handleMarkOrderPlaced}
     />
   )
@@ -670,101 +769,170 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
         <InfluencerProfileSidebar partner={selectedPartner} campaigns={[] as Campaign[]} allPartners={[]} onClose={() => setSidebarOpen(false)} />
       )}
 
-      {/* Search */}
-      <div className="flex items-center gap-3">
-        <div className="relative w-full max-w-md">
+      {/* ── Single inline toolbar row ── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
           <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search influencer..."
-            className="w-full pl-9 pr-3 h-10 border border-[#0F6B3E]/20 rounded-lg outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm" />
+            className="w-full pl-9 pr-3 h-9 border border-[#0F6B3E]/20 rounded-lg outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm" />
         </div>
-        <span className="text-sm text-gray-500 whitespace-nowrap">{data.length} influencer{data.length !== 1 ? "s" : ""}</span>
-      </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
-          <div className="bg-gray-100 text-gray-700 px-4 py-1.5 rounded-full text-sm font-medium">Follow up 0</div>
-        </div>
-        <div className="flex gap-2">
-          <div className="relative">
-            <button onClick={() => setShowFilterPanel(!showFilterPanel)}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 border ${hasActiveFilters ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20"}`}>
-              <IconFilter size={16} /> Filters
-            </button>
-            {showFilterPanel && (
-              <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[340px] p-5">
-                <div className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Filter by</div>
+        {/* Filters */}
+        <div className="relative">
+          <button
+            onClick={() => setShowFilterPanel(!showFilterPanel)}
+            className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${
+              hasActiveFilters ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"
+            }`}
+          >
+            <IconFilter size={15} />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className={`text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center ${
+                hasActiveFilters ? "bg-white/20 text-white" : "bg-[#1FAE5B] text-white"
+              }`}>
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          {showFilterPanel && (
+            <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[420px] p-5">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs font-bold text-gray-800 uppercase tracking-wide">Filter by</span>
+                {hasActiveFilters && (
+                  <button onClick={() => setFilters(EMPTY_FILTERS)}
+                    className="text-xs text-gray-400 hover:text-red-500 transition flex items-center gap-1">
+                    <IconX size={12} /> Clear all
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col gap-5">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                  {[
-                    { label: "Influencer", key: "influencer", placeholder: "Search by name...",    type: "text" },
-                    { label: "Handle",     key: "handle",     placeholder: "@username...",          type: "text" },
-                  ].map(({ label, key, placeholder }) => (
+                  {([
+                    { label: "Influencer", key: "influencer" as const, placeholder: "Search by name..." },
+                    { label: "Handle",     key: "handle"     as const, placeholder: "@username..."      },
+                  ] as const).map(({ label, key, placeholder }) => (
                     <div key={key} className="flex flex-col gap-1">
                       <label className="text-xs text-gray-500">{label}</label>
-                      <input type="text" value={filters[key as keyof typeof filters]}
+                      <input type="text" value={filters[key]}
                         onChange={(e) => setFilters((p) => ({ ...p, [key]: e.target.value }))}
                         placeholder={placeholder}
                         className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]" />
                     </div>
                   ))}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Location</label>
-                    <select value={filters.location} onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))}
-                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
-                      <option value="all">All Locations</option>
-                      {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Niche</label>
-                    <select value={filters.niche} onChange={(e) => setFilters((p) => ({ ...p, niche: e.target.value }))}
-                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
-                      <option value="all">All Niches</option>
-                      {NICHES.map((n) => <option key={n}>{n}</option>)}
-                    </select>
-                  </div>
                 </div>
-                <div className="flex items-center justify-end gap-3 mt-5">
-                  <button onClick={() => setFilters({ influencer: "", handle: "", location: "all", niche: "all" })}
-                    className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition">Clear all</button>
-                  <button onClick={() => setShowFilterPanel(false)}
-                    className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition">Apply</button>
+                <div className="border-t border-gray-100" />
+                <TagSelect label="Location" options={LOCATIONS} selected={filters.locations}
+                  onChange={(v) => setFilters((p) => ({ ...p, locations: v }))}
+                  colorClass="bg-blue-50 text-blue-700 border-blue-200" />
+                <div className="border-t border-gray-100" />
+                <TagSelect label="Niche" options={NICHES} selected={filters.niches}
+                  onChange={(v) => setFilters((p) => ({ ...p, niches: v }))}
+                  colorClass="bg-[#1FAE5B]/10 text-[#0F6B3E] border-[#1FAE5B]/30" />
+                <div className="border-t border-gray-100" />
+                {/* Sort inside filter panel */}
+                <div>
+                  <label className="text-xs text-gray-500 block mb-2">Sort by date</label>
+                  <div className="flex gap-2">
+                    <button onClick={() => setSortOrder("newest")}
+                      className={`flex-1 h-9 rounded-lg text-sm flex items-center justify-center gap-1.5 border font-medium transition-colors ${sortOrder === "newest" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                      <IconChevronDown size={14} /> Newest
+                    </button>
+                    <button onClick={() => setSortOrder("oldest")}
+                      className={`flex-1 h-9 rounded-lg text-sm flex items-center justify-center gap-1.5 border font-medium transition-colors ${sortOrder === "oldest" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                      <IconChevronDown size={14} className="rotate-180" /> Oldest
+                    </button>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => { setView("Board"); setSelectedColumnStatus(null) }}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "Board" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
-              <IconLayoutKanban size={16} /> Board
-            </button>
-            <button onClick={() => { setView("list"); setSelectedColumnStatus(null) }}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view === "list" ? "bg-[#1FAE5B] text-white" : "border border-[#0F6B3E]/20"}`}>
-              <IconList size={16} /> List
-            </button>
-          </div>
+              {(filters.locations.length > 0 || filters.niches.length > 0) && (
+                <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-1.5">
+                  {filters.locations.map((l) => (
+                    <span key={l} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[11px] font-medium">
+                      {l}
+                      <button onClick={() => setFilters((p) => ({ ...p, locations: p.locations.filter((x) => x !== l) }))} className="hover:text-blue-900 transition"><IconX size={10} /></button>
+                    </span>
+                  ))}
+                  {filters.niches.map((n) => (
+                    <span key={n} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#1FAE5B]/10 text-[#0F6B3E] rounded-full text-[11px] font-medium">
+                      {n}
+                      <button onClick={() => setFilters((p) => ({ ...p, niches: p.niches.filter((x) => x !== n) }))} className="hover:text-[#0F6B3E]/70 transition"><IconX size={10} /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-end mt-4">
+                <button onClick={() => setShowFilterPanel(false)}
+                  className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition">
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Sort shortcut buttons — always visible */}
+        {/* <button onClick={() => setSortOrder("newest")}
+          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border font-medium transition-colors ${sortOrder === "newest" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 text-gray-600 hover:border-[#0F6B3E]/40"}`}>
+          <IconChevronDown size={14} /> Newest
+        </button>
+        <button onClick={() => setSortOrder("oldest")}
+          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border font-medium transition-colors ${sortOrder === "oldest" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 text-gray-600 hover:border-[#0F6B3E]/40"}`}>
+          <IconChevronDown size={14} className="rotate-180" /> Oldest
+        </button> */}
+
+        {/* Count */}
+        <span className="text-sm text-gray-500 whitespace-nowrap ml-1">
+          {data.length} influencer{data.length !== 1 ? "s" : ""}
+        </span>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* View toggle */}
+        <button onClick={() => { setView("Board"); setSelectedColumnStatus(null) }}
+          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${view === "Board" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
+          <IconLayoutKanban size={16} /> Board
+        </button>
+        <button onClick={() => { setView("list"); setSelectedColumnStatus(null) }}
+          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${view === "list" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
+          <IconList size={16} /> List
+        </button>
       </div>
 
-      {/* KANBAN VIEW */}
+      {/* ── KANBAN VIEW ── */}
       {view === "Board" && (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
             <div className="flex gap-4 min-w-max">
-              {/* Main pipeline columns */}
+
+              {/* Main pipeline columns (everything except not-interested) */}
               {columns.filter((c) => c.key !== "not-interested").map((col) => {
-                const items = getItemsByColumn(col.key)
+                const items              = getItemsByColumn(col.key)
                 const isForOrderCreation = col.key === "for-order-creation"
                 return (
                   <DroppableColumn key={col.key} id={col.key}>
-                    <div onClick={() => handleColumnClick(col)}
-                      className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between cursor-pointer hover:opacity-90 transition-opacity`}>
-                      <span>{col.title}</span>
-                      <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                    {/* Column header */}
+                    <div className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between`}>
+                      {/* Title — clicking switches to list filtered by this column */}
+                      <span
+                        onClick={() => handleColumnClick(col)}
+                        className="flex-1 cursor-pointer hover:opacity-90 transition-opacity truncate mr-2"
+                      >
+                        {col.title}
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                        <ColumnInfoTooltip status={col.status} variant="dark" />
+                      </div>
                     </div>
+
                     {isForOrderCreation && (
                       <p className="text-[10px] text-emerald-600 px-1">Also visible in Post Tracker</p>
                     )}
+
                     <div className="flex flex-col gap-2 min-h-[400px]">
                       {items.map((inf) => (
                         <DraggableCard key={inf.id} id={inf.id}>
@@ -779,7 +947,7 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                 )
               })}
 
-              {/* Separator */}
+              {/* Exit separator */}
               <div className="flex flex-col items-center justify-center px-2 flex-shrink-0">
                 <div className="h-16 w-px bg-gray-200" />
                 <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest py-2">exit</span>
@@ -792,11 +960,20 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                 const items = getItemsByColumn(col.key)
                 return (
                   <DroppableColumn id={col.key}>
-                    <div onClick={() => handleColumnClick(col)}
-                      className="bg-red-100 text-red-700 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between cursor-pointer hover:opacity-90 transition-opacity">
-                      <span>{col.title}</span>
-                      <span className="bg-red-200 text-red-700 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                    {/* Column header — soft red style since it's an exit column */}
+                    <div className="bg-red-100 text-red-700 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between">
+                      <span
+                        onClick={() => handleColumnClick(col)}
+                        className="flex-1 cursor-pointer hover:opacity-90 transition-opacity truncate mr-2"
+                      >
+                        {col.title}
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="bg-red-200 text-red-700 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                        <ColumnInfoTooltip status={col.status} variant="light" />
+                      </div>
                     </div>
+
                     <div className="flex flex-col gap-2 min-h-[400px]">
                       {items.map((inf) => (
                         <DraggableCard key={inf.id} id={inf.id}>
@@ -823,7 +1000,7 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
         </DndContext>
       )}
 
-      {/* LIST VIEW */}
+      {/* ── LIST VIEW ── */}
       {view === "list" && (
         <div className="bg-white border rounded-xl overflow-hidden">
           {selectedColumnStatus && selectedColumnInfo && (
@@ -889,7 +1066,31 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                       </td>
                       <td className="px-4 py-3">{inf.followerCount?.toLocaleString() || inf.followers}</td>
                       <td className="px-4 py-3">{inf.engagementRate}</td>
-                      <td className="px-4 py-3"><span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">{inf.niche || "—"}</span></td>
+                      <td className="px-4 py-3">
+                        {/* Niche pill — clickable to quick-filter */}
+                        {inf.niche ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setFilters((p) => ({
+                                ...p,
+                                niches: p.niches.includes(inf.niche!)
+                                  ? p.niches.filter((n) => n !== inf.niche)
+                                  : [...p.niches, inf.niche!],
+                              }))
+                            }}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                              filters.niches.includes(inf.niche)
+                                ? "bg-[#1FAE5B]/15 text-[#0F6B3E] ring-1 ring-[#1FAE5B]/40"
+                                : "bg-gray-100 text-gray-700 hover:bg-[#1FAE5B]/10 hover:text-[#0F6B3E]"
+                            }`}
+                          >
+                            {inf.niche}
+                          </button>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div onClick={(e) => e.stopPropagation()}>
                           <StatusDropdown currentStatus={inf.pipelineStatus} onStatusChange={(s) => handleStatusUpdate(inf.id, s)} />

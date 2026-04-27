@@ -2,7 +2,7 @@
 // Pure utility functions — no React, no side effects
 
 import { CustomColumn, InfluencerRow, SortOrder } from "./types"
-import { PLATFORM_URL_MAP, CSV_EXPORT_FIELDS, IMPORT_FIELDS, platforms } from "./constants"
+import { PLATFORM_URL_MAP, CSV_EXPORT_FIELDS, IMPORT_FIELDS, platforms, DEFAULT_GENDERS, DEFAULT_CONTACT_STATUSES } from "./constants"
 
 // ── Handle helpers ────────────────────────────────────────────────────────────
 
@@ -151,7 +151,7 @@ export function getStaticCols(niches: string[], locations: string[]) {
     { key: "gender",          label: "Gender",           group: "Influencer Details" as const, minWidth: 70,  type: "select" as const, options: ["Male","Female","Non-binary","Other"] },
     { key: "location",        label: "Location",         group: "Influencer Details" as const, minWidth: 85,  type: "select" as const, options: locations },
     { key: "follower_count",  label: "Followers",        group: "Influencer Details" as const, minWidth: 70,  type: "number" as const },
-    { key: "engagement_rate", label: "Eng",              group: "Influencer Details" as const, minWidth: 60,  type: "number" as const },
+    { key: "engagement_rate", label: "Engagement Rate ",              group: "Influencer Details" as const, minWidth: 60,  type: "number" as const },
     { key: "first_name",      label: "First Name",       group: "Influencer Details" as const, minWidth: 75,  type: "text" as const },
     { key: "contact_info",    label: "Contact Info",     group: "Influencer Details" as const, minWidth: 120, type: "text" as const },
     { key: "approval_status", label: "Approve/Decline",  group: "Approval Details" as const,  minWidth: 95,  type: "select" as const, options: ["Approved","Declined","Pending"] },
@@ -159,7 +159,6 @@ export function getStaticCols(niches: string[], locations: string[]) {
     { key: "approval_notes",  label: "Notes",            group: "Approval Details" as const,  minWidth: 110, type: "text" as const },
   ]
 }
-
 // ── CSV import ────────────────────────────────────────────────────────────────
 
 export function escapeCSV(val: string): string {

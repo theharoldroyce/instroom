@@ -1,9 +1,8 @@
-// app/api/brand/[brandId]/influencers/route.ts
-
 import { prisma } from "@/lib/prisma"
 import { canAddInfluencer } from "@/lib/subscription-limits"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { logActivity } from "@/lib/activity-log"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function GET(
@@ -17,66 +16,101 @@ export async function GET(
     }
 
     const { brandId } = await params
-
     const brand = await prisma.brand.findUnique({ where: { id: brandId } })
     if (!brand) {
       return NextResponse.json({ error: "Brand not found" }, { status: 404 })
     }
 
-    // Allow owner OR any brand member
     const isOwner = brand.owner_id === session.user.id
-    const isMember = isOwner ? true : !!(await prisma.brandMember.findFirst({
-      where: { brand_id: brandId, user_id: session.user.id }
-    }))
-    
+    const isMember = isOwner
+      ? true
+      : !!(await prisma.brandMember.findFirst({
+          where: { brand_id: brandId, user_id: session.user.id },
+        }))
+
     if (!isMember) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    // Managers can only access if brand is active (subscription status)
     if (!isOwner && !brand.is_active) {
-      return NextResponse.json(
-        { error: "This workspace is unavailable." },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: "This workspace is unavailable." }, { status: 403 })
     }
 
-    // For owners: check if subscription exists and is expired (block access)
-    // vs. no subscription at all (allow access, block on actions)
     if (isOwner && !brand.is_active) {
       const subscription = await prisma.userSubscription.findUnique({
         where: { user_id: brand.owner_id },
       })
-      
-      // If subscription exists but is expired, block owner access
-      if (subscription && (subscription.status === "cancelled" || subscription.status === "paused" || 
-          (subscription.current_period_end && subscription.current_period_end < new Date()))) {
+      if (
+        subscription &&
+        (subscription.status === "cancelled" ||
+          subscription.status === "paused" ||
+          (subscription.current_period_end &&
+            subscription.current_period_end < new Date()))
+      ) {
         return NextResponse.json(
-          { error: "Subscription expired. Please renew to access this workspace.", subscriptionExpired: true },
+          {
+            error: "Subscription expired. Please renew to access this workspace.",
+            subscriptionExpired: true,
+          },
           { status: 403 }
         )
       }
-      // If no subscription (new user), allow access but they can't add influencers
     }
 
-    // Fetch BrandInfluencer rows without include to avoid Prisma throwing
-    // on orphaned records (influencer deleted but link remains)
     const brandInfluencers = await prisma.brandInfluencer.findMany({
       where: { brand_id: brandId },
       orderBy: { created_at: "desc" },
     })
 
-    // Fetch influencers separately so missing ones don't crash the query
-    const influencerIds = [...new Set(brandInfluencers.map(bi => bi.influencer_id))]
-    const influencers = await prisma.influencer.findMany({
-      where: { id: { in: influencerIds } },
-    })
-    const influencerMap = new Map(influencers.map(i => [i.id, i]))
+    const influencerIds = [...new Set(brandInfluencers.map((bi) => bi.influencer_id))]
+    const brandInfluencerIds = brandInfluencers.map((bi) => bi.id)
+
+    // Fetch influencers and "added" logs in parallel
+    const [influencers, addedLogs] = await Promise.all([
+      prisma.influencer.findMany({ where: { id: { in: influencerIds } } }),
+      prisma.activityLog.findMany({
+        where: {
+          brand_id: brandId,
+          action: "influencer.added",
+          entity_type: "brand_influencer",
+          entity_id: { in: brandInfluencerIds },
+        },
+        orderBy: { created_at: "asc" },
+        select: {
+          entity_id: true,
+          created_at: true,
+          user_id: true,
+        },
+      }),
+    ])
+
+    // Fetch user info for whoever added each influencer
+    const userIds = [...new Set(addedLogs.map((l) => l.user_id))]
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true, image: true, email: true },
+        })
+      : []
+    const userMap = new Map(users.map((u) => [u.id, u]))
+
+    // First log per brand_influencer_id = who added
+    const addedByMap = new Map<string, { user_id: string; created_at: Date }>()
+    for (const log of addedLogs) {
+      if (!addedByMap.has(log.entity_id)) {
+        addedByMap.set(log.entity_id, log)
+      }
+    }
+
+    const influencerMap = new Map(influencers.map((i) => [i.id, i]))
 
     const combined = brandInfluencers
-      .filter((bi) => influencerMap.has(bi.influencer_id)) // skip orphaned links
+      .filter((bi) => influencerMap.has(bi.influencer_id))
       .map((bi) => {
         const inf = influencerMap.get(bi.influencer_id)!
+        const addedLog = addedByMap.get(bi.id)
+        const addedUser = addedLog ? userMap.get(addedLog.user_id) : null
+
         return {
           id: bi.id,
           brand_id: bi.brand_id,
@@ -107,6 +141,14 @@ export async function GET(
           transferred_date: bi.transferred_date?.toISOString() ?? null,
           created_at: bi.created_at.toISOString(),
           updated_at: bi.updated_at.toISOString(),
+          added_by: addedUser
+            ? {
+                id: addedUser.id,
+                name: addedUser.name,
+                image: addedUser.image,
+                added_at: addedLog!.created_at.toISOString(),
+              }
+            : null,
           influencer: {
             id: inf.id,
             handle: inf.handle,
@@ -132,7 +174,10 @@ export async function GET(
 
     return NextResponse.json({ influencers: combined }, { status: 200 })
   } catch (error) {
-    console.error("GET /api/brand/[brandId]/influencers:", error instanceof Error ? error.message : String(error))
+    console.error(
+      "GET /api/brand/[brandId]/influencers:",
+      error instanceof Error ? error.message : String(error)
+    )
     return NextResponse.json({ error: "Failed to fetch influencers" }, { status: 500 })
   }
 }
@@ -177,7 +222,10 @@ export async function POST(
       where: { brand_id_influencer_id: { brand_id: brandId, influencer_id } },
     })
     if (existing) {
-      return NextResponse.json({ error: "This influencer is already added to your brand" }, { status: 409 })
+      return NextResponse.json(
+        { error: "This influencer is already added to your brand" },
+        { status: 409 }
+      )
     }
 
     const brandInfluencer = await prisma.brandInfluencer.create({
@@ -185,10 +233,26 @@ export async function POST(
       include: { influencer: true },
     })
 
+    logActivity({
+      brandId,
+      userId: session.user.id,
+      action: "influencer.added",
+      entityType: "brand_influencer",
+      entityId: brandInfluencer.id,
+      details: {
+        method: "manual",
+        handle: influencer.handle,
+        platform: influencer.platform,
+      },
+    }).catch(console.error)
+
     return NextResponse.json({ influencer: brandInfluencer }, { status: 201 })
   } catch (error) {
     return NextResponse.json(
-      { error: "Failed to add influencer", details: error instanceof Error ? error.message : String(error) },
+      {
+        error: "Failed to add influencer",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     )
   }
