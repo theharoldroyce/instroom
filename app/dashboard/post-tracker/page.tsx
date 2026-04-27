@@ -6,9 +6,7 @@
 
 "use client"
 
-export const dynamic = "force-dynamic"
-
-import { useState, useCallback } from "react"
+import { useState, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import {
   DndContext, DragOverlay, closestCorners, PointerSensor,
@@ -440,6 +438,14 @@ function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampa
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ClosedPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><span className="animate-spin text-[#1FAE5B]">⏳</span></div>}>
+      <PostTrackerContent />
+    </Suspense>
+  )
+}
+
+function PostTrackerContent() {
   const searchParams = useSearchParams()
   const brandId = searchParams.get("brandId") ?? undefined
 
