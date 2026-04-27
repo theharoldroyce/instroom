@@ -1,4 +1,13 @@
-import { useState, useEffect, useCallback } from "react"
+// hooks/useClosedData.ts
+// FIXED: same pattern as usePipelineData
+//   1. fetchData(showSpinner) — only shows spinner on initial load
+//   2. updateColumn uses optimistic update with applyColumnChange()
+//      that mirrors mapClosedToPipelineFields in the PATCH route
+//   3. On success: NO refetch (state already correct)
+//   4. On failure: silent rollback via snapshot
+//   5. updatePaidCollab / updateCampaignType: same pattern
+
+import { useState, useEffect, useCallback, useRef } from "react"
 
 export type ClosedColumn =
   | "For Order Creation"
@@ -28,7 +37,7 @@ export interface ClosedInfluencer {
   closedStatus: ClosedColumn
 
   contactStatus: string
-  stage: number
+  stage: number | null
   orderStatus: string | null
   contentPosted: boolean
   approvalStatus: string | null
@@ -97,45 +106,137 @@ interface UseClosedDataReturn {
   refetch: () => void
 }
 
-// ─────────────────────────────────────────────
-// Infer script/content status
-// ─────────────────────────────────────────────
-function inferContentStatuses(inf: any) {
+// ─── Infer script/content status from paidCollabData ─────────────────────────
+function inferContentStatuses(inf: { paidCollabData?: PaidCollabData | null }) {
   const paid = inf.paidCollabData
-  if (!paid?.deliverables?.length) {
-    return { scriptStatus: null, contentStatus: null }
-  }
+  if (!paid?.deliverables?.length) return { scriptStatus: null, contentStatus: null }
 
-  const scripts = paid.deliverables.map((d: any) => d.scriptStatus)
-  const contents = paid.deliverables.map((d: any) => d.contentStatus)
+  const scripts  = paid.deliverables.map((d) => d.scriptStatus)
+  const contents = paid.deliverables.map((d) => d.contentStatus)
 
   return {
-    scriptStatus: scripts.every((s: string) => s === "approved")
+    scriptStatus: scripts.every((s) => s === "approved")
       ? "approved"
-      : scripts.some((s: string) => ["pending", "revision_requested"].includes(s))
+      : scripts.some((s) => ["pending", "revision_requested"].includes(s))
       ? "pending"
       : null,
-
-    contentStatus: contents.every((s: string) => s === "approved")
+    contentStatus: contents.every((s) => s === "approved")
       ? "approved"
-      : contents.some((s: string) => ["pending", "revision_requested"].includes(s))
+      : contents.some((s) => ["pending", "revision_requested"].includes(s))
       ? "pending"
       : null,
   }
 }
 
-// ─────────────────────────────────────────────
-// Hook
-// ─────────────────────────────────────────────
-export function useClosedData(brandId?: string): UseClosedDataReturn {
-  const [data, setData] = useState<ClosedInfluencer[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// ─── Mirror of mapClosedToPipelineFields in the PATCH route ──────────────────
+// Keeps optimistic state 100% in sync with what the server will persist.
+function applyColumnChange(
+  item: ClosedInfluencer,
+  newColumn: ClosedColumn
+): ClosedInfluencer {
+  const now = new Date().toISOString()
 
-  // ─────────────────────────────────────────
-  // Fetch
-  // ─────────────────────────────────────────
-  const fetchData = useCallback(async () => {
+  switch (newColumn) {
+    case "For Order Creation":
+      return {
+        ...item,
+        closedStatus:   "For Order Creation",
+        contactStatus:  "for_order_creation",
+        stage:          5,
+        orderStatus:    "pending",
+        shippedAt:      null,
+        deliveredAt:    null,
+        contentPosted:  false,
+        postedAt:       null,
+        approvalStatus: "Approved",
+        approvalNotes:  null,
+      }
+
+    case "In-Transit":
+      return {
+        ...item,
+        closedStatus:   "In-Transit",
+        contactStatus:  "for_order_creation",
+        stage:          6,
+        orderStatus:    "shipped",
+        shippedAt:      item.shippedAt || now,
+        deliveredAt:    null,
+        contentPosted:  false,
+        postedAt:       null,
+        approvalStatus: "Approved",
+      }
+
+    case "Delivered":
+      return {
+        ...item,
+        closedStatus:   "Delivered",
+        contactStatus:  "for_order_creation",
+        stage:          7,
+        orderStatus:    "delivered",
+        shippedAt:      item.shippedAt || null,
+        deliveredAt:    item.deliveredAt || now,
+        contentPosted:  false,
+        postedAt:       null,
+        approvalStatus: "Approved",
+      }
+
+    case "Posted":
+      return {
+        ...item,
+        closedStatus:   "Posted",
+        contactStatus:  "for_order_creation",
+        stage:          8,
+        orderStatus:    "delivered",
+        shippedAt:      item.shippedAt || null,
+        deliveredAt:    item.deliveredAt || now,
+        contentPosted:  true,
+        postedAt:       item.postedAt || now,
+        approvalStatus: "Approved",
+      }
+
+    case "No post":
+      return {
+        ...item,
+        closedStatus:   "No post",
+        contactStatus:  "not_interested",
+        stage:          0,
+        orderStatus:    null,
+        shippedAt:      null,
+        deliveredAt:    null,
+        contentPosted:  false,
+        postedAt:       null,
+        approvalStatus: "Declined",
+        approvalNotes:  "No content published - exited",
+      }
+
+    default:
+      return item
+  }
+}
+
+// ─── Map raw API item to ClosedInfluencer ─────────────────────────────────────
+function mapItem(inf: any): ClosedInfluencer {
+  const base: ClosedInfluencer = {
+    ...inf,
+    closedStatus:
+      inf.closedStatus === "For Order Creation" ||
+      inf.contactStatus === "for_order_creation"
+        ? "For Order Creation"
+        : (inf.closedStatus as ClosedColumn) || "For Order Creation",
+    ...inferContentStatuses(inf),
+  }
+  return base
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+export function useClosedData(brandId?: string): UseClosedDataReturn {
+  const [data,      setData]      = useState<ClosedInfluencer[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error,     setError]     = useState<string | null>(null)
+  const pendingRef  = useRef(0)
+
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async (showSpinner = true) => {
     if (!brandId) {
       setData([])
       setIsLoading(false)
@@ -143,202 +244,139 @@ export function useClosedData(brandId?: string): UseClosedDataReturn {
     }
 
     try {
-      setIsLoading(true)
+      if (showSpinner) setIsLoading(true)
       setError(null)
 
       const res = await fetch(`/api/brand/${brandId}/closed`)
-
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error || "Fetch failed")
       }
 
       const json = await res.json()
-      console.log("API Response Data:", json.data); // Log to verify API response
-
-      const raw = json.data || []
-
-      const validStatuses: ClosedColumn[] = [
-        "For Order Creation",
-        "In-Transit",
-        "Delivered",
-        "Posted",
-        "No post",
-      ]
-
-      const mapped = raw.map((inf: any) => {
-        let closedStatus: ClosedColumn = "For Order Creation"
-
-        if (inf.contact_status === "not_interested") {
-          closedStatus = "No post"
-        } else if (inf.stage === 5) {
-          closedStatus = "For Order Creation"
-        } else if (inf.stage === 6) {
-          closedStatus = "In-Transit"
-        } else if (inf.stage === 7) {
-          closedStatus = "Delivered"
-        } else if (inf.stage === 8) {
-          closedStatus = "Posted"
-        }
-
-        const mappedItem = {
-          ...inf,
-          closedStatus,
-          ...inferContentStatuses(inf),
-        }
-
-        return mappedItem
-      })
-
-      console.log("Mapped Data:", mapped); // Log the mapped data
+      const mapped = (json.data || []).map(mapItem)
       setData(mapped)
     } catch (err: any) {
-      console.error("Fetch error:", err)
-      setError(err.message || "Error")
+      setError(err.message || "Error loading data")
     } finally {
-      setIsLoading(false)
+      if (showSpinner) setIsLoading(false)
     }
   }, [brandId])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  useEffect(() => { fetchData(true) }, [fetchData])
 
-  // ─────────────────────────────────────────
-  // Update Column
-  // ─────────────────────────────────────────
+  // ── Update Column (optimistic, no spinner) ────────────────────────────────
   const updateColumn = useCallback(
-    async (id: string, newColumn: ClosedColumn) => {
+    async (id: string, newColumn: ClosedColumn): Promise<boolean> => {
       if (!brandId) return false
 
-      let prevState: ClosedInfluencer[] = []
+      let snapshot: ClosedInfluencer[] = []
 
       setData((prev) => {
-        prevState = prev
-
+        snapshot = prev
         return prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                closedStatus: newColumn,
-                orderStatus:
-                  newColumn === "In-Transit"
-                    ? "shipped"
-                    : newColumn === "Delivered" || newColumn === "Posted"
-                    ? "delivered"
-                    : newColumn === "For Order Creation"
-                    ? "pending"
-                    : null,
-                contentPosted: newColumn === "Posted",
-              }
-            : item
+          item.id === id ? applyColumnChange(item, newColumn) : item
         )
       })
 
+      pendingRef.current += 1
+
       try {
         const res = await fetch(`/api/brand/${brandId}/closed/${id}`, {
-          method: "PATCH",
+          method:  "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ closedStatus: newColumn }),
+          body:    JSON.stringify({ closedStatus: newColumn }),
         })
 
         if (!res.ok) {
-          setData(prevState)
+          setData(snapshot)
           return false
         }
 
-        fetchData()
+        // ✅ State already correct — no refetch, no spinner
         return true
       } catch {
-        setData(prevState)
+        setData(snapshot)
         return false
+      } finally {
+        pendingRef.current -= 1
       }
     },
-    [brandId, fetchData]
+    [brandId]
   )
 
-  // ─────────────────────────────────────────
-  // Update Paid Collab
-  // ─────────────────────────────────────────
+  // ── Update Paid Collab (optimistic) ───────────────────────────────────────
   const updatePaidCollab = useCallback(
-    async (id: string, paidCollabData: PaidCollabData) => {
+    async (id: string, paidCollabData: PaidCollabData): Promise<boolean> => {
       if (!brandId) return false
 
-      let prevState: ClosedInfluencer[] = []
+      let snapshot: ClosedInfluencer[] = []
 
       setData((prev) => {
-        prevState = prev
-
+        snapshot = prev
         return prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                paidCollabData,
-                ...inferContentStatuses({ paidCollabData }),
-              }
-            : item
+          item.id !== id ? item : {
+            ...item,
+            paidCollabData,
+            ...inferContentStatuses({ paidCollabData }),
+          }
         )
       })
 
       try {
         const res = await fetch(`/api/brand/${brandId}/closed/${id}`, {
-          method: "PATCH",
+          method:  "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paidCollabData }),
+          body:    JSON.stringify({ paidCollabData }),
         })
 
         if (!res.ok) {
-          setData(prevState)
+          setData(snapshot)
           return false
         }
 
-        fetchData()
         return true
       } catch {
-        setData(prevState)
+        setData(snapshot)
         return false
       }
     },
-    [brandId, fetchData]
+    [brandId]
   )
 
-  // ─────────────────────────────────────────
-  // Update Campaign Type
-  // ─────────────────────────────────────────
+  // ── Update Campaign Type (optimistic) ─────────────────────────────────────
   const updateCampaignType = useCallback(
-    async (id: string, campaignType: string) => {
+    async (id: string, campaignType: string): Promise<boolean> => {
       if (!brandId) return false
 
-      let prevState: ClosedInfluencer[] = []
+      let snapshot: ClosedInfluencer[] = []
 
       setData((prev) => {
-        prevState = prev
-
+        snapshot = prev
         return prev.map((item) =>
-          item.id === id ? { ...item, campaignType } : item
+          item.id !== id ? item : { ...item, campaignType }
         )
       })
 
       try {
         const res = await fetch(`/api/brand/${brandId}/closed/${id}`, {
-          method: "PATCH",
+          method:  "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ campaignType }),
+          body:    JSON.stringify({ campaignType }),
         })
 
         if (!res.ok) {
-          setData(prevState)
+          setData(snapshot)
           return false
         }
 
-        fetchData()
         return true
       } catch {
-        setData(prevState)
+        setData(snapshot)
         return false
       }
     },
-    [brandId, fetchData]
+    [brandId]
   )
 
   return {
@@ -348,6 +386,6 @@ export function useClosedData(brandId?: string): UseClosedDataReturn {
     updateColumn,
     updatePaidCollab,
     updateCampaignType,
-    refetch: fetchData,
+    refetch: () => fetchData(false), // background sync, no spinner
   }
 }

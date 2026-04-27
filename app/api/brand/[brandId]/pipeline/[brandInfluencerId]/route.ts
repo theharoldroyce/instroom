@@ -92,9 +92,9 @@ export async function PATCH(
         stage: fields.stage,
 
         // ✅ FINAL FIX (auto fallback if missing)
-        approval_status:
-          fields.approval_status ??
-          (fields.stage >= 5 ? "Approved" : null),
+      approval_status:
+        fields.approval_status ??
+        (pipelineStatus !== "Not Interested" ? "Approved" : "Declined"),
 
         // ✅ only for Not Interested
         ...(pipelineStatus === "Not Interested"

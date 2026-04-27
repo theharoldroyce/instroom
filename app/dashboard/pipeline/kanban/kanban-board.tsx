@@ -1,4 +1,7 @@
 // app/dashboard/pipeline/kanban/kanban-board.tsx
+// FIXED: For Order Creation and Not Interested cards persist on refresh
+// For Order Creation shows a "Moved to Post Tracker" badge, no forward actions
+// Not Interested shows the NI reason pill, no forward actions
 
 "use client"
 
@@ -29,6 +32,7 @@ import {
   IconLoader2,
   IconAlertCircle,
   IconCheck,
+  IconArrowRight,
 } from "@tabler/icons-react"
 
 import InfluencerProfileSidebar, {
@@ -41,11 +45,7 @@ import { usePipelineData, type PipelineInfluencer } from "@/hooks/usePipelineDat
 // ─── Platform Icons ──────────────────────────────────────────────────────────
 export const PLATFORM_ICONS: Record<string, ReactNode> = {
   Instagram: (
-    <img
-      src="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
-      alt="Instagram"
-      className="w-4 h-4"
-    />
+    <img src="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg" alt="Instagram" className="w-4 h-4" />
   ),
   TikTok: (
     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -60,58 +60,59 @@ export const PLATFORM_ICONS: Record<string, ReactNode> = {
   Twitter: <IconBrandTwitter size={14} className="text-blue-400" />,
 }
 
-// ─── Filter constants ────────────────────────────────────────────────────────
-const NICHES = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech", "Fashion", "Travel"]
-const LOCATIONS = [
-  "Philippines", "Singapore", "United States", "Australia",
-  "United Kingdom", "Malaysia", "Indonesia", "Thailand", "Vietnam",
-]
+// ─── Constants ────────────────────────────────────────────────────────────────
+const NICHES    = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech", "Fashion", "Travel"]
+const LOCATIONS = ["Philippines", "Singapore", "United States", "Australia", "United Kingdom", "Malaysia", "Indonesia", "Thailand", "Vietnam"]
 
-// ─── Not Interested reasons ──────────────────────────────────────────────────
 const NI_REASONS = [
-  { r: "Fee too low / unpaid",                  bucket: "hard", color: "#E24B4A" },
-  { r: "Brief too scripted",                    bucket: "hard", color: "#E8724A" },
-  { r: "Won't allow content reuse",             bucket: "hard", color: "#F4A240" },
-  { r: "Working with a competitor",             bucket: "hard", color: "#C97B3A" },
-  { r: "Product doesn't fit their brand",       bucket: "hard", color: "#888780" },
-  { r: "Wrong audience fit",                    bucket: "hard", color: "#6B7F7A" },
-  { r: "Seen bad reviews about us",             bucket: "hard", color: "#A32D2D" },
-  { r: "Fully booked",                          bucket: "soft", color: "#2C8EC4" },
-  { r: "Temporarily unavailable / can't shoot", bucket: "soft", color: "#5BAFD4" },
-  { r: "Can't ship to their location",          bucket: "soft", color: "#7DC4E4" },
-  { r: "Ghosted / no longer active",            bucket: "soft", color: "#B4B2A9" },
-  { r: "Rate / deadline too tight",             bucket: "soft", color: "#F4B740" },
-  { r: "Others",                                bucket: "hard", color: "#D3D1C7" },
+  { r: "Fee too low / unpaid",                   bucket: "hard", color: "#E24B4A" },
+  { r: "Brief too scripted",                     bucket: "hard", color: "#E8724A" },
+  { r: "Won't allow content reuse",              bucket: "hard", color: "#F4A240" },
+  { r: "Working with a competitor",              bucket: "hard", color: "#C97B3A" },
+  { r: "Product doesn't fit their brand",        bucket: "hard", color: "#888780" },
+  { r: "Wrong audience fit",                     bucket: "hard", color: "#6B7F7A" },
+  { r: "Seen bad reviews about us",              bucket: "hard", color: "#A32D2D" },
+  { r: "Fully booked",                           bucket: "soft", color: "#2C8EC4" },
+  { r: "Temporarily unavailable / can't shoot",  bucket: "soft", color: "#5BAFD4" },
+  { r: "Can't ship to their location",           bucket: "soft", color: "#7DC4E4" },
+  { r: "Ghosted / no longer active",             bucket: "soft", color: "#B4B2A9" },
+  { r: "Rate / deadline too tight",              bucket: "soft", color: "#F4B740" },
+  { r: "Others",                                 bucket: "hard", color: "#D3D1C7" },
 ]
 
 // ─── Column definitions ──────────────────────────────────────────────────────
+// "For Order Creation" is the bridge column — cards here also appear in Post Tracker
 const columns = [
-  { key: "for-outreach",    title: "For Outreach",    color: "bg-yellow-400", status: "For Outreach" },
-  { key: "contacted",       title: "Contacted",        color: "bg-orange-400", status: "Contacted" },
-  { key: "in-conversation", title: "In Conversation",  color: "bg-blue-400",   status: "In Conversation" },
-  { key: "deal-agreed",     title: "Deal Agreed",      color: "bg-green-500",  status: "Deal Agreed" },
-  { key: "not-interested",  title: "Not Interested",   color: "bg-red-500",    status: "Not Interested" },
+  { key: "for-outreach",       title: "For Outreach",       color: "bg-yellow-400", status: "For Outreach"       },
+  { key: "contacted",          title: "Contacted",           color: "bg-orange-400", status: "Contacted"          },
+  { key: "in-conversation",    title: "In Conversation",     color: "bg-blue-400",   status: "In Conversation"    },
+  { key: "deal-agreed",        title: "Deal Agreed",         color: "bg-green-500",  status: "Deal Agreed"        },
+  { key: "for-order-creation", title: "For Order Creation",  color: "bg-[#1FAE5B]",  status: "For Order Creation" },
+  { key: "not-interested",     title: "Not Interested",      color: "bg-red-500",    status: "Not Interested"     },
 ]
 
-const isExitStage = (status: string) => status === "Not Interested"
-const getStatusFromColumnKey = (key: string): string => columns.find((c) => c.key === key)?.status ?? key
+const isExitStage  = (status: string) => status === "Not Interested" || status === "For Order Creation"
+const isTerminal   = (status: string) => status === "Not Interested" || status === "For Order Creation"
+
+const getStatusFromColumnKey = (key: string) => columns.find((c) => c.key === key)?.status ?? key
 
 const getStatusColor = (status: string) => {
-  const column = columns.find((c) => c.status === status)
-  if (!column) return "bg-gray-100 text-gray-700 border-gray-300"
-  switch (column.color) {
-    case "bg-yellow-400": return "bg-yellow-100 text-yellow-800 border-yellow-300"
-    case "bg-orange-400": return "bg-orange-100 text-orange-800 border-orange-300"
-    case "bg-blue-400":   return "bg-blue-100 text-blue-800 border-blue-300"
-    case "bg-green-500":  return "bg-green-100 text-green-800 border-green-300"
-    case "bg-red-500":    return "bg-red-100 text-red-800 border-red-300"
-    default:              return "bg-gray-100 text-gray-700 border-gray-300"
+  const col = columns.find((c) => c.status === status)
+  if (!col) return "bg-gray-100 text-gray-700 border-gray-300"
+  const map: Record<string, string> = {
+    "bg-yellow-400": "bg-yellow-100 text-yellow-800 border-yellow-300",
+    "bg-orange-400": "bg-orange-100 text-orange-800 border-orange-300",
+    "bg-blue-400":   "bg-blue-100 text-blue-800 border-blue-300",
+    "bg-green-500":  "bg-green-100 text-green-800 border-green-300",
+    "bg-[#1FAE5B]":  "bg-emerald-100 text-emerald-800 border-emerald-300",
+    "bg-red-500":    "bg-red-100 text-red-800 border-red-300",
   }
+  return map[col.color] ?? "bg-gray-100 text-gray-700 border-gray-300"
 }
 
-const getOptionDotColor = (status: string) => columns.find((c) => c.status === status)?.color ?? "bg-gray-400"
-const getPlatformIcon = (platform?: string): ReactNode => PLATFORM_ICONS[platform ?? ""] || PLATFORM_ICONS.Instagram
-const getAvatarColor = (name: string) => {
+const getOptionDotColor  = (status: string) => columns.find((c) => c.status === status)?.color ?? "bg-gray-400"
+const getPlatformIcon    = (platform?: string): ReactNode => PLATFORM_ICONS[platform ?? ""] || PLATFORM_ICONS.Instagram
+const getAvatarColor     = (name: string) => {
   const colors = ["bg-pink-500","bg-purple-500","bg-indigo-500","bg-blue-500","bg-cyan-500","bg-teal-500","bg-green-500","bg-yellow-500","bg-orange-500","bg-red-500","bg-rose-500"]
   return colors[name.charCodeAt(0) % colors.length]
 }
@@ -121,64 +122,65 @@ const getNextStages = (currentStatus: string): string[] => {
     case "For Outreach":    return ["Contacted", "Not Interested"]
     case "Contacted":       return ["In Conversation", "Not Interested"]
     case "In Conversation": return ["Deal Agreed", "Not Interested"]
-    case "Deal Agreed":     return []
+    case "Deal Agreed":     return []   // checklist handles the move to For Order Creation
+    // Terminal — no forward actions
+    case "For Order Creation":
     case "Not Interested":  return []
     default:                return []
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
 
-// ✅ FIX: influencerToPartner was missing — added back
 function influencerToPartner(inf: PipelineInfluencer): Partner {
   const nameParts = inf.influencer?.split(" ") || [""]
   const firstName = nameParts[0] || inf.handle?.slice(0, 6) || ""
   const lastName  = nameParts.slice(1).join(" ") || ""
   return {
-    id:          inf.id as any,
-    handle:      inf.handle || "",
+    id:           inf.id as any,
+    handle:       inf.handle || "",
     firstName,
     lastName,
-    birthday:    "",
-    plat:        inf.platform || "Instagram",
-    niche:       inf.niche || "",
-    gend:        "",
-    loc:         inf.location || "",
-    tier:        "",
+    birthday:     "",
+    plat:         inf.platform || "Instagram",
+    niche:        inf.niche || "",
+    gend:         "",
+    loc:          inf.location || "",
+    tier:         "",
     tierOverride: null,
-    onRet:       false,
-    retFee:      0,
-    defComm:     0,
-    commSt:      inf.pipelineStatus || "Pending",
-    clicks:      0,
-    cvr:         0,
-    sales:       0,
-    aov:         0,
-    rev:         0,
-    fol:         inf.followerCount,
-    eng:         parseFloat(inf.engagementRate) || 0,
-    avgV:        0,
-    gmv:         0,
-    added:       inf.createdAt ? new Date(inf.createdAt) : new Date(),
-    prods:       [],
-    prodCost:    0,
-    feesPaid:    inf.agreedRate || 0,
-    commPaid:    0,
-    totalSpend:  inf.agreedRate || 0,
-    roi_val:     0,
-    roas_val:    0,
-    monthly:     MONTHS.map((m) => ({ month: m, posts: 0, clicks: 0, rev: 0, eng: 0, sales: 0 })),
-    ppm:         0,
-    hClicks:     0,
-    hSales:      0,
-    hRev:        0,
-    hCVR:        0,
-    hPosts:      0,
+    onRet:        false,
+    retFee:       0,
+    defComm:      0,
+    commSt:       inf.pipelineStatus || "Pending",
+    clicks:       0,
+    cvr:          0,
+    sales:        0,
+    aov:          0,
+    rev:          0,
+    fol:          inf.followerCount,
+    eng:          parseFloat(inf.engagementRate) || 0,
+    avgV:         0,
+    gmv:          0,
+    added:        inf.createdAt ? new Date(inf.createdAt) : new Date(),
+    prods:        [],
+    prodCost:     0,
+    feesPaid:     inf.agreedRate || 0,
+    commPaid:     0,
+    totalSpend:   inf.agreedRate || 0,
+    roi_val:      0,
+    roas_val:     0,
+    monthly:      MONTHS.map((m) => ({ month: m, posts: 0, clicks: 0, rev: 0, eng: 0, sales: 0 })),
+    ppm:          0,
+    hClicks:      0,
+    hSales:       0,
+    hRev:         0,
+    hCVR:         0,
+    hPosts:       0,
   }
 }
 
-// ─── Not Interested Modal ────────────────────────────────────────────────────
+// ─── Not Interested Modal ─────────────────────────────────────────────────────
 interface NIModalProps {
   influencer: PipelineInfluencer
   onConfirm: (reason: string) => void
@@ -278,20 +280,16 @@ function NotInterestedModal({ influencer, onConfirm, onCancel }: NIModalProps) {
 }
 
 // ─── Deal Agreed Checklist ────────────────────────────────────────────────────
-interface DealAgreedChecklistProps {
+function DealAgreedChecklist({ influencerId, addressReceived, onAddressToggle, onMarkOrderPlaced }: {
   influencerId: string
   addressReceived: boolean
   onAddressToggle: (id: string) => void
   onMarkOrderPlaced: (id: string) => void
-}
-
-function DealAgreedChecklist({ influencerId, addressReceived, onAddressToggle, onMarkOrderPlaced }: DealAgreedChecklistProps) {
+}) {
   return (
     <div className="mt-3 pt-3 border-t border-gray-100">
-      <div
-        onClick={(e) => { e.stopPropagation(); onAddressToggle(influencerId) }}
-        className="flex items-center gap-2 cursor-pointer group mb-2"
-      >
+      <div onClick={(e) => { e.stopPropagation(); onAddressToggle(influencerId) }}
+        className="flex items-center gap-2 cursor-pointer group mb-2">
         <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all flex-shrink-0 ${addressReceived ? "bg-green-500 border-green-500" : "border-gray-300 bg-white group-hover:border-green-400"}`}>
           {addressReceived && <IconCheck size={10} className="text-white" />}
         </div>
@@ -302,50 +300,64 @@ function DealAgreedChecklist({ influencerId, addressReceived, onAddressToggle, o
       <button
         onClick={(e) => { e.stopPropagation(); if (addressReceived) onMarkOrderPlaced(influencerId) }}
         disabled={!addressReceived}
-        className={`w-full text-xs font-medium py-1.5 rounded-lg transition-all ${addressReceived ? "bg-green-500 text-white hover:bg-green-600" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+        className={`w-full text-xs font-medium py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${addressReceived ? "bg-[#1FAE5B] text-white hover:bg-[#0f6b3e]" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
       >
-        {addressReceived ? "✓ Mark For Order Creation" : "Mark For Order Creation"}
+        <IconArrowRight size={12} />
+        {addressReceived ? "Move to Post Tracker" : "Mark For Order Creation"}
       </button>
     </div>
   )
 }
 
 // ─── Pipeline Card ────────────────────────────────────────────────────────────
-interface PipelineCardProps {
-  influencer: PipelineInfluencer & { addressReceived?: boolean; niReason?: string }
+function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onAddressToggle, onMarkOrderPlaced }: {
+  influencer: PipelineInfluencer & { addressReceived?: boolean }
   onOpenSidebar: (inf: PipelineInfluencer) => void
   onStatusChange: (id: string, newStatus: string) => void
   onAddressToggle?: (id: string) => void
   onMarkOrderPlaced?: (id: string) => void
-}
-
-function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onAddressToggle, onMarkOrderPlaced }: PipelineCardProps) {
+}) {
   const nextStages = getNextStages(influencer.pipelineStatus)
-  const isExit = isExitStage(influencer.pipelineStatus)
+  const terminal   = isTerminal(influencer.pipelineStatus)
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow">
+    <div className={`bg-white border rounded-lg p-3 hover:shadow-md transition-shadow ${
+      influencer.pipelineStatus === "Not Interested"      ? "border-red-100 bg-red-50/30"     :
+      influencer.pipelineStatus === "For Order Creation"  ? "border-emerald-100 bg-emerald-50/30" :
+      "border-gray-200"
+    }`}>
       <div className="cursor-pointer" onClick={() => onOpenSidebar(influencer)}>
-        {/* Name + handle — no avatar */}
+        {/* Name + handle */}
         <div className="flex flex-col text-sm mb-2">
           <span className="font-medium text-gray-900">{influencer.influencer}</span>
           <span className="text-xs text-gray-500">{influencer.instagramHandle}</span>
         </div>
+
         {/* Platform + location */}
         <div className="flex items-center gap-2 text-xs text-gray-500 mb-1.5">
           <span className="flex items-center gap-1">{getPlatformIcon(influencer.platform)}{influencer.platform || "Instagram"}</span>
           <span>•</span>
           <span>{influencer.location || "—"}</span>
         </div>
+
         {/* Stats */}
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{influencer.followerCount?.toLocaleString() || influencer.followers || "—"} followers</span>
           <span>{influencer.engagementRate || "—"}% eng</span>
         </div>
-        {/* NI reason */}
-        {influencer.niReason && influencer.pipelineStatus === "Not Interested" && (
-          <div className="mt-2 text-xs text-red-600 bg-red-50 rounded px-2 py-1 inline-block">
+
+        {/* NI reason pill */}
+        {influencer.pipelineStatus === "Not Interested" && influencer.niReason && (
+          <div className="mt-2 text-xs text-red-600 bg-red-100 rounded-full px-2.5 py-1 inline-block font-medium">
             {influencer.niReason}
+          </div>
+        )}
+
+        {/* For Order Creation badge */}
+        {influencer.pipelineStatus === "For Order Creation" && (
+          <div className="mt-2 flex items-center gap-1 text-xs text-emerald-700 bg-emerald-100 rounded-full px-2.5 py-1 inline-flex font-medium">
+            <IconArrowRight size={11} />
+            In Post Tracker
           </div>
         )}
       </div>
@@ -360,19 +372,17 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onAddressTogg
         />
       )}
 
-      {/* Stage action buttons */}
-      {nextStages.length > 0 && !isExit && (
+      {/* Forward action buttons — hidden for terminal stages */}
+      {nextStages.length > 0 && !terminal && (
         <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
           {nextStages.map((stage) => (
-            <button
-              key={stage}
+            <button key={stage}
               onClick={(e) => { e.stopPropagation(); onStatusChange(influencer.id, stage) }}
               className={`text-xs px-2 py-1 rounded transition-all ${
                 stage === "Not Interested"
                   ? "bg-red-50 text-red-600 hover:bg-red-100"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
+              }`}>
               {stage === "Not Interested" ? "✕ Not Interested" : `→ ${stage}`}
             </button>
           ))}
@@ -394,7 +404,7 @@ function StatusDropdown({ currentStatus, onStatusChange }: { currentStatus: stri
   useEffect(() => {
     if (!isOpen || !buttonRef.current) return
     const rect = buttonRef.current.getBoundingClientRect()
-    const dropdownHeight = 300, dropdownWidth = 180
+    const dropdownHeight = 300, dropdownWidth = 200
     const spaceBelow = window.innerHeight - rect.bottom
     const spaceRight = window.innerWidth - rect.left
     const top  = spaceBelow >= dropdownHeight ? rect.bottom + 4 : rect.top - dropdownHeight - 4
@@ -420,8 +430,7 @@ function StatusDropdown({ currentStatus, onStatusChange }: { currentStatus: stri
       {columns.map((col, index) => (
         <div key={col.status}
           onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStatusChange(col.status); setIsOpen(false) }}
-          className={`px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 flex items-center gap-2 ${index !== columns.length - 1 ? "border-b border-gray-100" : ""} ${currentStatus === col.status ? "bg-gray-50 font-semibold" : ""}`}
-        >
+          className={`px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 flex items-center gap-2 ${index !== columns.length - 1 ? "border-b border-gray-100" : ""} ${currentStatus === col.status ? "bg-gray-50 font-semibold" : ""}`}>
           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getOptionDotColor(col.status)}`} />
           <span className="text-gray-700 whitespace-nowrap">{col.title}</span>
         </div>
@@ -433,12 +442,13 @@ function StatusDropdown({ currentStatus, onStatusChange }: { currentStatus: stri
     <>
       <button ref={buttonRef}
         onClick={(e) => { e.stopPropagation(); setIsOpen((p) => !p) }}
-        className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap border ${getStatusColor(currentStatus)}`}
-      >
+        className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap border ${getStatusColor(currentStatus)}`}>
         {currentStatus}
         <IconChevronDown size={12} className={`transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`} />
       </button>
-      {mounted && dropdown && typeof document !== "undefined" ? ReactDOM.createPortal(dropdown, document.body) : null}
+      {mounted && dropdown && typeof document !== "undefined"
+        ? ReactDOM.createPortal(dropdown, document.body)
+        : null}
     </>
   )
 }
@@ -446,9 +456,12 @@ function StatusDropdown({ currentStatus, onStatusChange }: { currentStatus: stri
 // ─── Droppable / Draggable ────────────────────────────────────────────────────
 function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
-  const isExit = id === "not-interested"
+  const isExit = id === "not-interested" || id === "for-order-creation"
   return (
-    <div ref={setNodeRef} className={`flex flex-col gap-3 w-[240px] flex-shrink-0 transition-colors rounded-lg ${isOver ? (isExit ? "bg-red-50" : "bg-gray-50") : ""}`}>
+    <div ref={setNodeRef}
+      className={`flex flex-col gap-3 w-[240px] flex-shrink-0 transition-colors rounded-lg ${
+        isOver ? (isExit ? "bg-red-50" : "bg-gray-50") : ""
+      }`}>
       {children}
     </div>
   )
@@ -469,17 +482,17 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
 interface PipelinePageProps { brandId?: string }
 
 export default function PipelinePage({ brandId }: PipelinePageProps) {
-  const [view, setView] = useState<"Board" | "list">("Board")
-  const [search, setSearch] = useState("")
-  const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null)
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null)
+  const [view,                 setView]                 = useState<"Board" | "list">("Board")
+  const [search,               setSearch]               = useState("")
+  const [showSuccessMessage,   setShowSuccessMessage]   = useState<string | null>(null)
+  const [activeId,             setActiveId]             = useState<string | null>(null)
+  const [sidebarOpen,          setSidebarOpen]          = useState(false)
+  const [selectedPartner,      setSelectedPartner]      = useState<Partner | null>(null)
   const [selectedColumnStatus, setSelectedColumnStatus] = useState<string | null>(null)
-  const [showFilterPanel, setShowFilterPanel] = useState(false)
-  const [filters, setFilters] = useState({ influencer: "", handle: "", location: "all", niche: "all" })
-  const [niModalInfluencer, setNiModalInfluencer] = useState<PipelineInfluencer | null>(null)
-  const [pendingNiId, setPendingNiId] = useState<string | null>(null)
+  const [showFilterPanel,      setShowFilterPanel]      = useState(false)
+  const [filters,              setFilters]              = useState({ influencer: "", handle: "", location: "all", niche: "all" })
+  const [niModalInfluencer,    setNiModalInfluencer]    = useState<PipelineInfluencer | null>(null)
+  const [pendingNiId,          setPendingNiId]          = useState<string | null>(null)
   const [addressReceivedState, setAddressReceivedState] = useState<Record<string, boolean>>({})
 
   const { data, isLoading, error, updateStatus, refetch } = usePipelineData(brandId)
@@ -495,11 +508,15 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     }
   }, [data])
 
+  const toast = (msg: string, duration = 3000) => {
+    setShowSuccessMessage(msg)
+    setTimeout(() => setShowSuccessMessage(null), duration)
+  }
+
   const handleAddressToggle = (id: string) => {
     setAddressReceivedState((prev) => {
       const next = { ...prev, [id]: !prev[id] }
-      setShowSuccessMessage(`Address ${next[id] ? "confirmed" : "unchecked"}`)
-      setTimeout(() => setShowSuccessMessage(null), 2000)
+      toast(`Address ${next[id] ? "confirmed ✓" : "unchecked"}`, 2000)
       return next
     })
   }
@@ -508,48 +525,57 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     const influencer = data.find((i) => i.id === id)
     if (!influencer || !addressReceivedState[id]) return
     const success = await updateStatus(id, "For Order Creation")
-    setShowSuccessMessage(
+    toast(
       success
-        ? `${influencer.influencer} moved to Post Tracker → For Order Creation`
+        ? `${influencer.influencer} moved to Post Tracker ✓`
         : `Failed to move ${influencer.influencer}`
     )
-    setTimeout(() => setShowSuccessMessage(null), 3000)
   }
 
-  const handleDragStart = (event: DragStartEvent) => { setActiveId(event.active.id as string) }
+  const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as string)
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     setActiveId(null)
     if (!over) return
-    const draggedId = active.id as string
-    const destinationKey = over.id as string
-    const draggedInfluencer = data.find((item) => item.id === draggedId)
-    if (!draggedInfluencer) return
-    const newStatus = getStatusFromColumnKey(destinationKey)
-    if (draggedInfluencer.pipelineStatus === newStatus) return
-    const allowedNext = getNextStages(draggedInfluencer.pipelineStatus)
-    if (!allowedNext.includes(newStatus)) {
-      setShowSuccessMessage(`Cannot move from "${draggedInfluencer.pipelineStatus}" to "${newStatus}"`)
-      setTimeout(() => setShowSuccessMessage(null), 2000)
+
+    const draggedId  = active.id as string
+    const destKey    = over.id as string
+    const dragged    = data.find((item) => item.id === draggedId)
+    if (!dragged) return
+
+    const newStatus = getStatusFromColumnKey(destKey)
+    if (dragged.pipelineStatus === newStatus) return
+
+    // Block dragging out of terminal columns
+    if (isTerminal(dragged.pipelineStatus)) {
+      toast(`Cannot move from "${dragged.pipelineStatus}"`, 2000)
       return
     }
+
+    const allowed = getNextStages(dragged.pipelineStatus)
+    if (!allowed.includes(newStatus)) {
+      toast(`Cannot move from "${dragged.pipelineStatus}" to "${newStatus}"`, 2000)
+      return
+    }
+
     if (newStatus === "Not Interested") {
       setPendingNiId(draggedId)
-      setNiModalInfluencer(draggedInfluencer)
+      setNiModalInfluencer(dragged)
       return
     }
+
     const success = await updateStatus(draggedId, newStatus)
-    const columnTitle = columns.find((col) => col.key === destinationKey)?.title
-    setShowSuccessMessage(success ? `${draggedInfluencer.influencer} moved to ${columnTitle}` : `Failed to move ${draggedInfluencer.influencer}`)
-    setTimeout(() => setShowSuccessMessage(null), 3000)
+    const colTitle = columns.find((col) => col.key === destKey)?.title
+    toast(success ? `${dragged.influencer} moved to ${colTitle}` : `Failed to move ${dragged.influencer}`)
   }
 
   const handleNiConfirm = async (reason: string) => {
     if (!pendingNiId || !niModalInfluencer) return
     const success = await updateStatus(pendingNiId, "Not Interested", { niReason: reason })
-    setShowSuccessMessage(success ? `${niModalInfluencer.influencer} marked as Not Interested · ${reason}` : `Failed to update ${niModalInfluencer.influencer}`)
-    setTimeout(() => setShowSuccessMessage(null), 3000)
+    toast(success
+      ? `${niModalInfluencer.influencer} marked as Not Interested · ${reason}`
+      : `Failed to update ${niModalInfluencer.influencer}`)
     setNiModalInfluencer(null)
     setPendingNiId(null)
   }
@@ -564,8 +590,9 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     }
     const influencer = data.find((i) => i.id === id)
     const success = await updateStatus(id, newStatus)
-    setShowSuccessMessage(success ? `${influencer?.influencer} updated to ${newStatus}` : `Failed to update ${influencer?.influencer}`)
-    setTimeout(() => setShowSuccessMessage(null), 2000)
+    toast(success
+      ? `${influencer?.influencer} updated to ${newStatus}`
+      : `Failed to update ${influencer?.influencer}`, 2000)
   }
 
   const openSidebar = (inf: PipelineInfluencer) => {
@@ -576,40 +603,35 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
   const handleColumnClick = (column: typeof columns[0]) => {
     setSelectedColumnStatus(column.status)
     setView("list")
-    setShowSuccessMessage(`Showing "${column.title}"`)
-    setTimeout(() => setShowSuccessMessage(null), 2000)
+    toast(`Showing "${column.title}"`, 2000)
   }
 
   const clearColumnFilter = () => {
     setSelectedColumnStatus(null)
-    setShowSuccessMessage("Showing all influencers")
-    setTimeout(() => setShowSuccessMessage(null), 2000)
+    toast("Showing all influencers", 2000)
   }
 
+  // ── Filtering ──────────────────────────────────────────────────────────────
   let filteredData = data
-    .filter((d) => d.influencer.toLowerCase().includes(search.toLowerCase()) || d.instagramHandle.toLowerCase().includes(search.toLowerCase()))
-    .filter((d) => (selectedColumnStatus ? d.pipelineStatus === selectedColumnStatus : true))
+    .filter((d) =>
+      d.influencer.toLowerCase().includes(search.toLowerCase()) ||
+      d.instagramHandle.toLowerCase().includes(search.toLowerCase())
+    )
+    .filter((d) => selectedColumnStatus ? d.pipelineStatus === selectedColumnStatus : true)
 
   if (filters.influencer)         filteredData = filteredData.filter((p) => p.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
   if (filters.handle)             filteredData = filteredData.filter((p) => p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase()))
   if (filters.location !== "all") filteredData = filteredData.filter((p) => p.location === filters.location)
   if (filters.niche !== "all")    filteredData = filteredData.filter((p) => p.niche === filters.niche)
 
-  const getItemsByColumn = (columnKey: string) =>
-    filteredData.filter((item) => item.pipelineStatus === getStatusFromColumnKey(columnKey))
-
-  const hasActiveFilters = filters.influencer !== "" || filters.handle !== "" || filters.location !== "all" || filters.niche !== "all" || search !== "" || selectedColumnStatus !== null
-  const activeInfluencer = activeId ? data.find((item) => item.id === activeId) : null
+  const getItemsByColumn  = (columnKey: string) => filteredData.filter((item) => item.pipelineStatus === getStatusFromColumnKey(columnKey))
+  const hasActiveFilters  = filters.influencer !== "" || filters.handle !== "" || filters.location !== "all" || filters.niche !== "all" || search !== "" || selectedColumnStatus !== null
+  const activeInfluencer  = activeId ? data.find((item) => item.id === activeId) : null
   const selectedColumnInfo = selectedColumnStatus ? columns.find((col) => col.status === selectedColumnStatus) : null
 
-  // ✅ FIX: Pass addressReceived and niReason into the card via spread
-  const renderCardContent = (inf: PipelineInfluencer) => (
+  const renderCard = (inf: PipelineInfluencer) => (
     <PipelineCard
-      influencer={{
-        ...inf,
-        addressReceived: addressReceivedState[inf.id] ?? false,
-        niReason: (inf as any).niReason ?? (inf as any).approvalNotes ?? undefined,
-      }}
+      influencer={{ ...inf, addressReceived: addressReceivedState[inf.id] ?? false }}
       onOpenSidebar={openSidebar}
       onStatusChange={handleStatusUpdate}
       onAddressToggle={handleAddressToggle}
@@ -634,7 +656,9 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
 
   return (
     <div className="flex flex-col gap-4 p-6">
-      {niModalInfluencer && <NotInterestedModal influencer={niModalInfluencer} onConfirm={handleNiConfirm} onCancel={handleNiCancel} />}
+      {niModalInfluencer && (
+        <NotInterestedModal influencer={niModalInfluencer} onConfirm={handleNiConfirm} onCancel={handleNiCancel} />
+      )}
 
       {showSuccessMessage && (
         <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2">
@@ -671,32 +695,40 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
               <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[340px] p-5">
                 <div className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Filter by</div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Influencer</label>
-                    <input type="text" value={filters.influencer} onChange={(e) => setFilters((p) => ({ ...p, influencer: e.target.value }))} placeholder="Search by name..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-500">Handle</label>
-                    <input type="text" value={filters.handle} onChange={(e) => setFilters((p) => ({ ...p, handle: e.target.value }))} placeholder="@username..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]" />
-                  </div>
+                  {[
+                    { label: "Influencer", key: "influencer", placeholder: "Search by name...",    type: "text" },
+                    { label: "Handle",     key: "handle",     placeholder: "@username...",          type: "text" },
+                  ].map(({ label, key, placeholder }) => (
+                    <div key={key} className="flex flex-col gap-1">
+                      <label className="text-xs text-gray-500">{label}</label>
+                      <input type="text" value={filters[key as keyof typeof filters]}
+                        onChange={(e) => setFilters((p) => ({ ...p, [key]: e.target.value }))}
+                        placeholder={placeholder}
+                        className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]" />
+                    </div>
+                  ))}
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-500">Location</label>
-                    <select value={filters.location} onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
+                    <select value={filters.location} onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))}
+                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
                       <option value="all">All Locations</option>
                       {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
                     </select>
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-gray-500">Niche</label>
-                    <select value={filters.niche} onChange={(e) => setFilters((p) => ({ ...p, niche: e.target.value }))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
+                    <select value={filters.niche} onChange={(e) => setFilters((p) => ({ ...p, niche: e.target.value }))}
+                      className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer">
                       <option value="all">All Niches</option>
                       {NICHES.map((n) => <option key={n}>{n}</option>)}
                     </select>
                   </div>
                 </div>
                 <div className="flex items-center justify-end gap-3 mt-5">
-                  <button onClick={() => setFilters({ influencer: "", handle: "", location: "all", niche: "all" })} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition">Clear all</button>
-                  <button onClick={() => setShowFilterPanel(false)} className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition">Apply</button>
+                  <button onClick={() => setFilters({ influencer: "", handle: "", location: "all", niche: "all" })}
+                    className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition">Clear all</button>
+                  <button onClick={() => setShowFilterPanel(false)}
+                    className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition">Apply</button>
                 </div>
               </div>
             )}
@@ -719,8 +751,10 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
             <div className="flex gap-4 min-w-max">
-              {columns.map((col) => {
+              {/* Main pipeline columns */}
+              {columns.filter((c) => c.key !== "not-interested").map((col) => {
                 const items = getItemsByColumn(col.key)
+                const isForOrderCreation = col.key === "for-order-creation"
                 return (
                   <DroppableColumn key={col.key} id={col.key}>
                     <div onClick={() => handleColumnClick(col)}
@@ -728,10 +762,13 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                       <span>{col.title}</span>
                       <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
                     </div>
+                    {isForOrderCreation && (
+                      <p className="text-[10px] text-emerald-600 px-1">Also visible in Post Tracker</p>
+                    )}
                     <div className="flex flex-col gap-2 min-h-[400px]">
                       {items.map((inf) => (
                         <DraggableCard key={inf.id} id={inf.id}>
-                          {renderCardContent(inf)}
+                          {renderCard(inf)}
                         </DraggableCard>
                       ))}
                       {items.length === 0 && (
@@ -741,12 +778,45 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                   </DroppableColumn>
                 )
               })}
+
+              {/* Separator */}
+              <div className="flex flex-col items-center justify-center px-2 flex-shrink-0">
+                <div className="h-16 w-px bg-gray-200" />
+                <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest py-2">exit</span>
+                <div className="h-16 w-px bg-gray-200" />
+              </div>
+
+              {/* Not Interested column */}
+              {(() => {
+                const col   = columns.find((c) => c.key === "not-interested")!
+                const items = getItemsByColumn(col.key)
+                return (
+                  <DroppableColumn id={col.key}>
+                    <div onClick={() => handleColumnClick(col)}
+                      className="bg-red-100 text-red-700 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between cursor-pointer hover:opacity-90 transition-opacity">
+                      <span>{col.title}</span>
+                      <span className="bg-red-200 text-red-700 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                    </div>
+                    <div className="flex flex-col gap-2 min-h-[400px]">
+                      {items.map((inf) => (
+                        <DraggableCard key={inf.id} id={inf.id}>
+                          {renderCard(inf)}
+                        </DraggableCard>
+                      ))}
+                      {items.length === 0 && (
+                        <div className="border-2 border-dashed border-red-200 rounded-lg p-4 text-center text-xs text-gray-400">Drop here</div>
+                      )}
+                    </div>
+                  </DroppableColumn>
+                )
+              })()}
             </div>
           </div>
+
           <DragOverlay>
             {activeInfluencer ? (
               <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg rotate-2 w-[240px]">
-                {renderCardContent(activeInfluencer)}
+                {renderCard(activeInfluencer)}
               </div>
             ) : null}
           </DragOverlay>
@@ -760,7 +830,7 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
             <div className={`${selectedColumnInfo.color} px-4 py-3 text-white flex items-center justify-between`}>
               <div className="flex items-center gap-2">
                 <IconLayoutList size={20} />
-                <span className="font-semibold">{selectedColumnInfo.title} Column</span>
+                <span className="font-semibold">{selectedColumnInfo.title}</span>
                 <span className="text-sm bg-white/20 px-2 py-1 rounded">{filteredData.length} influencers</span>
               </div>
               <button onClick={clearColumnFilter} className="text-white hover:bg-white/20 px-2 py-1 rounded transition flex items-center gap-1">
@@ -784,7 +854,7 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
               </thead>
               <tbody>
                 {filteredData.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No influencers found matching your filters</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No influencers found</td></tr>
                 ) : (
                   filteredData.map((inf) => (
                     <tr key={inf.id} className="border-t hover:bg-gray-50 cursor-pointer transition" onClick={() => openSidebar(inf)}>
@@ -797,7 +867,17 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                               {inf.influencer.charAt(0)}
                             </div>
                           )}
-                          <span className="font-medium">{inf.influencer}</span>
+                          <div>
+                            <span className="font-medium">{inf.influencer}</span>
+                            {inf.pipelineStatus === "Not Interested" && inf.niReason && (
+                              <p className="text-[11px] text-red-500 mt-0.5">{inf.niReason}</p>
+                            )}
+                            {inf.pipelineStatus === "For Order Creation" && (
+                              <p className="text-[11px] text-emerald-600 mt-0.5 flex items-center gap-1">
+                                <IconArrowRight size={10} /> In Post Tracker
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -805,11 +885,11 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                       </td>
                       <td className="px-4 py-3 text-[#0F6B3E] font-medium">{inf.instagramHandle}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1"><IconLocation size={14} className="text-gray-400" />{inf.location}</div>
+                        <div className="flex items-center gap-1"><IconLocation size={14} className="text-gray-400" />{inf.location || "—"}</div>
                       </td>
                       <td className="px-4 py-3">{inf.followerCount?.toLocaleString() || inf.followers}</td>
                       <td className="px-4 py-3">{inf.engagementRate}</td>
-                      <td className="px-4 py-3"><span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">{inf.niche}</span></td>
+                      <td className="px-4 py-3"><span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-700">{inf.niche || "—"}</span></td>
                       <td className="px-4 py-3">
                         <div onClick={(e) => e.stopPropagation()}>
                           <StatusDropdown currentStatus={inf.pipelineStatus} onStatusChange={(s) => handleStatusUpdate(inf.id, s)} />
