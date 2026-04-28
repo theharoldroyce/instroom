@@ -220,11 +220,11 @@ export function LoginForm({
       </Card>
       <FieldDescription className="px-0 sm:px-6 text-center text-xs sm:text-sm text-[#1E1E1E]">
         By clicking continue, you agree to our{" "}
-        <a href="#" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
+        <a href="/terms-of-service" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
           Terms of Service
         </a>{" "}
         and{" "}
-        <a href="#" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
+        <a href="/privacy" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
           Privacy Policy
         </a>
         .
@@ -234,7 +234,6 @@ export function LoginForm({
         isOpen={showForgotPassword}
         onClose={() => {
           setShowForgotPassword(false)
-          // Clean up URL
           router.replace("/login")
         }}
       />

@@ -37,7 +37,8 @@ function PipelineContent() {
     fetch("/api/subscription/status")
       .then(res => res.json())
       .then(data => {
-        setIsSubscribed(data.status === "active" && !data.isExpired)
+        // Allow access if active OR trialing
+        setIsSubscribed((data.status === "active" || data.status === "trialing") && !data.isExpired)
       })
       .catch(() => setIsSubscribed(false))
   }, [session?.user?.id])

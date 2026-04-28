@@ -55,27 +55,45 @@ export async function GET(
       select: { id: true, email: true, name: true, image: true },
     })
 
-    // Get collaborators
-    const members = await prisma.brandMember.findMany({
+    // Get collaborators - fetch without including user first to avoid null errors
+    const allMembers = await prisma.brandMember.findMany({
       where: { brand_id: brandId },
-      include: {
-        user: {
-          select: { id: true, email: true, name: true, image: true },
-        },
-      },
       orderBy: { joined_at: "desc" },
     })
 
+    // Fetch users separately - only for members that have valid user_ids
+    const userIds = allMembers.map((m) => m.user_id)
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, email: true, name: true, image: true },
+    })
+
+    // Create a map of user IDs to user data
+    const userMap = new Map(users.map((u) => [u.id, u]))
+
+    // Combine members with their user data, filtering out orphaned records
+    const validMembers = allMembers
+      .filter((m) => userMap.has(m.user_id))
+      .map((m) => {
+        const user = userMap.get(m.user_id)!
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: m.role,
+          joinedAt: m.joined_at,
+        }
+      })
+
     return NextResponse.json({
       owner,
-      members: members.map((m) => ({
-        id: m.user.id,
-        email: m.user.email,
-        name: m.user.name,
-        image: m.user.image,
-        role: m.role,
-        joinedAt: m.joined_at,
-      })),
+      members: validMembers,
+      brand: {
+        id: brand.id,
+        name: brand.name,
+        logo_url: brand.logo_url,
+      },
     })
   } catch (error) {
     console.error("Error fetching collaborators:", error)

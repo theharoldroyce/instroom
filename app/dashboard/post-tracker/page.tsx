@@ -8,8 +8,9 @@
 
 "use client"
 
-import { useState, useCallback, Suspense } from "react"
+import { useState, useCallback, Suspense, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import {
   DndContext, DragOverlay, closestCorners, PointerSensor,
   useSensor, useSensors, type DragStartEvent, type DragEndEvent,
@@ -26,6 +27,7 @@ import {
   useClosedData, type ClosedInfluencer, type ClosedColumn,
   type PaidCollabData, type CollabDeliverable,
 } from "@/hooks/useClosedData"
+import { SubscriptionGate } from "@/components/ui/subscription-gate"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const NICHES    = ["Beauty","Fitness","Lifestyle","Food","Tech","Fashion","Travel"]
@@ -499,8 +501,30 @@ export default function ClosedPage() {
 }
 
 function PostTrackerContent() {
+  const session = useSession()
   const searchParams = useSearchParams()
   const brandId = searchParams.get("brandId") ?? undefined
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null)
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>("inactive")
+
+  useEffect(() => {
+    const checkSubscription = async () => {
+      try {
+        const response = await fetch("/api/subscription/status")
+        const data = await response.json()
+        setSubscriptionStatus(data.status || "inactive")
+        setIsSubscribed((data.status === "active" || data.status === "trialing") && !data.isExpired)
+      } catch (error) {
+        console.error("Failed to check subscription:", error)
+        setSubscriptionStatus("inactive")
+        setIsSubscribed(false)
+      }
+    }
+
+    if (session.status === "authenticated") {
+      checkSubscription()
+    }
+  }, [session.status])
 
   const { data, isLoading, error, updateColumn, updatePaidCollab, updateCampaignType, refetch } = useClosedData(brandId)
 
@@ -579,7 +603,8 @@ function PostTrackerContent() {
   if (error) return <div className="flex flex-col items-center justify-center h-64 gap-3"><p className="text-red-500 text-sm">{error}</p><button onClick={refetch} className="text-[13px] px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition">Retry</button></div>
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <SubscriptionGate isSubscribed={isSubscribed} status={subscriptionStatus} featureName="Post Tracker">
+      <div className="flex flex-col gap-4 p-6">
       {toastMsg&&<div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in slide-in-from-top-2">{toastMsg}</div>}
 
       {selectedInf&&(
@@ -783,5 +808,6 @@ function PostTrackerContent() {
         </div>
       )}
     </div>
+    </SubscriptionGate>
   )
 }

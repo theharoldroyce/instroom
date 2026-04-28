@@ -208,21 +208,44 @@ export function LandingPage() {
 
         .trust-logos {
           display: flex;
-          justify-content: center;
           align-items: center;
           gap: 24px;
-          flex-wrap: wrap;
+          overflow: hidden;
           opacity: 0.7;
+          position: relative;
+          height: 70px;
+        }
+
+        .trust-carousel {
+          display: flex;
+          gap: 24px;
+          animation: scroll-left 60s linear infinite;
+          will-change: transform;
+        }
+
+        .trust-carousel:hover {
+          animation-play-state: paused;
+        }
+
+        @keyframes scroll-left {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(calc(-100% - 24px));
+          }
         }
 
         .trust-logo {
           height: 36px;
           padding: 0 12px;
-          background: rgba(30,30,30,0.04);
+          background: #f3f3f3;
           border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-shrink: 0;
+          border: 1px solid #e5e5e5;
         }
 
         /* ── Problem cards ── */
@@ -1014,11 +1037,19 @@ export function LandingPage() {
         <div className="container-md">
           <p className="trust-label">Brands we've managed campaigns for</p>
           <div className="trust-logos">
-            {[1,2,3,4,5,6].map(n => (
-              <div key={n} className="trust-logo">
-                <Image src="/images/instroomLogo.png" alt={`Brand ${n}`} width={100} height={36} />
-              </div>
-            ))}
+            <div className="trust-carousel">
+              {Array.from({ length: 17 }, (_, i) => 15 + i).map(n => (
+                <div key={n} className="trust-logo">
+                  <Image src={`/images/brandLogo/${n}.png`} alt={`Brand ${n}`} width={100} height={36} />
+                </div>
+              ))}
+              {/* Duplicate logos for seamless loop */}
+              {Array.from({ length: 17 }, (_, i) => 15 + i).map(n => (
+                <div key={`dup-${n}`} className="trust-logo">
+                  <Image src={`/images/brandLogo/${n}.png`} alt={`Brand ${n}`} width={100} height={36} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -1151,7 +1182,13 @@ export function LandingPage() {
               <p>Not everything is ready yet. We're still building, still improving, still listening to the people using it. But it's getting there, and we'd love for you to come along.</p>
             </div>
             <div className="founder-sign">
-              <div className="founder-avatar">Avatar</div>
+              <Image 
+                src="/images/CEO.jpg" 
+                alt="Armand Mañibo, Founder & CEO" 
+                width={64} 
+                height={64}
+                className="rounded-full border-2 border-[#1FAE5B] flex-shrink-0 object-cover"
+              />
               <div>
                 <div className="font-hand text-3xl font-bold text-[#0F6B3E] leading-none mb-1">Armand Manibo</div>
                 <div className="founder-title">Founder &amp; CEO, Instroom</div>

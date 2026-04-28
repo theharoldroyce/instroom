@@ -557,11 +557,11 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       </Card>
       <FieldDescription className="px-0 sm:px-6 text-center text-xs sm:text-sm text-[#1E1E1E]">
         By clicking continue, you agree to our{" "}
-        <Link href="#" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
+        <Link href="/terms-of-service" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
           Terms of Service
         </Link>{" "}
         and{" "}
-        <Link href="#" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
+        <Link href="/privacy" className="text-[#2C8EC4] hover:text-[#1FAE5B] font-medium">
           Privacy Policy
         </Link>
         .

@@ -35,18 +35,8 @@ export async function canAddBrand(userId: string): Promise<{
       }
     }
 
-    // Unlimited if max_brands is null (Agency plan)
-    if (subscription.plan.max_brands === null) {
-      return {
-        allowed: true,
-        current: brandCount,
-        max: null,
-      }
-    }
-
-    // Calculate max brands for limited plans
-    const includedBrands = subscription.plan.included_brands
-    const maxBrands = subscription.plan.max_brands + subscription.extra_brands
+    // Calculate max brands for limited plans (Solo: 1, Team: 3)
+    const maxBrands = (subscription.plan.max_brands ?? 0) + subscription.extra_brands
 
     return {
       allowed: brandCount < maxBrands,
@@ -55,7 +45,7 @@ export async function canAddBrand(userId: string): Promise<{
       message:
         brandCount >= maxBrands
           ? subscription.plan.name === "solo"
-            ? "Solo plan only includes 1 workspace. Upgrade to Team or Agency plan to add more."
+            ? "Solo plan only includes 1 workspace. Upgrade to Team plan to add more."
             : `You've reached your workspace limit (${maxBrands}). Upgrade your plan or purchase extra workspaces.`
           : undefined,
     }
@@ -114,7 +104,9 @@ export async function canAddCollaborator(
 
 /**
  * Check if user can add a new influencer to their brand
- * Free users (no active subscription) cannot add influencers
+ * Trial users can add up to 100 influencers
+ * Paid users get limits from their plan
+ * Free users cannot add influencers at all
  */
 export async function canAddInfluencer(
   userId: string,
@@ -124,6 +116,7 @@ export async function canAddInfluencer(
   current: number
   max: number | null
   message?: string
+  subscriptionStatus?: string
 }> {
   try {
     // Verify user owns the brand
@@ -146,7 +139,7 @@ export async function canAddInfluencer(
     })
 
     // Free users (no active subscription) cannot add influencers at all
-    if (!subscription || subscription.status !== "active") {
+    if (!subscription || (subscription.status !== "active" && subscription.status !== "trialing")) {
       return {
         allowed: false,
         current: 0,
@@ -155,26 +148,34 @@ export async function canAddInfluencer(
       }
     }
 
-    const maxInfluencers = subscription.plan.max_influencers
-
-    // Unlimited if null
-    if (maxInfluencers === null) {
-      return {
-        allowed: true,
-        current: 0,
-        max: null,
-      }
-    }
-
     // Count existing influencers for this brand
     const influencerCount = await prisma.brandInfluencer.count({
       where: { brand_id: brandId },
     })
 
+    // Trial users: 100 influencer limit
+    if (subscription.status === "trialing") {
+      const TRIAL_LIMIT = 3
+      return {
+        allowed: influencerCount < TRIAL_LIMIT,
+        current: influencerCount,
+        max: TRIAL_LIMIT,
+        subscriptionStatus: "trialing",
+        message:
+          influencerCount >= TRIAL_LIMIT
+            ? `You've reached your trial limit (${TRIAL_LIMIT} influencers). Upgrade to a paid plan to add more.`
+            : undefined,
+      }
+    }
+
+    // Paid users: use plan limits (Solo: 100, Team: 500)
+    const maxInfluencers = subscription.plan.max_influencers ?? 0
+
     return {
       allowed: influencerCount < maxInfluencers,
       current: influencerCount,
       max: maxInfluencers,
+      subscriptionStatus: "active",
       message:
         influencerCount >= maxInfluencers
           ? `You've reached your influencer limit (${maxInfluencers}). Upgrade your plan to add more.`
@@ -231,16 +232,7 @@ export async function canCreateCampaign(
       }
     }
 
-    const maxCampaigns = subscription.plan.max_campaigns
-
-    // Unlimited if null
-    if (maxCampaigns === null) {
-      return {
-        allowed: true,
-        current: 0,
-        max: null,
-      }
-    }
+    const maxCampaigns = subscription.plan.max_campaigns ?? 0
 
     // Count TOTAL active campaigns across ALL workspaces for this user
     const activeCampaignCount = await prisma.campaign.count({
@@ -295,7 +287,7 @@ export async function hasAPIAccess(userId: string): Promise<{
       allowed: subscription.plan.can_use_api === true,
       message: subscription.plan.can_use_api 
         ? undefined 
-        : "API access is not included in your plan. Upgrade to Team or Agency plan to use the API.",
+        : "API access is not included in your plan. Upgrade to Team plan to use the API.",
     }
   } catch (error) {
     return {
@@ -318,20 +310,42 @@ export async function hasCustomBranding(userId: string): Promise<{
       include: { plan: true },
     })
 
-    if (!subscription || subscription.status !== "active") {
+    if (!subscription) {
+      return {
+        allowed: false,
+        message: "No subscription found",
+      }
+    }
+
+    // Trial users cannot customize branding
+    if (subscription.status === "trialing") {
+      return {
+        allowed: false,
+        message: "Custom branding is available on paid plans only. Upgrade to Solo or Team to customize your branding.",
+      }
+    }
+
+    // Only active subscriptions can use branding
+    if (subscription.status !== "active") {
       return {
         allowed: false,
         message: "No active subscription found",
       }
     }
 
+    // Solo and Team plans have custom branding access
+    const allowedPlans = ["solo", "team"]
+    const planName = subscription.plan.name.toLowerCase()
+    const allowed = allowedPlans.includes(planName)
+
     return {
-      allowed: subscription.plan.custom_branding === true,
-      message: subscription.plan.custom_branding 
+      allowed,
+      message: allowed 
         ? undefined 
-        : "Custom branding is not included in your plan. Upgrade to Agency plan to use custom branding.",
+        : "Custom branding is not included in your plan. Please contact support for advanced features.",
     }
   } catch (error) {
+    console.error("Error checking custom branding access:", error)
     return {
       allowed: false,
       message: "Error checking custom branding access",

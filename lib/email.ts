@@ -1,5 +1,6 @@
 import "server-only"
 import nodemailer from "nodemailer"
+import path from "path"
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -9,12 +10,23 @@ const transporter = nodemailer.createTransport({
   },
 })
 
+const LOGO_CID = "instroomlogo@instroom"
+const LOGO_PATH = path.join(process.cwd(), "public/images/INSTROOM LOGO 1.png")
+
+const logoAttachment = {
+  filename: "INSTROOM LOGO 1.png",
+  path: LOGO_PATH,
+  cid: LOGO_CID,
+  disposition: "inline",
+}
+
 export async function sendWelcomeEmail(email: string, name: string) {
   try {
     const mailOptions = {
       from: `Instroom <${process.env.GMAIL_USER}>`,
       to: email,
       subject: "Welcome to Instroom!",
+      attachments: [logoAttachment],
       html: `
         <!DOCTYPE html>
         <html>
@@ -46,7 +58,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
                 margin-bottom: 15px;
               }
               .logo img {
-                height: 50px;
+                height: 120px;
                 width: auto;
               }
               h1 {
@@ -86,7 +98,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
             <div class="container">
               <div class="header">
                 <div class="logo">
-                  <img src="/images/instroomLogo.png" alt="Instroom Logo" width="50" height="50" />
+                  <img src="cid:${LOGO_CID}" alt="Instroom Logo" width="120" height="120" />
                 </div>
                 <h1>Welcome to Instroom!</h1>
               </div>
@@ -142,6 +154,7 @@ export async function sendPasswordResetEmail(email: string, name: string, resetU
       from: `Instroom <${process.env.GMAIL_USER}>`,
       to: email,
       subject: "Reset Your Instroom Password",
+      attachments: [logoAttachment],
       html: `
         <!DOCTYPE html>
         <html>
@@ -173,7 +186,7 @@ export async function sendPasswordResetEmail(email: string, name: string, resetU
                 margin-bottom: 15px;
               }
               .logo img {
-                height: 50px;
+                height: 120px;
                 width: auto;
               }
               h1 {
@@ -184,10 +197,6 @@ export async function sendPasswordResetEmail(email: string, name: string, resetU
               .content {
                 margin: 30px 0;
                 line-height: 1.8;
-              }
-              .highlight {
-                color: #1FAE5B;
-                font-weight: 600;
               }
               .button {
                 display: inline-block;
@@ -224,7 +233,7 @@ export async function sendPasswordResetEmail(email: string, name: string, resetU
             <div class="container">
               <div class="header">
                 <div class="logo">
-                  <img src="/images/instroomLogo.png" alt="Instroom Logo" width="50" height="50" />
+                  <img src="cid:${LOGO_CID}" alt="Instroom Logo" width="120" height="120" />
                 </div>
                 <h1>Reset Your Password</h1>
               </div>
@@ -276,6 +285,7 @@ export async function sendOTPEmail(email: string, name: string, otp: string) {
       from: `Instroom <${process.env.GMAIL_USER}>`,
       to: email,
       subject: "Verify Your Instroom Account - OTP Code",
+      attachments: [logoAttachment],
       html: `
         <!DOCTYPE html>
         <html>
@@ -307,7 +317,7 @@ export async function sendOTPEmail(email: string, name: string, otp: string) {
                 margin-bottom: 15px;
               }
               .logo img {
-                height: 50px;
+                height: 120px;
                 width: auto;
               }
               h1 {
@@ -357,7 +367,7 @@ export async function sendOTPEmail(email: string, name: string, otp: string) {
             <div class="container">
               <div class="header">
                 <div class="logo">
-                  <img src="/images/instroomLogo.png" alt="Instroom Logo" width="50" height="50" />
+                  <img src="cid:${LOGO_CID}" alt="Instroom Logo" width="120" height="120" />
                 </div>
                 <h1>Verify Your Email</h1>
               </div>
@@ -408,7 +418,6 @@ export async function sendBrandInvitationEmail(
   role: string = "collaborator"
 ) {
   try {
-    // Role configurations with capabilities
     const roleConfigs: Record<string, { label: string; can: string[]; cannot: string[] }> = {
       manager: {
         label: "Manager",
@@ -457,6 +466,7 @@ export async function sendBrandInvitationEmail(
       from: `Instroom <${process.env.GMAIL_USER}>`,
       to: email,
       subject: `You're invited to join ${brandName} on Instroom!`,
+      attachments: [logoAttachment],
       html: `
         <!DOCTYPE html>
         <html>
@@ -490,6 +500,10 @@ export async function sendBrandInvitationEmail(
                 font-size: 24px;
                 font-weight: 700;
                 color: #0F6B3E;
+              }
+              .logo img {
+                height: 120px;
+                width: auto;
               }
               .main-heading {
                 color: #0F6B3E;
@@ -619,7 +633,9 @@ export async function sendBrandInvitationEmail(
           <body>
             <div class="container">
               <div class="header">
-                <div class="logo" style="font-size: 28px; font-weight: 700; color: #0F6B3E; margin-bottom: 25px; display: block;">Instroom</div>
+                <div class="logo">
+                  <img src="cid:${LOGO_CID}" alt="Instroom Logo" width="120" height="120" />
+                </div>
                 <h1 class="main-heading">You're invited to ${brandName}</h1>
                 <p class="subheading">Join as <span class="role-badge">${roleConfig.label}</span></p>
               </div>

@@ -23,7 +23,7 @@ const plans = {
     max_influencers: 100,
     max_campaigns: 3,
     can_use_api: false,
-    custom_branding: false,
+    custom_branding: true,
     priority_support: false,
   },
   team: {
@@ -36,20 +36,6 @@ const plans = {
     max_brands: 10,
     max_influencers: 500,
     max_campaigns: 10,
-    can_use_api: true,
-    custom_branding: false,
-    priority_support: true,
-  },
-  agency: {
-    display_name: "Agency",
-    price_monthly: 199,
-    price_yearly: 1990,
-    included_seats: 30,
-    max_seats: null,
-    included_brands: 10,
-    max_brands: null,
-    max_influencers: null,
-    max_campaigns: null,
     can_use_api: true,
     custom_branding: true,
     priority_support: true,
@@ -121,6 +107,39 @@ function PaymentPageInner() {
     }
   }
 
+  const handleStartTrial = async () => {
+    if (!userId) {
+      router.push("/login")
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const response = await fetch("/api/subscription/start-trial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planName: planKey,
+          cycle,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        console.error("Error starting trial:", data.error)
+        return
+      }
+
+      router.push("/dashboard")
+    } catch (error) {
+      console.error("Error starting trial:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="relative min-h-screen bg-[#F7F9F8] text-[#1E1E1E] overflow-hidden">
       <div className="pointer-events-none fixed top-0 left-0 w-96 h-96 rounded-full bg-[#1FAE5B]/8 blur-3xl -translate-x-1/2 -translate-y-1/2" />
@@ -182,13 +201,22 @@ function PaymentPageInner() {
           <p className="text-[#666666] text-center md:text-left mb-8">
             Click the button below to securely complete your subscription.
           </p>
-          <button
-            onClick={handleCheckout}
-            disabled={loading}
-            className="w-full rounded-lg py-3 px-6 text-center text-base font-semibold transition-all duration-150 bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] text-white shadow-lg shadow-[#1FAE5B]/25 hover:shadow-xl hover:shadow-[#1FAE5B]/35 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Processing..." : "Proceed to Checkout"}
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={handleCheckout}
+              disabled={loading}
+              className="w-full rounded-lg py-3 px-6 text-center text-base font-semibold transition-all duration-150 bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] text-white shadow-lg shadow-[#1FAE5B]/25 hover:shadow-xl hover:shadow-[#1FAE5B]/35 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? "Processing..." : "Subscribe Now"}
+            </button>
+            <button
+              onClick={handleStartTrial}
+              disabled={loading}
+              className="w-full rounded-lg py-3 px-6 text-center text-base font-semibold transition-all duration-150 bg-white border-2 border-[#1FAE5B] text-[#1FAE5B] hover:bg-[#1FAE5B]/5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Start Free Trial
+            </button>
+          </div>
           <p className="text-xs text-[#999999] text-center mt-4">
             Powered by Lemon Squeezy
           </p>

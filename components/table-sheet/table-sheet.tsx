@@ -110,6 +110,7 @@ export default function TableSheet({
   initialRows = [], initialCustomColumns = [],
   onRowsChange, onDeleteRow, onFetchComplete, onRegisterIdSwap,
   onCustomColumnsChange, onImportRows, readOnly = false, brandId,
+  subscriptionStatus, onShowTrialModal,
 }: {
   initialRows?: InfluencerRow[]
   initialCustomColumns?: CustomColumn[]
@@ -121,6 +122,8 @@ export default function TableSheet({
   onImportRows?: (rows: InfluencerRow[]) => void
   readOnly?: boolean
   brandId?: string
+  subscriptionStatus?: { status: string; isExpired: boolean } | null
+  onShowTrialModal?: () => void
 }) {
   const [rows, setRows] = useState<InfluencerRow[]>(initialRows)
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
@@ -1071,8 +1074,23 @@ useEffect(() => {
             <button onClick={() => setShowManageLocations(true)} className="flex items-center gap-1.5 px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition" title="Manage locations"><IconMapPin size={13} /> Locations</button>
 
             <div className="relative">
-              <button ref={importExportBtnRef} onClick={() => setShowImportExportMenu(v => !v)}
-                className="flex items-center gap-1.5 px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition">
+              <button 
+                ref={importExportBtnRef} 
+                onClick={() => {
+                  if (subscriptionStatus?.status === "trialing") {
+                    onShowTrialModal?.()
+                    return
+                  }
+                  setShowImportExportMenu(v => !v)
+                }}
+                disabled={subscriptionStatus?.status === "trialing"}
+                className={`flex items-center gap-1.5 px-2.5 py-2 text-xs border rounded-lg transition ${
+                  subscriptionStatus?.status === "trialing"
+                    ? "opacity-50 cursor-not-allowed border-gray-200 text-gray-400 bg-gray-50"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+                title={subscriptionStatus?.status === "trialing" ? "Import and Export are not available during your free trial" : undefined}
+              >
                 <IconSettings size={13} /> Import / Export
               </button>
               {showImportExportMenu && (

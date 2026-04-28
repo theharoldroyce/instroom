@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { Input } from "@/components/ui/input"
 import {
   IconSearch,
@@ -10,6 +11,7 @@ import {
   IconHistory,
   IconX,
   IconList,
+  IconFilter,
 } from "@tabler/icons-react"
 
 import AddInfluencerModal from "./modal/AddInfluencerModal"
@@ -62,6 +64,28 @@ interface ActivityLog {
     image: string | null
     initials: string
   } | null
+}
+
+interface FilterState {
+  platform: string
+  contact_status: string
+  niche: string
+  minFollowers: string
+  maxFollowers: string
+  minEngagement: string
+  maxEngagement: string
+  addedById: string  // filter by who added the influencer
+}
+
+const DEFAULT_FILTERS: FilterState = {
+  platform: "",
+  contact_status: "",
+  niche: "",
+  minFollowers: "",
+  maxFollowers: "",
+  minEngagement: "",
+  maxEngagement: "",
+  addedById: "",
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -175,6 +199,294 @@ const STATUS_COLORS: Record<string, string> = {
   no_response:    "bg-gray-100 text-gray-500",
   paid_collab:    "bg-emerald-100 text-emerald-700",
   negotiating:    "bg-indigo-100 text-indigo-700",
+}
+
+// ─── Filter Modal ─────────────────────────────────────────────────────────────
+function FilterModal({
+  filters,
+  influencers,
+  onChange,
+  onReset,
+  onClose,
+}: {
+  filters: FilterState
+  influencers: InfluencerRow[]
+  onChange: (f: FilterState) => void
+  onReset: () => void
+  onClose: () => void
+}) {
+  const [local, setLocal] = useState<FilterState>(filters)
+
+  // Derive unique options from data
+  const platforms = Array.from(
+    new Set(influencers.map((i) => i.influencer.platform).filter(Boolean))
+  ).sort()
+
+  const niches = Array.from(
+    new Set(influencers.map((i) => i.influencer.niche).filter(Boolean) as string[])
+  ).sort()
+
+  const contactStatuses = Array.from(
+    new Set(influencers.map((i) => i.contact_status).filter(Boolean))
+  ).sort()
+
+  // Derive unique "added by" users — deduplicated by user id
+  const addedByUsers = Array.from(
+    new Map(
+      influencers
+        .filter((i) => i.added_by !== null)
+        .map((i) => [i.added_by!.id, i.added_by!])
+    ).values()
+  ).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
+
+  const set = (key: keyof FilterState, value: string) =>
+    setLocal((prev) => ({ ...prev, [key]: value }))
+
+  const handleApply = () => {
+    onChange(local)
+    onClose()
+  }
+
+  const handleReset = () => {
+    setLocal(DEFAULT_FILTERS)
+    onReset()
+    onClose()
+  }
+
+  const activeCount = Object.values(local).filter(Boolean).length
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-[480px] max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <IconFilter size={18} className="text-[#1FAE5B]" />
+            <h2 className="font-semibold text-gray-900">Filter Influencers</h2>
+            {activeCount > 0 && (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#1FAE5B]/15 text-[#0F6B3E]">
+                {activeCount} active
+              </span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition"
+          >
+            <IconX size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+
+          {/* ── Added By ─────────────────────────────────────────────────────── */}
+          {addedByUsers.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Added by
+                </label>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Filter by researcher or team member who added the influencer
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {/* "All" option */}
+                <button
+                  onClick={() => set("addedById", "")}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm transition ${
+                    local.addedById === ""
+                      ? "bg-[#1FAE5B]/10 border-[#1FAE5B] text-[#0F6B3E] font-medium"
+                      : "bg-white border-gray-200 text-gray-600 hover:border-[#1FAE5B]/50 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold text-gray-400">ALL</span>
+                  </div>
+                  <span className="flex-1 text-left">All team members</span>
+                  <span className="text-xs text-gray-400">{influencers.length}</span>
+                </button>
+
+                {addedByUsers.map((user) => {
+                  const count = influencers.filter(
+                    (i) => i.added_by?.id === user.id
+                  ).length
+                  return (
+                    <button
+                      key={user.id}
+                      onClick={() => set("addedById", user.id)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm transition ${
+                        local.addedById === user.id
+                          ? "bg-[#1FAE5B]/10 border-[#1FAE5B] text-[#0F6B3E] font-medium"
+                          : "bg-white border-gray-200 text-gray-600 hover:border-[#1FAE5B]/50 hover:bg-gray-50"
+                      }`}
+                    >
+                      <Avatar name={user.name} image={user.image} size={7} />
+                      <span className="flex-1 text-left truncate">
+                        {user.name ?? "Unknown"}
+                      </span>
+                      <span className="text-xs text-gray-400 flex-shrink-0">
+                        {count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Divider */}
+          {addedByUsers.length > 0 && (
+            <div className="border-t border-gray-100" />
+          )}
+
+          {/* ── Platform ─────────────────────────────────────────────────────── */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Platform
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {["", ...platforms].map((p) => (
+                <button
+                  key={p || "__all__"}
+                  onClick={() => set("platform", p)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                    local.platform === p
+                      ? "bg-[#1FAE5B] text-white border-[#1FAE5B]"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-[#1FAE5B] hover:text-[#0F6B3E]"
+                  }`}
+                >
+                  {p || "All"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Contact Status ───────────────────────────────────────────────── */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Contact Status
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {["", ...contactStatuses].map((s) => (
+                <button
+                  key={s || "__all__"}
+                  onClick={() => set("contact_status", s)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                    local.contact_status === s
+                      ? "bg-[#1FAE5B] text-white border-[#1FAE5B]"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-[#1FAE5B] hover:text-[#0F6B3E]"
+                  }`}
+                >
+                  {s ? s.replace(/_/g, " ") : "All"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Niche ────────────────────────────────────────────────────────── */}
+          {niches.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Niche
+              </label>
+              <select
+                value={local.niche}
+                onChange={(e) => set("niche", e.target.value)}
+                className="h-9 px-3 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/30 focus:border-[#1FAE5B]"
+              >
+                <option value="">All niches</option>
+                {niches.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* ── Follower Range ───────────────────────────────────────────────── */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Followers
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                placeholder="Min"
+                value={local.minFollowers}
+                onChange={(e) => set("minFollowers", e.target.value)}
+                className="flex-1 h-9 px-3 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/30 focus:border-[#1FAE5B]"
+              />
+              <span className="text-gray-400 text-sm">–</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={local.maxFollowers}
+                onChange={(e) => set("maxFollowers", e.target.value)}
+                className="flex-1 h-9 px-3 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/30 focus:border-[#1FAE5B]"
+              />
+            </div>
+          </div>
+
+          {/* ── Engagement Range ─────────────────────────────────────────────── */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Engagement Rate (%)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                placeholder="Min"
+                value={local.minEngagement}
+                onChange={(e) => set("minEngagement", e.target.value)}
+                className="flex-1 h-9 px-3 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/30 focus:border-[#1FAE5B]"
+              />
+              <span className="text-gray-400 text-sm">–</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={local.maxEngagement}
+                onChange={(e) => set("maxEngagement", e.target.value)}
+                className="flex-1 h-9 px-3 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]/30 focus:border-[#1FAE5B]"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/60">
+          <button
+            onClick={handleReset}
+            className="text-sm text-gray-500 hover:text-gray-700 transition font-medium"
+          >
+            Reset all
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="h-9 px-4 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApply}
+              className="h-9 px-5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#0f6b3e] transition"
+            >
+              Apply filters
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── History Modal ────────────────────────────────────────────────────────────
@@ -342,8 +654,23 @@ export default function InfluencerList() {
   const [search, setSearch] = useState("")
   const [openModal, setOpenModal] = useState(false)
   const [openImport, setOpenImport] = useState(false)
+  const [openFilter, setOpenFilter] = useState(false)
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
   const [modalType, setModalType] = useState<ModalType>("select")
   const [historyTarget, setHistoryTarget] = useState<InfluencerRow | null>(null)
+  const [showTrialLimitModal, setShowTrialLimitModal] = useState(false)
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{ status: string; isExpired: boolean } | null>(null)
+
+  const { data: session } = useSession()
+
+  // Fetch subscription status for trial detection
+  useEffect(() => {
+    if (!session?.user?.id) return
+    fetch("/api/subscription/status")
+      .then(res => res.json())
+      .then(data => setSubscriptionStatus(data))
+      .catch(() => setSubscriptionStatus({ status: "inactive", isExpired: false }))
+  }, [session?.user?.id])
 
   const fetchInfluencers = useCallback(async (): Promise<void> => {
     if (!brandId) return
@@ -375,11 +702,43 @@ export default function InfluencerList() {
     setOpenModal(false)
   }
 
+  // Count active filters for the badge on the Filter button
+  const activeFilterCount = Object.values(filters).filter(Boolean).length
+
   const filtered = influencers.filter((item) => {
+    // Search
     const name = (item.influencer.full_name ?? "").toLowerCase()
     const handle = item.influencer.handle.toLowerCase()
     const q = search.toLowerCase()
-    return name.includes(q) || handle.includes(q)
+    if (q && !name.includes(q) && !handle.includes(q)) return false
+
+    // Added by (matched on user id)
+    if (filters.addedById && item.added_by?.id !== filters.addedById) return false
+
+    // Platform
+    if (filters.platform && item.influencer.platform !== filters.platform)
+      return false
+
+    // Contact status
+    if (filters.contact_status && item.contact_status !== filters.contact_status)
+      return false
+
+    // Niche
+    if (filters.niche && item.influencer.niche !== filters.niche) return false
+
+    // Followers
+    if (filters.minFollowers && item.influencer.follower_count < Number(filters.minFollowers))
+      return false
+    if (filters.maxFollowers && item.influencer.follower_count > Number(filters.maxFollowers))
+      return false
+
+    // Engagement
+    if (filters.minEngagement && item.influencer.engagement_rate < Number(filters.minEngagement))
+      return false
+    if (filters.maxEngagement && item.influencer.engagement_rate > Number(filters.maxEngagement))
+      return false
+
+    return true
   })
 
   return (
@@ -411,16 +770,57 @@ export default function InfluencerList() {
               + New Influencer
             </button>
             <button
-              onClick={() => setOpenImport(true)}
-              className="h-10 px-4 border rounded-lg text-sm hover:bg-gray-50 transition"
+              onClick={() => {
+                if (subscriptionStatus?.status === "trialing") {
+                  setShowTrialLimitModal(true)
+                  return
+                }
+                setOpenImport(true)
+              }}
+              disabled={subscriptionStatus?.status === "trialing"}
+              className={`h-10 px-4 border rounded-lg text-sm transition ${
+                subscriptionStatus?.status === "trialing"
+                  ? "opacity-50 cursor-not-allowed bg-gray-50 border-gray-200 text-gray-400"
+                  : "hover:bg-gray-50 text-gray-600"
+              }`}
+              title={subscriptionStatus?.status === "trialing" ? "Import is not available during your free trial" : undefined}
             >
               Import
             </button>
-            <button className="h-10 px-4 border rounded-lg text-sm hover:bg-gray-50 transition">
+            <button
+              onClick={() => {
+                if (subscriptionStatus?.status === "trialing") {
+                  setShowTrialLimitModal(true)
+                  return
+                }
+              }}
+              disabled={subscriptionStatus?.status === "trialing"}
+              className={`h-10 px-4 border rounded-lg text-sm transition ${
+                subscriptionStatus?.status === "trialing"
+                  ? "opacity-50 cursor-not-allowed bg-gray-50 border-gray-200 text-gray-400"
+                  : "hover:bg-gray-50 text-gray-600"
+              }`}
+              title={subscriptionStatus?.status === "trialing" ? "Export is not available during your free trial" : undefined}
+            >
               Export
             </button>
-            <button className="h-10 px-4 border rounded-lg text-sm hover:bg-gray-50 transition">
-              Filter
+
+            {/* Filter button — solid green when active with inline count badge */}
+            <button
+              onClick={() => setOpenFilter(true)}
+              className={`relative h-10 px-4 rounded-lg text-sm transition flex items-center gap-1.5 border font-medium ${
+                activeFilterCount > 0
+                  ? "bg-[#1FAE5B] border-[#1FAE5B] text-white hover:bg-[#0f6b3e]"
+                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <IconFilter size={14} />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="bg-white/25 text-white text-[11px] font-bold px-1.5 py-0.5 rounded-md leading-none">
+                  {activeFilterCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -430,7 +830,9 @@ export default function InfluencerList() {
           <p className="text-sm text-gray-500">
             {loading
               ? "Loading..."
-              : `${filtered.length} influencer${filtered.length !== 1 ? "s" : ""}`}
+              : `${filtered.length} influencer${filtered.length !== 1 ? "s" : ""}${
+                  activeFilterCount > 0 ? " (filtered)" : ""
+                }`}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -508,8 +910,8 @@ export default function InfluencerList() {
                       colSpan={10}
                       className="text-center py-12 text-gray-500 text-sm"
                     >
-                      {search
-                        ? `No results for "${search}"`
+                      {search || activeFilterCount > 0
+                        ? "No influencers match your search or filters."
                         : 'No influencers yet. Click "+ New Influencer" to add one.'}
                     </td>
                   </tr>
@@ -730,6 +1132,17 @@ export default function InfluencerList() {
         />
       )}
 
+      {/* ── Filter Modal ── */}
+      {openFilter && (
+        <FilterModal
+          filters={filters}
+          influencers={influencers}
+          onChange={setFilters}
+          onReset={() => setFilters(DEFAULT_FILTERS)}
+          onClose={() => setOpenFilter(false)}
+        />
+      )}
+
       {/* ── Add Influencer Modals ── */}
       {openModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -771,6 +1184,103 @@ export default function InfluencerList() {
             setOpenImport(false)
           }}
         />
+      )}
+
+      {/* ── Trial Limit Modal ── */}
+      {showTrialLimitModal && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center">
+          {/* Overlay covering only content area (not sidebar/navbar) */}
+          <div
+            className="absolute inset-0"
+            style={{ background: "rgba(10,20,15,0.45)", backdropFilter: "blur(1px)" }}
+            onClick={() => setShowTrialLimitModal(false)}
+          />
+          
+          {/* Card centered on overlay */}
+          <div
+            className="flex flex-col items-center gap-6 rounded-2xl px-8 py-9 text-center relative"
+            style={{
+              background: "rgba(255,255,255,0.98)",
+              boxShadow:
+                "0 2px 0px rgba(15,107,62,0.08) inset, 0 32px 72px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(31,174,91,0.2)",
+              maxWidth: 380,
+              width: "88%",
+              borderRadius: 20,
+            }}
+          >
+            {/* Clock icon */}
+            <div
+              className="flex items-center justify-center"
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: "linear-gradient(145deg, #fef3c7 0%, #fde68a 100%)",
+                boxShadow: "0 1px 3px rgba(180,83,9,0.15), 0 0 0 1px rgba(180,83,9,0.1)",
+              }}
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#b45309"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+            </div>
+
+            {/* Text */}
+            <div className="flex flex-col gap-2">
+              <h2
+                className="text-xl font-semibold leading-tight"
+                style={{ color: "#111827", letterSpacing: "-0.025em" }}
+              >
+                Import unavailable on trial
+              </h2>
+              <p
+                className="text-sm leading-relaxed mx-auto"
+                style={{ color: "#6b7280", maxWidth: 280 }}
+              >
+                You're currently on a free trial with a 100-influencer limit. Upgrade to a paid plan to import influencers in bulk.
+              </p>
+            </div>
+
+            {/* Plan pills */}
+            <div className="flex flex-wrap justify-center gap-2">
+              {["Solo", "Team"].map((plan) => (
+                <span
+                  key={plan}
+                  className="rounded-full px-4 py-1.5 text-xs font-semibold tracking-wide"
+                  style={{
+                    background: "#f0faf5",
+                    color: "#0F6B3E",
+                    border: "1px solid #c3e6d4",
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  {plan}
+                </span>
+              ))}
+            </div>
+
+            {/* CTA */}
+            <a
+              href="/pricing"
+              className="block w-full rounded-xl py-3 text-center text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
+              style={{
+                background: "linear-gradient(135deg,#22c55e 0%,#0F6B3E 100%)",
+                boxShadow: "0 4px 16px rgba(15,107,62,0.32), 0 1px 0 rgba(255,255,255,0.15) inset",
+              }}
+            >
+              View pricing & upgrade
+            </a>
+          </div>
+        </div>
       )}
     </div>
   )
