@@ -1,76 +1,42 @@
+// app/analytics/page.tsx
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Filter, Download } from "lucide-react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { Filter, Download, Loader2 } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { useRouter, useSearchParams } from "next/navigation"
 
 // ============================================================
-// MOCK DATA GENERATOR (replace with actual data.json import)
+// Types
 // ============================================================
-const generateMockData = () => {
-  const platforms = ["Instagram", "YouTube", "TikTok"]
-  const niches = ["Beauty", "Fitness", "Lifestyle", "Food", "Tech"]
-  const locations = ["PH", "SG", "US", "AU"]
-  
-  // Expanded rejection reasons with hard/soft classification
-  const rejectionReasons = [
-    { r: 'Fee too low / unpaid', bucket: 'hard' },
-    { r: 'Brief too scripted', bucket: 'hard' },
-    { r: "Won't allow content reuse", bucket: 'hard' },
-    { r: 'Working with a competitor', bucket: 'hard' },
-    { r: "Product doesn't fit their brand", bucket: 'hard' },
-    { r: 'Wrong audience fit', bucket: 'hard' },
-    { r: 'Seen bad reviews about us', bucket: 'hard' },
-    { r: 'Fully booked', bucket: 'soft' },
-    { r: "Temporarily unavailable / can't shoot", bucket: 'soft' },
-    { r: "Can't ship to their location", bucket: 'soft' },
-    { r: 'Ghosted / no longer active', bucket: 'soft' },
-    { r: 'Rate / deadline too tight', bucket: 'soft' },
-    { r: 'Others', bucket: 'hard' },
-  ]
-  
-  const pipelineStatuses = [
-    "Prospect", "Reached Out", "In Conversation", "Onboarded", 
-    "In Transit", "Delivery Problem", "Content Pending", "Posted", "Rejected"
-  ]
-  
-  return Array.from({ length: 50 }, (_, i) => {
-    const platform = platforms[Math.floor(Math.random() * platforms.length)]
-    const pipelineStatus = pipelineStatuses[Math.floor(Math.random() * pipelineStatuses.length)]
-    const isRejected = pipelineStatus === "Rejected"
-    const isPosted = pipelineStatus === "Posted"
-    const isContentPending = pipelineStatus === "Content Pending"
-    const hasSales = isPosted && Math.random() > 0.4
-    const rejection = isRejected ? rejectionReasons[Math.floor(Math.random() * rejectionReasons.length)] : null
-    
-    return {
-      id: i,
-      platform: platform,
-      instagramHandle: platform === "Instagram" ? `@influencer_${i}` : null,
-      niche: niches[Math.floor(Math.random() * niches.length)],
-      location: locations[Math.floor(Math.random() * locations.length)],
-      createdAt: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString(),
-      pipelineStatus: pipelineStatus,
-      rejectionReason: rejection?.r || null,
-      rejectionBucket: rejection?.bucket || null,
-      views: isPosted ? Math.floor(Math.random() * 100000) : 0,
-      likes: isPosted ? Math.floor(Math.random() * 8000) : 0,
-      comments: isPosted ? Math.floor(Math.random() * 800) : 0,
-      clicks: isPosted ? Math.floor(Math.random() * 1000) : 0,
-      salesQty: hasSales ? Math.floor(Math.random() * 40) : 0,
-      salesAmt: hasSales ? Math.floor(Math.random() * 3000) : 0,
-      prodCost: (pipelineStatus === "Onboarded" || isPosted || isContentPending) ? Math.floor(Math.random() * 1500) + 200 : 0,
-      usageRights: isPosted && Math.random() > 0.45,
-      contentSaved: isPosted && Math.random() > 0.6,
-      adCode: isPosted && Math.random() > 0.7,
-      deliveredDaysAgo: (pipelineStatus === "Content Pending" && Math.random() > 0.5) ? Math.floor(Math.random() * 45) + 1 : null,
-    }
-  })
+
+interface AnalyticsInfluencer {
+  id: string
+  platform: string
+  instagramHandle: string | null
+  niche: string
+  location: string
+  createdAt: string
+  pipelineStatus: string
+  rejectionReason: string | null
+  rejectionBucket: "hard" | "soft" | null
+  views: number
+  likes: number
+  comments: number
+  clicks: number
+  salesQty: number
+  salesAmt: number
+  prodCost: number
+  usageRights: boolean
+  contentSaved: boolean
+  adCode: boolean
+  deliveredDaysAgo: number | null
 }
 
-const jsonData = generateMockData()
+// ============================================================
+// Helper Functions
 // ============================================================
 
-// Helper functions
 const formatNumber = (num: number) => {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
   if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
@@ -86,33 +52,35 @@ const formatPercent = (value: number, total: number) => {
   return Math.round((value / total) * 100) + '%'
 }
 
-// Tooltip component for rejection reasons
+// ============================================================
+// UI Components
+// ============================================================
+
 const ReasonTooltip = ({ reason }: { reason: string }) => {
   const tips: Record<string, string> = {
-    'Fee too low / unpaid': 'Creator treats this as a business — your offer didn\'t meet their rate card or they require payment, not just gifting. Consider increasing your budget or adding a guaranteed fee on top of commission.',
-    'Brief too scripted': 'Your creative brief left no room for the creator\'s own voice. Over-scripted content gets 30–40% lower engagement because followers can tell it\'s not authentic. Try giving a key message + full creative freedom.',
-    "Won't allow content reuse": 'Creator won\'t let you repurpose their content for paid ads, emails, or other channels without extra compensation. Increasingly common as creators treat their content as a commercial asset. Build usage rights into your initial offer.',
-    'Working with a competitor': 'Creator has an active exclusive deal with a direct competitor, or the brand category conflicts with an existing partner. Check their recent posts before outreach to spot competitor collabs.',
-    "Product doesn't fit their brand": 'The product feels out of place in their content — their audience would notice the mismatch. Audit creator\'s feed before outreach. A beauty creator posting tech gadgets loses audience trust fast.',
-    'Wrong audience fit': 'The creator\'s followers don\'t match your target customer — even if the niche looks right on paper. Ask for audience demographic data (age, gender, location) before outreach, not after.',
-    'Seen bad reviews about us': 'Creator came across negative reviews, complaints, or callouts about your brand or product and doesn\'t want reputational risk. This is a signal worth escalating — if multiple creators cite this, it\'s a brand health issue, not a campaign issue.',
-    'Fully booked': 'Content calendar is at capacity. Especially common in Q4 (Oct–Dec), Valentine\'s, and Mother\'s Day windows. Reach out 6–8 weeks earlier next time. This creator is worth re-approaching — they didn\'t say no to you, just to your timing.',
-    "Temporarily unavailable / can't shoot": 'Creator is travelling, dealing with personal circumstances, or simply doesn\'t have time to shoot right now. Not a rejection — flag for follow-up next campaign. They\'re still warm.',
-    "Can't ship to their location": 'Your product can\'t be delivered to where they are — wrong country, remote location, or they\'re travelling. Consider digital-only alternatives (commission link, e-gift) or add their location to your shipping coverage.',
-    'Ghosted / no longer active': 'Stopped responding after initial contact — could be inbox overwhelm, platform inactivity, or they\'ve moved on from brand deals. Try a different contact channel (DM vs email) before writing them off.',
-    'Rate / deadline too tight': 'Either the pay was below their rate, the posting deadline was too rushed, or both. Campaigns with less than 2 weeks\' notice see significantly higher decline rates. Build in more lead time.',
-    'Others': 'Reason wasn\'t captured or doesn\'t fit any category. Try to get specifics before logging this — even a short note helps spot patterns over time.',
+    'Fee too low / unpaid': 'Creator treats this as a business — your offer didn\'t meet their rate card or they require payment, not just gifting.',
+    'Brief too scripted': 'Your creative brief left no room for the creator\'s own voice. Try giving a key message + full creative freedom.',
+    "Won't allow content reuse": 'Creator won\'t let you repurpose their content without extra compensation.',
+    'Working with a competitor': 'Creator has an active exclusive deal with a direct competitor.',
+    "Product doesn't fit their brand": 'The product feels out of place in their content.',
+    'Wrong audience fit': 'The creator\'s followers don\'t match your target customer.',
+    'Seen bad reviews about us': 'Creator came across negative reviews about your brand.',
+    'Fully booked': 'Content calendar is at capacity. Re-approach next campaign.',
+    "Temporarily unavailable / can't shoot": 'Creator is travelling or unavailable. Flag for follow-up.',
+    "Can't ship to their location": 'Your product can\'t be delivered to their location.',
+    'Ghosted / no longer active': 'Stopped responding after initial contact.',
+    'Rate / deadline too tight': 'Pay was below their rate or deadline too rushed.',
+    'Others': 'Reason wasn\'t captured or doesn\'t fit any category.',
   }
   
   return (
     <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block bg-gray-900 text-white text-xs rounded-lg p-3 w-64 shadow-lg">
-      {tips[reason] || 'No additional context available for this rejection reason.'}
+      {tips[reason] || 'No additional context available.'}
     </div>
   )
 }
 
-// Metric Card Component
-function MetricCard({ label, value, subLabel, isGreen = false }: { label: string; value: string | number; subLabel?: string; isGreen?: boolean }) {
+const MetricCard = ({ label, value, subLabel, isGreen = false }: { label: string; value: string | number; subLabel?: string; isGreen?: boolean }) => {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4">
       <div className="text-xs text-gray-500 mb-1">{label}</div>
@@ -122,8 +90,7 @@ function MetricCard({ label, value, subLabel, isGreen = false }: { label: string
   )
 }
 
-// Funnel Step Component
-function FunnelStep({ name, value, total, color, dropOff }: { name: string; value: number; total: number; color: string; dropOff?: string }) {
+const FunnelStep = ({ name, value, total, color, dropOff }: { name: string; value: number; total: number; color: string; dropOff?: string }) => {
   const percentage = total === 0 ? 0 : (value / total) * 100
   
   return (
@@ -143,8 +110,7 @@ function FunnelStep({ name, value, total, color, dropOff }: { name: string; valu
   )
 }
 
-// Enhanced Reason Row with Tooltip
-function ReasonRow({ name, count, total, color, bucket }: { name: string; count: number; total: number; color: string; bucket: string }) {
+const ReasonRow = ({ name, count, total, color, bucket }: { name: string; count: number; total: number; color: string; bucket: string }) => {
   const maxCount = Math.max(count, 1)
   
   return (
@@ -167,8 +133,7 @@ function ReasonRow({ name, count, total, color, bucket }: { name: string; count:
   )
 }
 
-// Platform Row Component
-function PlatformRow({ platform, posted, received, color, icon, iconBg }: { platform: string; posted: number; received: number; color: string; icon: string; iconBg: string }) {
+const PlatformRow = ({ platform, posted, received, color, icon, iconBg }: { platform: string; posted: number; received: number; color: string; icon: string; iconBg: string }) => {
   const rate = received === 0 ? 0 : (posted / received) * 100
   
   return (
@@ -188,8 +153,7 @@ function PlatformRow({ platform, posted, received, color, icon, iconBg }: { plat
   )
 }
 
-// EMV Row Component
-function EMVRow({ platform, views, emv, color, icon, iconBg, rate }: { platform: string; views: number; emv: number; color: string; icon: string; iconBg: string; rate: number }) {
+const EMVRow = ({ platform, views, emv, color, icon, iconBg, rate }: { platform: string; views: number; emv: number; color: string; icon: string; iconBg: string; rate: number }) => {
   const maxEmv = Math.max(emv, 1)
   const percentage = (emv / maxEmv) * 100
   
@@ -213,8 +177,7 @@ function EMVRow({ platform, views, emv, color, icon, iconBg, rate }: { platform:
   )
 }
 
-// Pipeline Item Component
-function PipelineItem({ status, count, total, color, agingData }: { status: string; count: number; total: number; color: string; agingData?: any[] }) {
+const PipelineItem = ({ status, count, total, color, agingData }: { status: string; count: number; total: number; color: string; agingData?: any[] }) => {
   const percentage = total === 0 ? 0 : (count / total) * 100
   
   return (
@@ -243,8 +206,7 @@ function PipelineItem({ status, count, total, color, agingData }: { status: stri
   )
 }
 
-// Tab Component
-function Tab({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) {
+const Tab = ({ label, isActive, onClick }: { label: string; isActive: boolean; onClick: () => void }) => {
   return (
     <button
       onClick={onClick}
@@ -259,8 +221,7 @@ function Tab({ label, isActive, onClick }: { label: string; isActive: boolean; o
   )
 }
 
-// Inline Filter Panel Component
-function InlineFilterPanel({ 
+const InlineFilterPanel = ({ 
   isOpen, 
   filters, 
   onFilterChange,
@@ -278,7 +239,7 @@ function InlineFilterPanel({
   nicheOptions: any[];
   locationOptions: any[];
   onReset: () => void;
-}) {
+}) => {
   if (!isOpen) return null
 
   return (
@@ -333,8 +294,7 @@ function InlineFilterPanel({
   )
 }
 
-// Donut Chart Component
-function DonutChart({ segments, centerLabel, centerSub, size = 130 }: { segments: { label: string; value: number; color: string }[]; centerLabel: string | number; centerSub: string; size?: number }) {
+const DonutChart = ({ segments, centerLabel, centerSub, size = 130 }: { segments: { label: string; value: number; color: string }[]; centerLabel: string | number; centerSub: string; size?: number }) => {
   const total = segments.reduce((a, s) => a + s.value, 0)
   if (total === 0) {
     return <div className="flex items-center justify-center h-[130px] text-gray-400 text-sm">No data</div>
@@ -375,8 +335,19 @@ function DonutChart({ segments, centerLabel, centerSub, size = 130 }: { segments
   )
 }
 
+// ============================================================
+// Main Analytics Component
+// ============================================================
+
 export default function AnalyticsPage() {
-  const [influencers, setInfluencers] = useState<any[]>([])
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const brandId = searchParams.get("brandId")
+  
+  const [influencers, setInfluencers] = useState<AnalyticsInfluencer[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(0)
   const [filters, setFilters] = useState({
     platform: "all",
@@ -387,11 +358,52 @@ export default function AnalyticsPage() {
   const [showFilters, setShowFilters] = useState(false)
   const filterContainerRef = useRef<HTMLDivElement>(null)
 
+  // Redirect if not authenticated
   useEffect(() => {
-    if (jsonData && Array.isArray(jsonData)) {
-      setInfluencers(jsonData)
+    if (status === "unauthenticated") {
+      router.push("/auth/signin")
     }
-  }, [])
+  }, [status, router])
+
+  // Fetch analytics data
+  const fetchAnalytics = useCallback(async () => {
+    if (!session?.user?.id || !brandId) {
+      setIsLoading(false)
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams({
+        brandId,
+        platform: filters.platform,
+        niche: filters.niche,
+        location: filters.location,
+        dateRange: filters.dateRange,
+      })
+
+      const response = await fetch(`/api/analytics?${params.toString()}`)
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `HTTP ${response.status}`)
+      }
+
+      const result = await response.json()
+      setInfluencers(result.data || [])
+    } catch (err) {
+      console.error("[Analytics] Error fetching data:", err)
+      setError(err instanceof Error ? err.message : "Failed to load analytics data")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [session?.user?.id, brandId, filters.platform, filters.niche, filters.location, filters.dateRange])
+
+  useEffect(() => {
+    fetchAnalytics()
+  }, [fetchAnalytics])
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
@@ -408,44 +420,13 @@ export default function AnalyticsPage() {
 
   const hasActiveFilters = filters.platform !== "all" || filters.niche !== "all" || filters.location !== "all" || filters.dateRange !== "all"
 
-  const getFilteredInfluencers = () => {
-    let filtered = [...influencers]
-    
-    if (filters.platform !== "all") {
-      filtered = filtered.filter(i => i.platform === filters.platform)
-    }
-    if (filters.niche !== "all") {
-      filtered = filtered.filter(i => i.niche === filters.niche)
-    }
-    if (filters.location !== "all") {
-      filtered = filtered.filter(i => i.location === filters.location)
-    }
-    if (filters.dateRange !== "all") {
-      const now = new Date()
-      filtered = filtered.filter(influencer => {
-        const influencerDate = influencer.createdAt
-        if (!influencerDate) return true
-        const itemDate = new Date(influencerDate)
-        switch (filters.dateRange) {
-          case "7": { const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7); return itemDate >= weekAgo }
-          case "30": { const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30); return itemDate >= monthAgo }
-          case "90": { const ninetyAgo = new Date(now); ninetyAgo.setDate(now.getDate() - 90); return itemDate >= ninetyAgo }
-          case "month": return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear()
-          default: return true
-        }
-      })
-    }
-    return filtered
-  }
-  
-  const filteredInfluencers = getFilteredInfluencers()
-
+  // Calculate metrics from real data
   const calculateMetrics = () => {
-    const dataToUse = filteredInfluencers
+    const dataToUse = influencers
     
     const totalOutreach = dataToUse.length
     const responded = dataToUse.filter(i => i.pipelineStatus === "In Conversation" || i.pipelineStatus === "Onboarded").length
-    const closed = dataToUse.filter(i => i.pipelineStatus === "Onboarded").length
+    const closed = dataToUse.filter(i => i.pipelineStatus === "Onboarded" || i.pipelineStatus === "In Transit" || i.pipelineStatus === "Content Pending" || i.pipelineStatus === "Posted").length
     const notInterested = dataToUse.filter(i => i.pipelineStatus === "Rejected").length
     const responseRate = totalOutreach > 0 ? (responded / totalOutreach) * 100 : 0
     const closingRate = responded > 0 ? (closed / responded) * 100 : 0
@@ -463,7 +444,10 @@ export default function AnalyticsPage() {
     allReasons.forEach(r => { reasonsBreakdown[r] = 0 })
     
     dataToUse.filter(i => i.rejectionReason).forEach(i => {
-      if (reasonsBreakdown[i.rejectionReason] !== undefined) reasonsBreakdown[i.rejectionReason]++
+      const reason = i.rejectionReason || 'Others'
+      if (allReasons.includes(reason)) {
+        reasonsBreakdown[reason] = (reasonsBreakdown[reason] || 0) + 1
+      }
       else reasonsBreakdown['Others'] = (reasonsBreakdown['Others'] || 0) + 1
     })
     
@@ -479,7 +463,11 @@ export default function AnalyticsPage() {
     const receivedProduct = noPost + posted
     const postRate = receivedProduct > 0 ? (posted / receivedProduct) * 100 : 0
     
-    const platformStats = { Instagram: { posted: 0, received: 0, views: 0, likes: 0, comments: 0 }, TikTok: { posted: 0, received: 0, views: 0, likes: 0, comments: 0 }, YouTube: { posted: 0, received: 0, views: 0, likes: 0, comments: 0 } }
+    const platformStats = { 
+      Instagram: { posted: 0, received: 0, views: 0, likes: 0, comments: 0 }, 
+      TikTok: { posted: 0, received: 0, views: 0, likes: 0, comments: 0 }, 
+      YouTube: { posted: 0, received: 0, views: 0, likes: 0, comments: 0 } 
+    }
     
     dataToUse.forEach(i => {
       const platform = i.platform
@@ -520,7 +508,7 @@ export default function AnalyticsPage() {
     const totalProductCost = dataToUse.reduce((sum, i) => sum + (i.prodCost || 0), 0)
     
     // Spend/ROI metrics
-    const totalFeesPaid = posted * 300
+    const totalFeesPaid = posted * 300 // Assuming $300 per posted influencer
     const totalCommPaid = Math.round(totalRevenue * 0.10)
     const totalSpend = totalProductCost + totalFeesPaid + totalCommPaid
     const roas = totalSpend > 0 ? (totalRevenue / totalSpend).toFixed(2) : '—'
@@ -534,10 +522,10 @@ export default function AnalyticsPage() {
     // Aging data for No Post
     const noPostItems = dataToUse.filter(i => i.pipelineStatus === 'Content Pending' && i.deliveredDaysAgo)
     const agingData = [
-      { label: "≤ 7 days", count: noPostItems.filter(i => i.deliveredDaysAgo <= 7).length, color: "#1FAE5B", percent: "—", percentage: 25 },
-      { label: "8–14 days", count: noPostItems.filter(i => i.deliveredDaysAgo > 7 && i.deliveredDaysAgo <= 14).length, color: "#F4B740", percent: "—", percentage: 25 },
-      { label: "15–30 days", count: noPostItems.filter(i => i.deliveredDaysAgo > 14 && i.deliveredDaysAgo <= 30).length, color: "#E24B4A", percent: "—", percentage: 25 },
-      { label: "30+ days", count: noPostItems.filter(i => i.deliveredDaysAgo > 30).length, color: "#A32D2D", percent: "—", percentage: 25 }
+      { label: "≤ 7 days", count: noPostItems.filter(i => i.deliveredDaysAgo! <= 7).length, color: "#1FAE5B", percent: "—", percentage: 25 },
+      { label: "8–14 days", count: noPostItems.filter(i => i.deliveredDaysAgo! > 7 && i.deliveredDaysAgo! <= 14).length, color: "#F4B740", percent: "—", percentage: 25 },
+      { label: "15–30 days", count: noPostItems.filter(i => i.deliveredDaysAgo! > 14 && i.deliveredDaysAgo! <= 30).length, color: "#E24B4A", percent: "—", percentage: 25 },
+      { label: "30+ days", count: noPostItems.filter(i => i.deliveredDaysAgo! > 30).length, color: "#A32D2D", percent: "—", percentage: 25 }
     ]
     
     return {
@@ -569,7 +557,7 @@ export default function AnalyticsPage() {
 
   const exportCSV = () => {
     const headers = ['Platform', 'Niche', 'Location', 'Date Added', 'Pipeline Status', 'Rejection Reason', 'Views', 'Likes', 'Comments', 'Web Clicks', 'Sales (Units)', 'Revenue ($)', 'Usage Rights', 'Content Saved', 'Ad Code Given']
-    const rows = filteredInfluencers.map(i => [
+    const rows = influencers.map(i => [
       i.platform || '', i.niche || 'General', i.location || 'PH', i.createdAt?.split('T')[0] || '',
       i.pipelineStatus || '', i.rejectionReason || '', i.views || 0, i.likes || 0, i.comments || 0,
       i.clicks || 0, i.salesQty || 0, i.salesAmt || 0, i.usageRights ? 'Yes' : 'No',
@@ -623,6 +611,34 @@ export default function AnalyticsPage() {
     'Wrong audience fit', 'Seen bad reviews about us', 'Others'
   ]
   const softPassReasonsList = ['Fully booked', "Temporarily unavailable / can't shoot", "Can't ship to their location", 'Ghosted / no longer active', 'Rate / deadline too tight']
+
+  if (status === "loading" || isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-green-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading analytics data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-600 text-lg mb-2">Error loading data</div>
+          <p className="text-gray-600">{error}</p>
+          <button 
+            onClick={() => fetchAnalytics()}
+            className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -695,13 +711,13 @@ export default function AnalyticsPage() {
                 <h3 className="text-sm font-semibold text-gray-900 mb-4">Campaign funnel</h3>
                 <FunnelStep name="Reached out" value={metrics.totalOutreach} total={metrics.totalOutreach} color="#1FAE5B" />
                 <FunnelStep name="Responded" value={metrics.responded} total={metrics.totalOutreach} color="#1FAE5B" 
-                  dropOff={`▼ ${Math.round((1 - metrics.responded / metrics.totalOutreach) * 100)}% drop-off`} />
+                  dropOff={metrics.totalOutreach > 0 ? `▼ ${Math.round((1 - metrics.responded / metrics.totalOutreach) * 100)}% drop-off` : undefined} />
                 <FunnelStep name="Closed collaboration" value={metrics.closed} total={metrics.responded} color="#5BC98A" 
-                  dropOff={`▼ ${Math.round((1 - metrics.closed / metrics.responded) * 100)}% closing drop-off`} />
+                  dropOff={metrics.responded > 0 ? `▼ ${Math.round((1 - metrics.closed / metrics.responded) * 100)}% closing drop-off` : undefined} />
                 <FunnelStep name="Not interested" value={metrics.notInterested} total={metrics.responded} color="#E24B4A" />
               </div>
 
-              {/* Reasons not interested with Hard/Soft pass */}
+              {/* Reasons not interested */}
               <div className="bg-white border border-gray-200 rounded-xl p-5">
                 <h3 className="text-sm font-semibold text-gray-900 mb-4">
                   Reasons not interested 
@@ -901,7 +917,7 @@ export default function AnalyticsPage() {
                 <MetricCard label="Total revenue" value={formatMoney(metrics.totalRevenue)} subLabel="from influencer-driven sales" isGreen />
                 <MetricCard label="Total spend" value={formatMoney(metrics.totalSpend)} subLabel="COGS + fees + commission" />
                 <MetricCard label="Net profit / loss" value={`${metrics.profit >= 0 ? '+' : ''}${formatMoney(metrics.profit)}`} subLabel={metrics.profit >= 0 ? 'profitable campaign' : 'loss-making campaign'} isGreen={metrics.profit >= 0} />
-                <MetricCard label="ROAS" value={metrics.roas !== '—' ? `${metrics.roas}x` : '—'} subLabel="revenue ÷ total spend" isGreen={parseFloat(metrics.roas as string) >= 1} />
+                <MetricCard label="ROAS" value={metrics.roas !== '—' ? `${metrics.roas}x` : '—'} subLabel="revenue ÷ total spend" isGreen={typeof metrics.roas === 'string' ? parseFloat(metrics.roas) >= 1 : false} />
                 <MetricCard label="ROI" value={metrics.roi} subLabel="net profit ÷ total spend" isGreen={metrics.profit >= 0} />
                 <MetricCard label="Break-even" value={formatMoney(metrics.totalSpend)} subLabel="min revenue needed" />
               </div>

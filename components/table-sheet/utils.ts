@@ -155,7 +155,7 @@ export function getStaticCols(niches: string[], locations: string[]) {
     { key: "first_name",      label: "First Name",       group: "Influencer Details" as const, minWidth: 75,  type: "text" as const },
     { key: "contact_info",    label: "Contact Info",     group: "Influencer Details" as const, minWidth: 120, type: "text" as const },
     { key: "approval_status", label: "Approve/Decline",  group: "Approval Details" as const,  minWidth: 95,  type: "select" as const, options: ["Approved","Declined","Pending"] },
-    { key: "transferred_date",label: "Transferred",      group: "Approval Details" as const,  minWidth: 95,  type: "date" as const },
+    { key: "transferred_date",label: "Date Reviewed",      group: "Approval Details" as const,  minWidth: 95,  type: "date" as const },
     { key: "approval_notes",  label: "Notes",            group: "Approval Details" as const,  minWidth: 110, type: "text" as const },
   ]
 }

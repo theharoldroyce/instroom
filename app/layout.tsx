@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Manrope } from "next/font/google";
+// @ts-ignore: CSS module type declarations missing in current TypeScript setup
 import "./globals.css";
 import { AuthProvider } from "./providers";
 import { Toaster } from "sonner";

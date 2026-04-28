@@ -19,12 +19,13 @@ model User {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  @@index([email])
-  @@index([platform_role])
-
   onboarding   Onboarding?
   subscription UserSubscription?
   brandMembers BrandMember[]
+  activityLogs ActivityLog[]
+
+  @@index([email])
+  @@index([platform_role])
 }
 
 model Account {
@@ -180,6 +181,7 @@ model Brand {
   locations    BrandLocation[]
   influencers  BrandInfluencer[]
   campaigns    Campaign[]
+  activityLogs ActivityLog[]
 
   @@index([owner_id])
   @@index([slug])
@@ -349,6 +351,9 @@ model ActivityLog {
   entity_id   String   @db.VarChar(30)
   details     String?  @db.Text
   created_at  DateTime @default(now())
+
+  brand Brand @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([brand_id])
   @@index([user_id])

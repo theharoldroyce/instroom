@@ -1,0 +1,900 @@
+"use client"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BrandPartnersPage — DATABASE-WIRED VERSION
+//
+// Replace your existing BrandPartnersPage.tsx with this file.
+//
+// Changes from mock version:
+//   • useEffect on mount fetches real partners + campaigns from the DB
+//   • handleAddPartner calls POST /api/brands/[brandId]/partners
+//   • handleCreateCampaign calls POST /api/brands/[brandId]/campaigns
+//   • handleUpdatePartner calls PATCH /api/brands/[brandId]/partners/[id]
+//   • handleRemovePartner calls DELETE /api/brands/[brandId]/partners/[id]
+//   • AddPartnerModal receives real influencers from the global influencers table
+//
+// Props:
+//   brandId — the brand's cuid from your DB (pass from route params or session)
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useState, useEffect, useCallback } from "react"
+import TierSettingsModal from "./TierSettingsModal"
+import AddPartnerModal from "./AddPartnerModal"
+import NewCampaignModal from "./NewCampaignModal"
+import InfluencerProfileSidebar from "@/components/InfluencerProfileSidebar"
+import { IconSearch, IconFilter } from "@tabler/icons-react"
+import { ReactNode } from "react"
+
+import {
+  partnersApi,
+  campaignsApi,
+  BrandInfluencerRecord,
+  CampaignRecord,
+} from "@/lib/api"
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+// These mirror the component-level Partner/Campaign shapes the modals expect.
+// We derive them from DB records so the modals need no changes.
+
+interface Partner {
+  id: string               // BrandInfluencer.id (cuid)
+  influencer_id: string
+  handle: string
+  firstName: string
+  lastName: string
+  plat: string
+  niche: string
+  gend: string
+  loc: string
+  tier: string
+  tierOverride: string | null
+  onRet: boolean
+  retFee: number
+  defComm: number
+  commSt: string
+  clicks: number
+  cvr: number
+  sales: number
+  aov: number
+  rev: number
+  fol: number
+  eng: number
+  avgV: number
+  gmv: number
+  added: Date
+  prodCost: number
+  feesPaid: number
+  commPaid: number
+  totalSpend: number
+  roi_val: number
+  roas_val: number
+  likes_count: number
+  comments_count: number
+  engagement_count: number
+  contact_status: string
+  stage: number
+  content_posted: boolean
+  post_url: string | null
+  notes: string | null
+  agreed_rate: number | null
+  internal_rating: number | null
+  campaign_id: string | null
+  // raw db record kept for sidebar
+  _raw: BrandInfluencerRecord
+}
+
+interface Campaign {
+  id: string
+  name: string
+  status: string
+  start: string
+  end: string
+  budget: number
+  type: string
+  notes: string
+  partner_count: number
+  posts_done: number
+  posts_total: number
+  total_rev: number
+  _raw: CampaignRecord
+}
+
+interface FilterState {
+  tier: string
+  platform: string
+  niche: string
+  location: string
+  contact_status: string
+}
+
+interface TierSettings {
+  bronzeMin: number
+  bronzeMax: number
+  silverMin: number
+  silverMax: number
+  goldMin: number
+}
+
+// ─── Tier helpers ─────────────────────────────────────────────────────────────
+let tierBronzeMax = 2000
+let tierSilverMax = 10000
+
+function autoTier(rev: number): string {
+  if (rev >= tierSilverMax + 1) return "Gold"
+  if (rev >= tierBronzeMax + 1) return "Silver"
+  return "Bronze"
+}
+
+// ─── Formatters ───────────────────────────────────────────────────────────────
+function formatMoney(v: number) {
+  return "$" + Math.round(v).toLocaleString()
+}
+function formatROAS(rev: number, spend: number) {
+  return spend > 0 ? (rev / spend).toFixed(1) + "x" : "—"
+}
+function formatROI(rev: number, spend: number) {
+  return spend > 0 ? ((rev - spend) / spend * 100).toFixed(1) + "%" : "—"
+}
+
+// ─── DB record → component Partner shape ────────────────────────────────────
+function dbToPartner(bi: BrandInfluencerRecord): Partner {
+  const inf = bi.influencer
+  const nameParts = (inf.full_name || inf.handle.replace("@", "")).split(" ")
+  const rev = bi.agreed_rate ? Number(bi.agreed_rate) : 0
+  const spend = 0 // extend when you track spend in DB
+  return {
+    id: bi.id,
+    influencer_id: bi.influencer_id,
+    handle: inf.handle,
+    firstName: nameParts[0] || "",
+    lastName: nameParts.slice(1).join(" ") || "",
+    plat: inf.platform,
+    niche: inf.niche || "",
+    gend: inf.gender || "",
+    loc: inf.location || "",
+    tier: autoTier(rev),
+    tierOverride: null,
+    onRet: false,
+    retFee: 0,
+    defComm: 0,
+    commSt: bi.contact_status || "not_contacted",
+    clicks: 0,
+    cvr: 0,
+    sales: 0,
+    aov: 0,
+    rev,
+    fol: inf.follower_count || 0,
+    eng: Number(inf.engagement_rate) || 0,
+    avgV: inf.avg_views || 0,
+    gmv: 0,
+    added: new Date(bi.created_at),
+    prodCost: 0,
+    feesPaid: 0,
+    commPaid: 0,
+    totalSpend: spend,
+    roi_val: 0,
+    roas_val: 0,
+    likes_count: bi.likes_count,
+    comments_count: bi.comments_count,
+    engagement_count: bi.engagement_count,
+    contact_status: bi.contact_status,
+    stage: bi.stage,
+    content_posted: bi.content_posted,
+    post_url: bi.post_url,
+    notes: bi.notes,
+    agreed_rate: bi.agreed_rate ? Number(bi.agreed_rate) : null,
+    internal_rating: bi.internal_rating ? Number(bi.internal_rating) : null,
+    campaign_id: bi.campaign_id,
+    _raw: bi,
+  }
+}
+
+// ─── DB record → component Campaign shape ───────────────────────────────────
+function dbToCampaign(c: CampaignRecord): Campaign {
+  return {
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    start: c.created_at.slice(0, 10),
+    end: "",
+    budget: 0,
+    type: "—",
+    notes: c.description || "",
+    partner_count: c._stats?.partner_count ?? c.influencers?.length ?? 0,
+    posts_done: c._stats?.posts_done ?? 0,
+    posts_total: c._stats?.posts_total ?? 0,
+    total_rev: c._stats?.total_rev ?? 0,
+    _raw: c,
+  }
+}
+
+// ─── Platform icons ───────────────────────────────────────────────────────────
+export const PLATFORM_ICONS: Record<string, ReactNode> = {
+  instagram: (
+    <img
+      src="https://upload.wikimedia.org/wikipedia/commons/e/e7/Instagram_logo_2016.svg"
+      alt="Instagram"
+      className="w-4 h-4"
+    />
+  ),
+  tiktok: (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-2.89 2.89 2.896 2.896 0 0 1-2.889-2.89 2.896 2.896 0 0 1 2.89-2.889c.302 0 .595.05.872.137V9.257a6.339 6.339 0 0 0-5.053 2.212 6.339 6.339 0 0 0-1.33 5.52 6.34 6.34 0 0 0 5.766 4.731 6.34 6.34 0 0 0 6.34-6.34V8.898a7.756 7.756 0 0 0 4.422 1.393V6.825a4.8 4.8 0 0 1-2.443-.139z" />
+    </svg>
+  ),
+  youtube: (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.376.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.376-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  ),
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
+interface Props {
+  brandId: string
+}
+
+export default function BrandPartnersPage({ brandId }: Props) {
+  const [partners, setPartners] = useState<Partner[]>([])
+  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  // globalInfluencers removed — AddPartnerModal fetches its own list directly
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [activeTab, setActiveTab] = useState(0)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [filters, setFilters] = useState<FilterState>({
+    tier: "all",
+    platform: "all",
+    niche: "all",
+    location: "all",
+    contact_status: "all",
+  })
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
+  const [sortCol, setSortCol] = useState("added")
+  const [sortAsc, setSortAsc] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const rowsPerPage = 50
+
+  const [showTierModal, setShowTierModal] = useState(false)
+  const [showAddPartnerModal, setShowAddPartnerModal] = useState(false)
+  const [showCampaignModal, setShowCampaignModal] = useState(false)
+  const [showProfilePanel, setShowProfilePanel] = useState(false)
+  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null)
+  const [showCampaignDetail, setShowCampaignDetail] = useState(false)
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
+
+  // ── Initial data load ────────────────────────────────────────────────────
+  useEffect(() => {
+    // Guard: if brandId is empty/undefined, clear loading immediately
+    if (!brandId) {
+      setLoading(false)
+      setError("No brand ID provided. Check your URL.")
+      return
+    }
+
+    async function loadData() {
+      try {
+        setLoading(true)
+        setError(null)
+
+        // Fetch partners and campaigns in parallel.
+        // Global influencer search is non-critical — failure is swallowed.
+        const [bps, camps] = await Promise.all([
+          partnersApi.list(brandId),
+          campaignsApi.list(brandId),
+        ])
+
+        setPartners(bps.map(dbToPartner))
+        setCampaigns(camps.map(dbToCampaign))
+
+        // AddPartnerModal fetches its own influencer list directly
+
+      } catch (e: any) {
+        setError(
+          e?.message?.includes("Unauthorized")
+            ? "Session expired. Please refresh the page."
+            : e?.message || "Failed to load brand partners."
+        )
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [brandId])
+
+  // ── Tier helpers ─────────────────────────────────────────────────────────
+  const getDisplayTier = useCallback((p: Partner) => p.tierOverride || autoTier(p.rev), [])
+
+  const handleTierSave = (settings: TierSettings) => {
+    tierBronzeMax = settings.bronzeMax
+    tierSilverMax = settings.silverMax
+    setPartners((prev) => prev.map((p) => ({ ...p, tier: p.tierOverride || autoTier(p.rev) })))
+  }
+
+  // ── Add partner ──────────────────────────────────────────────────────────
+  // Uses the existing /api/influencers/create endpoint which handles
+  // find-or-create on the global Influencer record AND creates the
+  // BrandInfluencer link in one shot.
+  const handleAddPartner = async (formData: any) => {
+    try {
+      if (formData.type === "search") {
+        // "Search" mode: selected from global influencer list
+        // Each selected influencer gets linked via /api/brands/[id]/partners
+        for (const inf of formData.influencers) {
+          try {
+            const bi = await partnersApi.add(brandId, {
+              influencer_id: inf.id,
+              notes: formData.notes || null,
+            })
+            setPartners((prev) => [...prev, dbToPartner(bi)])
+          } catch (e: any) {
+            if (e.message?.includes("already added") || e.message?.includes("409")) {
+              // Skip silently — already linked
+            } else {
+              throw e
+            }
+          }
+        }
+        return
+      }
+
+      // "Manual" mode: create a new influencer via the existing /create endpoint
+      // which handles subscription limits, find-or-create, and brand linking
+      const res = await fetch("/api/influencers/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          handle: formData.handle,
+          platform: formData.platform?.toLowerCase(),
+          full_name: formData.full_name || null,
+          email: formData.email || null,
+          niche: formData.niche || null,
+          location: formData.location || null,
+          notes: formData.notes || null,
+          brandId,
+        }),
+      })
+
+      const json = await res.json()
+
+      if (res.status === 403) {
+        alert(json.message || "Influencer limit reached. Please upgrade your plan.")
+        return
+      }
+
+      if (res.status === 409) {
+        // Influencer already exists globally — link them to this brand
+        if (json.id) {
+          try {
+            const bi = await partnersApi.add(brandId, {
+              influencer_id: json.id,
+              notes: formData.notes || null,
+            })
+            setPartners((prev) => [...prev, dbToPartner(bi)])
+          } catch (linkErr: any) {
+            if (linkErr.message?.includes("already added")) {
+              alert("This influencer is already in your brand partner list.")
+            } else {
+              throw linkErr
+            }
+          }
+        }
+        return
+      }
+
+      if (!res.ok) {
+        throw new Error(json.error || `Server error ${res.status}`)
+      }
+
+      // Created fresh — now fetch the BrandInfluencer link that /create made
+      const freshBIs = await partnersApi.list(brandId, { search: json.handle })
+      const justAdded = freshBIs.find((bi) => bi.influencer_id === json.id)
+      if (justAdded) {
+        setPartners((prev) => [...prev, dbToPartner(justAdded)])
+      }
+
+    } catch (e: any) {
+      alert("Failed to add partner: " + (e.message || "Unknown error"))
+    }
+  }
+
+  // ── Update a partner field (stage, status, etc.) ─────────────────────────
+  const handleUpdatePartner = async (partnerId: string, updates: Partial<BrandInfluencerRecord>) => {
+    try {
+      const updated = await partnersApi.update(brandId, partnerId, updates)
+      setPartners((prev) =>
+        prev.map((p) => (p.id === partnerId ? dbToPartner(updated) : p))
+      )
+    } catch (e: any) {
+      alert("Failed to update: " + e.message)
+    }
+  }
+
+  // ── Remove a partner ─────────────────────────────────────────────────────
+  const handleRemovePartner = async (partnerId: string) => {
+    if (!confirm("Remove this partner from the brand?")) return
+    try {
+      await partnersApi.remove(brandId, partnerId)
+      setPartners((prev) => prev.filter((p) => p.id !== partnerId))
+    } catch (e: any) {
+      alert("Failed to remove partner: " + e.message)
+    }
+  }
+
+  // Campaign creation handled inside NewCampaignModal directly
+
+  // ── Sorting & filtering ──────────────────────────────────────────────────
+  const getFilteredPartners = useCallback(() => {
+    let filtered = [...partners]
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      filtered = filtered.filter((p) =>
+        `${p.handle} ${p.niche} ${p.plat} ${p.firstName} ${p.lastName} ${p.loc}`.toLowerCase().includes(q)
+      )
+    }
+    if (filters.tier !== "all") filtered = filtered.filter((p) => getDisplayTier(p) === filters.tier)
+    if (filters.platform !== "all")
+      filtered = filtered.filter((p) => p.plat.toLowerCase() === filters.platform.toLowerCase())
+    if (filters.niche !== "all") filtered = filtered.filter((p) => p.niche === filters.niche)
+    if (filters.location !== "all") filtered = filtered.filter((p) => p.loc === filters.location)
+    if (filters.contact_status !== "all")
+      filtered = filtered.filter((p) => p.contact_status === filters.contact_status)
+
+    const tierOrder: Record<string, number> = { Gold: 0, Silver: 1, Bronze: 2 }
+    filtered.sort((a, b) => {
+      let v = 0
+      switch (sortCol) {
+        case "revenue": v = a.rev - b.rev; break
+        case "followers": v = a.fol - b.fol; break
+        case "engagement": v = a.eng - b.eng; break
+        case "stage": v = a.stage - b.stage; break
+        case "alpha": v = a.handle.localeCompare(b.handle); break
+        case "tier": v = tierOrder[getDisplayTier(a)] - tierOrder[getDisplayTier(b)]; break
+        case "added": v = new Date(a.added).getTime() - new Date(b.added).getTime(); break
+        default: v = 0
+      }
+      return sortAsc ? v : -v
+    })
+    return filtered
+  }, [partners, searchQuery, filters, sortCol, sortAsc, getDisplayTier])
+
+  const filteredPartners = getFilteredPartners()
+  const totalPages = Math.max(1, Math.ceil(filteredPartners.length / rowsPerPage))
+  const paginatedPartners = filteredPartners.slice(
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
+  )
+
+  const goldCount = partners.filter((p) => getDisplayTier(p) === "Gold").length
+  const silverCount = partners.filter((p) => getDisplayTier(p) === "Silver").length
+  const bronzeCount = partners.filter((p) => getDisplayTier(p) === "Bronze").length
+
+  const handleSort = (col: string) => {
+    if (sortCol === col) setSortAsc(!sortAsc)
+    else { setSortCol(col); setSortAsc(false) }
+    setCurrentPage(1)
+  }
+
+  // ── Loading / error states ───────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", fontFamily: "'Inter', sans-serif", color: "#888" }}>
+        Loading brand partners…
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", fontFamily: "'Inter', sans-serif", color: "#E24B4A", flexDirection: "column", gap: 8 }}>
+        <div>⚠ {error}</div>
+        <button onClick={() => window.location.reload()} style={{ fontSize: 11, padding: "4px 12px", borderRadius: 6, border: "0.5px solid #E24B4A", background: "transparent", color: "#E24B4A", cursor: "pointer" }}>
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  return (
+    <div style={{ fontFamily: "'Inter', sans-serif", background: "#f7f9f8", minHeight: "100vh" }}>
+
+      {/* Top Bar */}
+      <div className="topbar">
+        <div>
+          <div style={{ fontWeight: 600 }}>Brand Partners</div>
+          <div className="topbar-sub">
+            {partners.length} total · {goldCount} Gold · {silverCount} Silver · {bronzeCount} Bronze
+          </div>
+        </div>
+        <div className="topbar-actions">
+          <button className="btn-outline" onClick={() => setShowTierModal(true)}>⚙ Tier Settings</button>
+          <button className="btn-outline" onClick={() => setShowCampaignModal(true)}>+ New Campaign</button>
+          <button className="btn-primary" onClick={() => setShowAddPartnerModal(true)}>+ Add Partner</button>
+        </div>
+      </div>
+
+      {/* Tab Bar + Search */}
+      {!showCampaignDetail && (
+        <div className="tab-search-row">
+          <div className="tab-bar">
+            {["Partner List", "Campaigns"].map((tab, idx) => (
+              <div key={idx} className={`tab ${activeTab === idx ? "active" : ""}`} onClick={() => setActiveTab(idx)}>
+                {tab}
+              </div>
+            ))}
+          </div>
+          <div className="sfg">
+            <div className="sw relative">
+              <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="sb pl-9"
+                placeholder="Search creators…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="fw">
+              <button onClick={() => setShowFilterPanel(!showFilterPanel)} className="px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 border border-[#0F6B3E]/20">
+                <IconFilter size={16} /> Filters
+              </button>
+              {showFilterPanel && (
+                <div className="fp open">
+                  <div className="fp-title">Filter by</div>
+                  <div className="fg">
+                    {[
+                      { label: "Tier", key: "tier", options: ["Gold", "Silver", "Bronze"] },
+                      { label: "Platform", key: "platform", options: ["instagram", "tiktok", "youtube"] },
+                      { label: "Niche", key: "niche", options: ["Beauty", "Fitness", "Lifestyle", "Food", "Tech"] },
+                      { label: "Location", key: "location", options: ["Philippines", "Singapore", "United States", "Australia", "United Kingdom", "Malaysia"] },
+                      { label: "Status", key: "contact_status", options: ["not_contacted", "contacted", "interested", "agreed"] },
+                    ].map(({ label, key, options }) => (
+                      <div key={key}>
+                        <label>{label}</label>
+                        <select
+                          value={(filters as any)[key]}
+                          onChange={(e) => setFilters((p) => ({ ...p, [key]: e.target.value }))}
+                        >
+                          <option value="all">All</option>
+                          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="fa">
+                    <button className="fc-btn" onClick={() => setFilters({ tier: "all", platform: "all", niche: "all", location: "all", contact_status: "all" })}>
+                      Clear all
+                    </button>
+                    <button className="fa-btn" onClick={() => setShowFilterPanel(false)}>Apply</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Partner List Tab ── */}
+      {activeTab === 0 && !showCampaignDetail && (
+        <div className="content">
+          {partners.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "60px 20px", color: "#888" }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🤝</div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>No partners yet</div>
+              <div style={{ fontSize: 12 }}>Click "+ Add Partner" to add your first influencer</div>
+            </div>
+          ) : (
+            <div className="tw">
+              <table className="pt">
+                <thead>
+                  <tr>
+                    <th style={{ width: 28, color: "#bbb" }}>#</th>
+                    <th><div className="thi" onClick={() => handleSort("alpha")}><span className="cl">Creator</span><span className="sa">↕</span></div></th>
+                    <th><div className="thi" onClick={() => handleSort("platform")}><span className="cl">Platform</span><span className="sa">↕</span></div></th>
+                    <th><span className="cl">Niche</span></th>
+                    <th><span className="cl">Location</span></th>
+                    <th><div className="thi" onClick={() => handleSort("tier")}><span className="cl">Tier</span><span className="sa">↕</span></div></th>
+                    <th><div className="thi" onClick={() => handleSort("stage")}><span className="cl">Stage</span><span className="sa">↕</span></div></th>
+                    <th><div className="thi" onClick={() => handleSort("followers")}><span className="cl">Followers</span><span className="sa">↕</span></div></th>
+                    <th><div className="thi" onClick={() => handleSort("engagement")}><span className="cl">Eng. rate</span><span className="sa">↕</span></div></th>
+                    <th><div className="thi" onClick={() => handleSort("revenue")}><span className="cl">Agreed rate</span><span className="sa">↕</span></div></th>
+                    <th><span className="cl">Status</span></th>
+                    <th><span className="cl">Posted</span></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedPartners.map((p, idx) => {
+                    const tier = getDisplayTier(p)
+                    const tierClass = tier === "Gold" ? "tg" : tier === "Silver" ? "ts" : "tbr"
+                    const tierIcon = tier === "Gold" ? "🥇" : tier === "Silver" ? "🥈" : "🥉"
+                    return (
+                      <tr
+                        key={p.id}
+                        className="dr"
+                        onClick={() => { setSelectedPartner(p); setShowProfilePanel(true) }}
+                      >
+                        <td style={{ color: "#bbb", fontSize: 11 }}>{(currentPage - 1) * rowsPerPage + idx + 1}</td>
+                        <td style={{ fontWeight: 500, fontSize: 12 }}>{p.handle}</td>
+                        <td>
+                          <div className="flex justify-center items-center">
+                            {PLATFORM_ICONS[p.plat.toLowerCase()] || <span style={{ fontSize: 11 }}>{p.plat}</span>}
+                          </div>
+                        </td>
+                        <td style={{ fontSize: 11, color: "#888" }}>{p.niche || "—"}</td>
+                        <td style={{ fontSize: 11, color: "#888" }}>{p.loc || "—"}</td>
+                        <td>
+                          <div className="flex justify-center">
+                            <span className={`tb ${tierClass}`}>{tierIcon}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="stage-badge" data-stage={p.stage}>Stage {p.stage}</span>
+                        </td>
+                        <td style={{ fontSize: 11 }}>
+                          {p.fol >= 1000 ? (p.fol / 1000).toFixed(1) + "K" : p.fol || "—"}
+                        </td>
+                        <td style={{ fontSize: 11 }}>
+                          {p.eng ? p.eng + "%" : "—"}
+                        </td>
+                        <td style={{ fontWeight: 600, color: "#1FAE5B", fontSize: 12 }}>
+                          {p.agreed_rate ? formatMoney(p.agreed_rate) : "—"}
+                        </td>
+                        <td>
+                          <span className={`status-badge s-${p.contact_status?.replace(/_/g, "-")}`}>
+                            {p.contact_status?.replace(/_/g, " ") || "—"}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 11, textAlign: "center" }}>
+                          {p.content_posted ? "✅" : "—"}
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button
+                              className="abt"
+                              onClick={(e) => { e.stopPropagation(); setSelectedPartner(p); setShowProfilePanel(true) }}
+                            >
+                              View →
+                            </button>
+                            <button
+                              className="abt del"
+                              onClick={(e) => { e.stopPropagation(); handleRemovePartner(p.id) }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+
+              {/* Pagination */}
+              <div className="pgbar">
+                <div style={{ fontSize: 11, color: "#888" }}>
+                  {(currentPage - 1) * rowsPerPage + 1}–{Math.min(currentPage * rowsPerPage, filteredPartners.length)} of {filteredPartners.length}
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button className="pb" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>‹</button>
+                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((n) => (
+                    <button key={n} className={`pb ${n === currentPage ? "pb-active" : ""}`} onClick={() => setCurrentPage(n)}>{n}</button>
+                  ))}
+                  <button className="pb" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>›</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Campaigns Tab ── */}
+      {activeTab === 1 && !showCampaignDetail && (
+        <div className="content">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: "0.07em" }}>All campaigns</div>
+            <button className="btn-primary" onClick={() => setShowCampaignModal(true)}>+ New Campaign</button>
+          </div>
+          {campaigns.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "60px 20px", color: "#888" }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+              <div style={{ fontWeight: 600 }}>No campaigns yet</div>
+              <div style={{ fontSize: 12 }}>Click "+ New Campaign" to get started</div>
+            </div>
+          ) : (
+            campaigns.map((c) => (
+              <div
+                key={c.id}
+                className="camp-card"
+                onClick={() => { setSelectedCampaign(c); setShowCampaignDetail(true) }}
+              >
+                <div className="cc-header">
+                  <div>
+                    <div className="cc-name">{c.name}</div>
+                    <div className="cc-meta">{c.notes || "No description"}</div>
+                  </div>
+                  <span className={`cs c-${c.status.toLowerCase()}`}>{c.status}</span>
+                </div>
+                <div className="cc-stats">
+                  <div><div className="csv">{c.partner_count}</div><div className="csl">creators</div></div>
+                  <div><div className="csv">{c.posts_done}/{c.posts_total}</div><div className="csl">posts done</div></div>
+                  <div><div className="csv" style={{ color: "#1FAE5B" }}>{formatMoney(c.total_rev)}</div><div className="csl">revenue</div></div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ── Campaign Detail ── */}
+      {showCampaignDetail && selectedCampaign && (
+        <div>
+          <div style={{ background: "#fff", borderBottom: "0.5px solid rgba(0,0,0,0.08)", padding: "10px 20px" }}>
+            <button style={{ fontSize: 12, color: "#1FAE5B", background: "none", border: "none", cursor: "pointer" }} onClick={() => setShowCampaignDetail(false)}>
+              ← Back to Campaigns
+            </button>
+          </div>
+          <div className="content">
+            <div className="cd-section">
+              <div style={{ fontWeight: 700, fontSize: 18 }}>{selectedCampaign.name}</div>
+              <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{selectedCampaign.notes || "No description"}</div>
+              <span className={`cs c-${selectedCampaign.status.toLowerCase()}`} style={{ marginTop: 8, display: "inline-block" }}>
+                {selectedCampaign.status}
+              </span>
+            </div>
+            <div className="cd-section">
+              <div className="cd-section-title">Overview</div>
+              <div className="kpi-grid-4">
+                <div className="kpi-card"><div className="kpi-l">Creators</div><div className="kpi-v">{selectedCampaign.partner_count}</div></div>
+                <div className="kpi-card"><div className="kpi-l">Posts done</div><div className="kpi-v">{selectedCampaign.posts_done}/{selectedCampaign.posts_total}</div></div>
+                <div className="kpi-card"><div className="kpi-l">Revenue</div><div className="kpi-v g">{formatMoney(selectedCampaign.total_rev)}</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modals ── */}
+      <TierSettingsModal
+        isOpen={showTierModal}
+        onClose={() => setShowTierModal(false)}
+        onSave={handleTierSave}
+        initialSettings={{ bronzeMin: 0, bronzeMax: tierBronzeMax, silverMin: tierBronzeMax + 1, silverMax: tierSilverMax, goldMin: tierSilverMax + 1 }}
+      />
+
+      <AddPartnerModal
+        isOpen={showAddPartnerModal}
+        onClose={() => setShowAddPartnerModal(false)}
+        brandId={brandId}
+        onAdded={async () => {
+          // Re-fetch the full partners list after a new partner is saved
+          try {
+            const fresh = await partnersApi.list(brandId)
+            setPartners(fresh.map(dbToPartner))
+          } catch {
+            // non-critical — stale until next reload
+          }
+        }}
+      />
+
+      <NewCampaignModal
+        isOpen={showCampaignModal}
+        onClose={() => setShowCampaignModal(false)}
+        brandId={brandId}
+        partners={partners.map((p) => ({
+          id: p.id,
+          handle: p.handle,
+          plat: p.plat,
+          niche: p.niche,
+        }))}
+        onCreated={async () => {
+          try {
+            const fresh = await campaignsApi.list(brandId)
+            setCampaigns(fresh.map(dbToCampaign))
+          } catch { /* non-critical */ }
+          setActiveTab(1)
+        }}
+      />
+
+      {/* ── Profile Sidebar ── */}
+      {showProfilePanel && selectedPartner && (
+        <InfluencerProfileSidebar
+          partner={selectedPartner as any}
+          campaigns={campaigns as any}
+          allPartners={partners as any}
+          onClose={async () => {
+            setShowProfilePanel(false)
+            // Re-fetch this partner's latest data so the table reflects any
+            // edits made inside the sidebar
+            try {
+              const fresh = await partnersApi.get(brandId, selectedPartner.id)
+              setPartners((prev) =>
+                prev.map((p) => (p.id === selectedPartner.id ? dbToPartner(fresh) : p))
+              )
+            } catch {
+              // non-critical — stale data until next full reload
+            }
+          }}
+        />
+      )}
+
+      <style jsx>{`
+        .topbar { background: #fff; border-bottom: 0.5px solid rgba(0,0,0,0.08); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .topbar-sub { font-size: 11px; color: #888; margin-top: 2px; }
+        .topbar-actions { display: flex; gap: 8px; }
+        .btn-primary { background: #1FAE5B; color: #fff; border: none; padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 500; font-family: 'Inter', sans-serif; }
+        .btn-primary:hover { background: #0F6B3E; }
+        .btn-outline { background: transparent; border: 0.5px solid rgba(0,0,0,0.2); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 500; color: #555; font-family: 'Inter', sans-serif; }
+        .tab-search-row { background: #fff; border-bottom: 0.5px solid rgba(0,0,0,0.08); padding: 0 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .tab-bar { display: flex; }
+        .tab { padding: 10px 16px; cursor: pointer; font-size: 12px; font-weight: 500; color: #888; border-bottom: 2px solid transparent; }
+        .tab.active { color: #1FAE5B; border-bottom-color: #1FAE5B; }
+        .sfg { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+        .sw { position: relative; }
+        .sb { font-size: 12px; padding: 6px 10px 6px 28px; border-radius: 8px; border: 0.5px solid rgba(0,0,0,0.15); background: #f7f9f8; width: 200px; font-family: 'Inter', sans-serif; }
+        .fw { position: relative; }
+        .fp { position: absolute; top: calc(100% + 6px); right: 0; z-index: 200; background: #fff; border: 0.5px solid rgba(0,0,0,0.12); border-radius: 10px; padding: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); width: 360px; }
+        .fp-title { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+        .fg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .fg label { font-size: 11px; color: #888; display: block; margin-bottom: 4px; }
+        .fg select { width: 100%; font-size: 12px; padding: 5px 8px; border-radius: 7px; border: 0.5px solid rgba(0,0,0,0.15); background: #f7f9f8; font-family: 'Inter', sans-serif; }
+        .fa { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 0.5px solid rgba(0,0,0,0.06); }
+        .fc-btn { font-size: 11px; padding: 5px 10px; border-radius: 7px; border: 0.5px solid rgba(0,0,0,0.15); background: transparent; color: #888; cursor: pointer; }
+        .fa-btn { font-size: 11px; padding: 5px 12px; border-radius: 7px; border: none; background: #1FAE5B; color: #fff; cursor: pointer; }
+        .content { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+        .tw { background: #fff; border: 0.5px solid rgba(0,0,0,0.08); border-radius: 10px; overflow: hidden; }
+        .pt { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .pt thead { background: #fafaf9; }
+        .pt th { padding: 9px 10px; font-weight: 500; font-size: 11px; border-bottom: 0.5px solid rgba(0,0,0,0.08); white-space: nowrap; }
+        .pt td { padding: 9px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.05); color: #1E1E1E; vertical-align: middle; }
+        .pt tr:last-child td { border-bottom: none; }
+        .dr:hover td { background: #fafaf9; cursor: pointer; }
+        .thi { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+        .cl { font-size: 11px; color: #888; }
+        .sa { font-size: 10px; color: #ccc; }
+        .tb { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+        .tg { background: #fff8e1; color: #854F0B; }
+        .ts { background: #f0f0f0; color: #444; }
+        .tbr { background: #fdf0e8; color: #7a3e1a; }
+        .stage-badge { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: #f0f0f0; color: #555; }
+        .stage-badge[data-stage="3"] { background: #e6f9ee; color: #0F6B3E; }
+        .stage-badge[data-stage="4"] { background: #e6f1fb; color: #185FA5; }
+        .stage-badge[data-stage="5"] { background: #e6f9ee; color: #0F6B3E; }
+        .status-badge { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 6px; background: #f0f0f0; color: #555; }
+        .s-contacted { background: #fff8e1; color: #854F0B; }
+        .s-interested { background: #e6f1fb; color: #185FA5; }
+        .s-agreed { background: #e6f9ee; color: #0F6B3E; }
+        .abt { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 0.5px solid rgba(0,0,0,0.15); background: transparent; color: #555; cursor: pointer; }
+        .abt.del { border-color: #fca5a5; color: #E24B4A; }
+        .abt.del:hover { background: #fdecea; }
+        .pgbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: #fafaf9; border-top: 0.5px solid rgba(0,0,0,0.06); }
+        .pb { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 0.5px solid rgba(0,0,0,0.15); background: #fff; color: #555; cursor: pointer; }
+        .pb:disabled { color: #ccc; cursor: not-allowed; }
+        .pb-active { background: #1FAE5B; color: #fff; border-color: #1FAE5B; }
+        .camp-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.08); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; }
+        .camp-card:hover { border-color: #1FAE5B; }
+        .cc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .cc-name { font-size: 14px; font-weight: 600; }
+        .cc-meta { font-size: 11px; color: #888; margin-top: 2px; }
+        .cc-stats { display: flex; gap: 20px; margin-top: 8px; flex-wrap: wrap; }
+        .csv { font-size: 15px; font-weight: 600; }
+        .csl { font-size: 10px; color: #888; }
+        .cs { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+        .c-draft { background: #f0f0ee; color: #888; }
+        .c-active { background: #e6f9ee; color: #0F6B3E; }
+        .c-completed { background: #e6f1fb; color: #185FA5; }
+        .c-archived { background: #f0f0ee; color: #999; }
+        .cd-section { background: #fff; border: 0.5px solid rgba(0,0,0,0.08); border-radius: 10px; padding: 14px 16px; }
+        .cd-section-title { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+        .kpi-grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+        .kpi-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.08); border-radius: 10px; padding: 12px 14px; }
+        .kpi-l { font-size: 10px; color: #888; }
+        .kpi-v { font-size: 17px; font-weight: 600; color: #1E1E1E; margin-top: 2px; }
+        .kpi-v.g { color: #1FAE5B; }
+      `}</style>
+    </div>
+  )
+}

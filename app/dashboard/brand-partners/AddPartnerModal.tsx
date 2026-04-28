@@ -1,607 +1,269 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 
 interface AddPartnerModalProps {
   isOpen: boolean
   onClose: () => void
-  onAdd: (partnerData: any) => void
-  existingInfluencers?: any[] // List of existing influencers to search from
+  brandId: string
+  onAdded: () => void
 }
 
-export default function AddPartnerModal({ 
-  isOpen, 
-  onClose, 
-  onAdd,
-  existingInfluencers = [] 
-}: AddPartnerModalProps) {
+interface GlobalInfluencer {
+  id: string
+  handle: string
+  platform: string
+  full_name: string | null
+  niche: string | null
+  location: string | null
+  follower_count: number
+  engagement_rate: number
+}
+
+export default function AddPartnerModal({ isOpen, onClose, brandId, onAdded }: AddPartnerModalProps) {
   const [mode, setMode] = useState<"search" | "manual">("search")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedInfluencers, setSelectedInfluencers] = useState<Set<number>>(new Set())
-  
-  // Search mode form data
-  const [searchFormData, setSearchFormData] = useState({
-    tier: "",
-    commission: "",
-    notes: ""
-  })
-  
-  // Manual mode form data
-  const [manualFormData, setManualFormData] = useState({
-    handle: "",
-    platform: "",
-    niche: "",
-    location: "",
-    email: "",
-    tier: "",
-    commission: "",
-    notes: ""
-  })
 
-  // Mock influencer list (replace with actual data from your system)
-  const mockInfluencers = [
-    { id: 1, handle: "@glossqueen", platform: "Instagram", niche: "Beauty", location: "Philippines", revenue: 25000, followers: 150000 },
-    { id: 2, handle: "@fitwithjay", platform: "YouTube", niche: "Fitness", location: "Singapore", revenue: 18000, followers: 89000 },
-    { id: 3, handle: "@chefmaria", platform: "TikTok", niche: "Food", location: "Philippines", revenue: 32000, followers: 450000 },
-    { id: 4, handle: "@lifestylelux", platform: "Instagram", niche: "Lifestyle", location: "United States", revenue: 45000, followers: 280000 },
-    { id: 5, handle: "@techrealmph", platform: "YouTube", niche: "Tech", location: "Philippines", revenue: 12000, followers: 67000 },
-  ]
+  // Search mode
+  const [searchQuery, setSearchQuery]     = useState("")
+  const [results, setResults]             = useState<GlobalInfluencer[]>([])
+  const [selectedIds, setSelectedIds]     = useState<Set<string>>(new Set())
+  const [searching, setSearching]         = useState(false)
+  const [searchNotes, setSearchNotes]     = useState("")
 
-  const influencers = existingInfluencers.length > 0 ? existingInfluencers : mockInfluencers
+  // Manual mode
+  const [handle,   setHandle]   = useState("")
+  const [platform, setPlatform] = useState("")
+  const [niche,    setNiche]    = useState("")
+  const [location, setLocation] = useState("")
+  const [email,    setEmail]    = useState("")
+  const [notes,    setNotes]    = useState("")
 
+  // Status
+  const [saving,   setSaving]   = useState(false)
+  const [errMsg,   setErrMsg]   = useState<string | null>(null)
+  const [success,  setSuccess]  = useState(false)
+
+  // Reset on open
   useEffect(() => {
-    if (isOpen) {
-      // Reset all form data when modal opens
-      setMode("search")
-      setSearchQuery("")
-      setSelectedInfluencers(new Set())
-      setSearchFormData({ tier: "", commission: "", notes: "" })
-      setManualFormData({
-        handle: "",
-        platform: "",
-        niche: "",
-        location: "",
-        email: "",
-        tier: "",
-        commission: "",
-        notes: ""
-      })
-    }
+    if (!isOpen) return
+    setMode("search")
+    setSearchQuery(""); setResults([]); setSelectedIds(new Set()); setSearchNotes("")
+    setHandle(""); setPlatform(""); setNiche(""); setLocation(""); setEmail(""); setNotes("")
+    setSaving(false); setErrMsg(null); setSuccess(false)
   }, [isOpen])
 
-  const getFilteredInfluencers = () => {
-    if (!searchQuery.trim()) return influencers
-    const query = searchQuery.toLowerCase()
-    return influencers.filter(inf => 
-      inf.handle.toLowerCase().includes(query) ||
-      inf.niche.toLowerCase().includes(query) ||
-      inf.platform.toLowerCase().includes(query) ||
-      inf.location.toLowerCase().includes(query)
-    )
-  }
+  // Debounced search → real DB
+  const doSearch = useCallback(async (q: string) => {
+    setSearching(true)
+    try {
+      const p = new URLSearchParams({ exclude_brand_id: brandId, limit: "100" })
+      if (q.trim()) p.set("search", q.trim())
+      const res  = await fetch(`/api/influencers?${p}`)
+      const json = await res.json()
+      setResults(Array.isArray(json.data) ? json.data : [])
+    } catch { setResults([]) }
+    finally  { setSearching(false) }
+  }, [brandId])
 
-  const toggleInfluencerSelection = (id: number) => {
-    setSelectedInfluencers(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(id)) {
-        newSet.delete(id)
+  useEffect(() => {
+    if (!isOpen) return
+    const t = setTimeout(() => doSearch(searchQuery), searchQuery ? 300 : 0)
+    return () => clearTimeout(t)
+  }, [isOpen, searchQuery, doSearch])
+
+  const toggle = (id: string) =>
+    setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+
+  // ── Save ──────────────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    setErrMsg(null); setSaving(true)
+    try {
+      if (mode === "search") {
+        if (selectedIds.size === 0) { setErrMsg("Select at least one influencer."); setSaving(false); return }
+        const errs: string[] = []
+        for (const influencer_id of Array.from(selectedIds)) {
+          const res  = await fetch(`/api/brands/${brandId}/partners`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ influencer_id, notes: searchNotes || null }),
+          })
+          const json = await res.json()
+          if (!res.ok && res.status !== 409) errs.push(json.error || "Failed")
+        }
+        if (errs.length) { setErrMsg(errs.join(" · ")); setSaving(false); return }
+
       } else {
-        newSet.add(id)
-      }
-      return newSet
-    })
-  }
+        // Manual — /api/influencers/create handles find-or-create + brand link + limits
+        if (!handle.trim() || !platform || !niche || !location) {
+          setErrMsg("Handle, platform, niche and location are required.")
+          setSaving(false); return
+        }
+        const res  = await fetch("/api/influencers/create", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            handle: handle.trim(), platform: platform.toLowerCase(),
+            email: email || null, niche: niche || null,
+            location: location || null, notes: notes || null, brandId,
+          }),
+        })
+        const json = await res.json()
 
-  const handleSave = () => {
-    if (mode === "search") {
-      if (selectedInfluencers.size === 0) {
-        alert("Please select at least one influencer to add.")
-        return
+        if (res.status === 403) { setErrMsg(json.error || "Influencer limit reached."); setSaving(false); return }
+
+        // 409 = influencer already exists globally; /create linked them already
+        // but if not yet linked to THIS brand, link now
+        if (res.status === 409 && json.id) {
+          const link = await fetch(`/api/brands/${brandId}/partners`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ influencer_id: json.id, notes: notes || null }),
+          })
+          const linkJson = await link.json()
+          if (!link.ok && link.status !== 409) {
+            setErrMsg(linkJson.error || "Failed to link influencer.")
+            setSaving(false); return
+          }
+        } else if (!res.ok) {
+          setErrMsg(json.error || `Error ${res.status}`)
+          setSaving(false); return
+        }
       }
-      
-      const selectedInfos = Array.from(selectedInfluencers).map(id => 
-        influencers.find(inf => inf.id === id)
-      ).filter(Boolean)
-      
-      onAdd({
-        type: "search",
-        influencers: selectedInfos,
-        tier: searchFormData.tier || null,
-        commission: searchFormData.commission ? parseFloat(searchFormData.commission) : null,
-        notes: searchFormData.notes
-      })
-    } else {
-      // Manual mode validation
-      if (!manualFormData.handle || !manualFormData.platform || !manualFormData.niche || 
-          !manualFormData.location || !manualFormData.email) {
-        alert("Please fill in all required fields (*).")
-        return
-      }
-      
-      onAdd({
-        type: "manual",
-        ...manualFormData,
-        commission: manualFormData.commission ? parseFloat(manualFormData.commission) : null
-      })
+
+      setSuccess(true)
+      setTimeout(() => { onAdded(); onClose() }, 700)
+    } catch (e: any) {
+      setErrMsg(e.message || "Unexpected error.")
+    } finally {
+      setSaving(false)
     }
-    onClose()
   }
 
-  const filteredInfluencers = getFilteredInfluencers()
+  if (!isOpen) return null
+
+  const fs: React.CSSProperties = {
+    width: "100%", padding: "6px 10px", borderRadius: 7,
+    border: "0.5px solid rgba(0,0,0,0.15)", fontSize: 12,
+    fontFamily: "inherit", boxSizing: "border-box",
+  }
 
   return (
-    <div className={`mo ${isOpen ? "open" : ""}`} onClick={onClose}>
-      <div className="md md-sm" onClick={(e) => e.stopPropagation()}>
-        <div className="mh">
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:20 }} onClick={onClose}>
+      <div style={{ background:"#fff",borderRadius:14,width:580,maxWidth:"90%",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px rgba(0,0,0,0.2)" }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ padding:"18px 20px 14px",borderBottom:"0.5px solid rgba(0,0,0,0.08)",display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
           <div>
-            <div className="mt">Add Brand Partner</div>
-            <div style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}>
-              Search from influencer list or add manually
-            </div>
+            <div style={{ fontSize:15,fontWeight:600 }}>Add Brand Partner</div>
+            <div style={{ fontSize:11,color:"#888",marginTop:2 }}>Search the global list or add manually</div>
           </div>
-          <button className="mc" onClick={onClose}>×</button>
+          <button onClick={onClose} style={{ background:"none",border:"none",fontSize:20,color:"#888",cursor:"pointer" }}>×</button>
         </div>
 
-        <div className="mb" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          {/* Mode Toggle */}
-          <div className="mt2">
-            <button 
-              className={`mb2 ${mode === "search" ? "active" : ""}`} 
-              onClick={() => setMode("search")}
-            >
-              🔍 Search influencer list
-            </button>
-            <button 
-              className={`mb2 ${mode === "manual" ? "active" : ""}`} 
-              onClick={() => setMode("manual")}
-            >
-              ✏️ Add manually
-            </button>
+        {/* Mode toggle */}
+        <div style={{ padding:"12px 20px 0" }}>
+          <div style={{ display:"flex",gap:8,background:"#f7f9f8",padding:4,borderRadius:10 }}>
+            {(["search","manual"] as const).map(m=>(
+              <button key={m} onClick={()=>setMode(m)} style={{ flex:1,padding:"8px 12px",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:500,fontFamily:"inherit",background:mode===m?"#fff":"transparent",color:mode===m?"#1FAE5B":"#555",boxShadow:mode===m?"0 1px 3px rgba(0,0,0,0.1)":"none" }}>
+                {m==="search"?"🔍 Search influencer list":"✏️ Add manually"}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {/* Search Mode */}
-          {mode === "search" && (
-            <div id="ap-search">
-              <div style={{ fontSize: "12px", color: "#888", marginBottom: "8px" }}>
-                Select from influencers already in your pipeline.
-              </div>
-              
-              {/* Search Input */}
-              <div style={{ position: "relative", marginBottom: "8px" }}>
-                <span style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", fontSize: "12px", color: "#888" }}>
-                  🔍
-                </span>
-                <input 
-                  style={{ width: "100%", fontSize: "12px", padding: "6px 10px 6px 28px", borderRadius: "8px", border: "0.5px solid rgba(0,0,0,0.15)", fontFamily: "'Inter', sans-serif" }}
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+        {/* Body */}
+        <div style={{ padding:20,overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:12 }}>
 
-              {/* Influencer List */}
-              <div className="ppl" style={{ maxHeight: "250px", overflowY: "auto" }}>
-                {filteredInfluencers.map(inf => (
-                  <div 
-                    key={inf.id} 
-                    className={`ppr ${selectedInfluencers.has(inf.id) ? "sel" : ""}`}
-                    onClick={() => toggleInfluencerSelection(inf.id)}
-                  >
-                    <div className="pck">{selectedInfluencers.has(inf.id) ? "✓" : ""}</div>
-                    <div>
-                      <div style={{ fontWeight: 500 }}>{inf.handle}</div>
-                      <div style={{ fontSize: "11px", color: "#888" }}>
-                        {inf.platform} · {inf.niche} · {inf.location}
-                      </div>
-                      <div style={{ fontSize: "10px", color: "#aaa", marginTop: "2px" }}>
-                        ${inf.revenue?.toLocaleString()} rev · {inf.followers?.toLocaleString()} followers
-                      </div>
+          {mode==="search" && (<>
+            <div style={{ fontSize:12,color:"#888" }}>Select influencers from the global list — they'll be linked to this brand.</div>
+            <div style={{ position:"relative" }}>
+              <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#aaa" }}>🔍</span>
+              <input style={{ ...fs,paddingLeft:30 }} placeholder="Search by handle, niche, location…" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
+            </div>
+            <div style={{ border:"0.5px solid rgba(0,0,0,0.1)",borderRadius:8,maxHeight:240,overflowY:"auto" }}>
+              {searching ? (
+                <div style={{ padding:20,textAlign:"center",color:"#888",fontSize:12 }}>Searching…</div>
+              ) : results.length===0 ? (
+                <div style={{ padding:20,textAlign:"center",color:"#888",fontSize:12 }}>
+                  {searchQuery?"No results found":"No influencers in system yet — add them manually first"}
+                </div>
+              ) : results.map(inf=>(
+                <div key={inf.id} onClick={()=>toggle(inf.id)} style={{ display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",background:selectedIds.has(inf.id)?"#f0faf5":"transparent",borderBottom:"0.5px solid rgba(0,0,0,0.04)" }}>
+                  <div style={{ width:18,height:18,borderRadius:4,flexShrink:0,border:`1.5px solid ${selectedIds.has(inf.id)?"#1FAE5B":"#ccc"}`,background:selectedIds.has(inf.id)?"#1FAE5B":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff" }}>
+                    {selectedIds.has(inf.id)?"✓":""}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:500,fontSize:12 }}>@{inf.handle}</div>
+                    <div style={{ fontSize:11,color:"#888" }}>{inf.platform} · {inf.niche||"—"} · {inf.location||"—"}</div>
+                    <div style={{ fontSize:10,color:"#aaa" }}>
+                      {inf.follower_count>=1000?(inf.follower_count/1000).toFixed(1)+"K":inf.follower_count} followers
+                      {inf.engagement_rate?` · ${inf.engagement_rate}% eng`:""}
                     </div>
                   </div>
-                ))}
-                {filteredInfluencers.length === 0 && (
-                  <div style={{ padding: "20px", textAlign: "center", color: "#888", fontSize: "12px" }}>
-                    No influencers found
-                  </div>
-                )}
-              </div>
-
-              <div style={{ fontSize: "11px", color: "#888", marginTop: "6px" }}>
-                {selectedInfluencers.size} selected
-              </div>
-
-              {/* Search Mode Form Fields */}
-              <div className="fr" style={{ marginTop: "12px" }}>
-                <div className="fg2">
-                  <div className="fl">
-                    Assign tier <span className="opt">(or auto-suggested)</span>
-                  </div>
-                  <select 
-                    className="fi" 
-                    value={searchFormData.tier}
-                    onChange={(e) => setSearchFormData({ ...searchFormData, tier: e.target.value })}
-                  >
-                    <option value="">Auto (based on revenue)</option>
-                    <option value="Bronze">🥉 Bronze</option>
-                    <option value="Silver">🥈 Silver</option>
-                    <option value="Gold">🥇 Gold</option>
-                  </select>
                 </div>
-                <div className="fg2">
-                  <div className="fl">
-                    Commission % <span className="opt">(optional — affiliate only)</span>
-                  </div>
-                  <input 
-                    className="fi" 
-                    type="number" 
-                    min="0" 
-                    max="100" 
-                    placeholder="e.g. 15"
-                    value={searchFormData.commission}
-                    onChange={(e) => setSearchFormData({ ...searchFormData, commission: e.target.value })}
-                  />
-                </div>
-              </div>
+              ))}
+            </div>
+            <div style={{ fontSize:11,color:"#888" }}>{selectedIds.size} selected</div>
+            <div>
+              <div style={{ fontSize:11,color:"#555",fontWeight:500,marginBottom:4 }}>Notes <span style={{ color:"#aaa",fontWeight:400 }}>(optional)</span></div>
+              <textarea style={{ ...fs,minHeight:50,resize:"vertical" }} placeholder="e.g. Proven performer…" value={searchNotes} onChange={e=>setSearchNotes(e.target.value)} />
+            </div>
+          </>)}
 
-              <div className="fg2">
-                <div className="fl">
-                  Notes <span className="opt">(optional)</span>
-                </div>
-                <textarea 
-                  className="fi" 
-                  style={{ minHeight: "55px" }}
-                  placeholder="e.g. Proven performer..."
-                  value={searchFormData.notes}
-                  onChange={(e) => setSearchFormData({ ...searchFormData, notes: e.target.value })}
-                />
+          {mode==="manual" && (<>
+            <div style={{ fontSize:12,color:"#888" }}>Creates a new influencer record and links them to this brand.</div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+              <div>
+                <div style={{ fontSize:11,color:"#555",fontWeight:500,marginBottom:4 }}>Handle <span style={{ color:"#E24B4A",fontSize:10 }}>*</span></div>
+                <input style={fs} placeholder="@creatorname" value={handle} onChange={e=>setHandle(e.target.value)} />
+              </div>
+              <div>
+                <div style={{ fontSize:11,color:"#555",fontWeight:500,marginBottom:4 }}>Platform <span style={{ color:"#E24B4A",fontSize:10 }}>*</span></div>
+                <select style={fs} value={platform} onChange={e=>setPlatform(e.target.value)}>
+                  <option value="">Select…</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="youtube">YouTube</option>
+                  <option value="twitter">Twitter/X</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
             </div>
-          )}
-
-          {/* Manual Mode */}
-          {mode === "manual" && (
-            <div id="ap-manual">
-              <div className="fr">
-                <div className="fg2">
-                  <div className="fl">
-                    Handle <span className="req">*</span>
-                  </div>
-                  <input 
-                    className="fi" 
-                    placeholder="@creatorname"
-                    value={manualFormData.handle}
-                    onChange={(e) => setManualFormData({ ...manualFormData, handle: e.target.value })}
-                  />
-                </div>
-                <div className="fg2">
-                  <div className="fl">
-                    Platform <span className="req">*</span>
-                  </div>
-                  <select 
-                    className="fi" 
-                    value={manualFormData.platform}
-                    onChange={(e) => setManualFormData({ ...manualFormData, platform: e.target.value })}
-                  >
-                    <option value="">Select...</option>
-                    <option>Instagram</option>
-                    <option>YouTube</option>
-                    <option>TikTok</option>
-                  </select>
-                </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+              <div>
+                <div style={{ fontSize:11,color:"#555",fontWeight:500,marginBottom:4 }}>Niche <span style={{ color:"#E24B4A",fontSize:10 }}>*</span></div>
+                <select style={fs} value={niche} onChange={e=>setNiche(e.target.value)}>
+                  <option value="">Select…</option>
+                  {["Beauty","Fitness","Lifestyle","Food","Tech","Fashion","Travel","Gaming","Health","Finance","Parenting","Pets","Other"].map(n=><option key={n}>{n}</option>)}
+                </select>
               </div>
-
-              <div className="fr">
-                <div className="fg2">
-                  <div className="fl">
-                    Niche <span className="req">*</span>
-                  </div>
-                  <select 
-                    className="fi" 
-                    value={manualFormData.niche}
-                    onChange={(e) => setManualFormData({ ...manualFormData, niche: e.target.value })}
-                  >
-                    <option value="">Select...</option>
-                    <option>Beauty</option>
-                    <option>Fitness</option>
-                    <option>Lifestyle</option>
-                    <option>Food</option>
-                    <option>Tech</option>
-                  </select>
-                </div>
-                <div className="fg2">
-                  <div className="fl">
-                    Location <span className="req">*</span>
-                  </div>
-                  <select 
-                    className="fi" 
-                    value={manualFormData.location}
-                    onChange={(e) => setManualFormData({ ...manualFormData, location: e.target.value })}
-                  >
-                    <option value="">Select...</option>
-                    <option>Philippines</option>
-                    <option>Singapore</option>
-                    <option>United States</option>
-                    <option>Australia</option>
-                    <option>United Kingdom</option>
-                    <option>Malaysia</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="fg2">
-                <div className="fl">
-                  Email <span className="req">*</span>
-                </div>
-                <input 
-                  className="fi" 
-                  type="email" 
-                  placeholder="creator@email.com"
-                  value={manualFormData.email}
-                  onChange={(e) => setManualFormData({ ...manualFormData, email: e.target.value })}
-                />
-              </div>
-
-              <div className="fr" style={{ marginTop: "4px" }}>
-                <div className="fg2">
-                  <div className="fl">
-                    Tier <span className="opt">(auto-assigned if blank)</span>
-                  </div>
-                  <select 
-                    className="fi" 
-                    value={manualFormData.tier}
-                    onChange={(e) => setManualFormData({ ...manualFormData, tier: e.target.value })}
-                  >
-                    <option value="">Auto</option>
-                    <option value="Bronze">🥉 Bronze</option>
-                    <option value="Silver">🥈 Silver</option>
-                    <option value="Gold">🥇 Gold</option>
-                  </select>
-                </div>
-                <div className="fg2">
-                  <div className="fl">
-                    Commission % <span className="opt">(optional)</span>
-                  </div>
-                  <input 
-                    className="fi" 
-                    type="number" 
-                    min="0" 
-                    max="100" 
-                    placeholder="e.g. 15"
-                    value={manualFormData.commission}
-                    onChange={(e) => setManualFormData({ ...manualFormData, commission: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="fg2" style={{ marginTop: "4px" }}>
-                <div className="fl">
-                  Notes <span className="opt">(optional)</span>
-                </div>
-                <textarea 
-                  className="fi" 
-                  style={{ minHeight: "55px" }}
-                  placeholder="Relationship context..."
-                  value={manualFormData.notes}
-                  onChange={(e) => setManualFormData({ ...manualFormData, notes: e.target.value })}
-                />
+              <div>
+                <div style={{ fontSize:11,color:"#555",fontWeight:500,marginBottom:4 }}>Location <span style={{ color:"#E24B4A",fontSize:10 }}>*</span></div>
+                <select style={fs} value={location} onChange={e=>setLocation(e.target.value)}>
+                  <option value="">Select…</option>
+                  {["Philippines","Singapore","United States","Australia","United Kingdom","Malaysia","Indonesia","Canada","UAE","Other"].map(l=><option key={l}>{l}</option>)}
+                </select>
               </div>
             </div>
-          )}
+            <div>
+              <div style={{ fontSize:11,color:"#555",fontWeight:500,marginBottom:4 }}>Email <span style={{ color:"#aaa",fontWeight:400,fontSize:10 }}>(optional)</span></div>
+              <input type="email" style={fs} placeholder="creator@email.com" value={email} onChange={e=>setEmail(e.target.value)} />
+            </div>
+            <div>
+              <div style={{ fontSize:11,color:"#555",fontWeight:500,marginBottom:4 }}>Notes <span style={{ color:"#aaa",fontWeight:400,fontSize:10 }}>(optional)</span></div>
+              <textarea style={{ ...fs,minHeight:50,resize:"vertical" }} placeholder="Relationship context…" value={notes} onChange={e=>setNotes(e.target.value)} />
+            </div>
+          </>)}
+
+          {errMsg  && <div style={{ padding:"8px 12px",background:"#fdecea",border:"0.5px solid #E24B4A",borderRadius:8,fontSize:12,color:"#a32d2d" }}>⚠ {errMsg}</div>}
+          {success && <div style={{ padding:"8px 12px",background:"#e6f9ee",border:"0.5px solid #1FAE5B",borderRadius:8,fontSize:12,color:"#0F6B3E" }}>✓ Partner added successfully!</div>}
         </div>
 
-        <div className="mf">
-          <button className="btn-outline" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave}>+ Add as Brand Partner</button>
+        {/* Footer */}
+        <div style={{ padding:"14px 20px",borderTop:"0.5px solid rgba(0,0,0,0.08)",display:"flex",justifyContent:"flex-end",gap:8 }}>
+          <button onClick={onClose} style={{ fontSize:11,padding:"6px 14px",borderRadius:8,border:"0.5px solid rgba(0,0,0,0.2)",background:"transparent",color:"#555",cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+          <button onClick={handleSave} disabled={saving||success} style={{ fontSize:11,padding:"6px 16px",borderRadius:8,border:"none",background:saving||success?"#aaa":"#1FAE5B",color:"#fff",cursor:saving||success?"not-allowed":"pointer",fontFamily:"inherit",fontWeight:500 }}>
+            {saving?"Saving…":success?"✓ Saved!":"+ Add as Brand Partner"}
+          </button>
         </div>
       </div>
-
-      <style jsx>{`
-        .mo {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.45);
-          z-index: 600;
-          display: none;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-        }
-
-        .mo.open {
-          display: flex;
-        }
-
-        .md {
-          background: #fff;
-          border-radius: 14px;
-          max-width: 90%;
-          max-height: 90vh;
-          display: flex;
-          flex-direction: column;
-          box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2);
-        }
-
-        .md-sm {
-          width: 580px;
-        }
-
-        .mh {
-          padding: 18px 20px 14px;
-          border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-        }
-
-        .mt {
-          font-size: 15px;
-          font-weight: 600;
-          color: #1e1e1e;
-        }
-
-        .mc {
-          background: none;
-          border: none;
-          font-size: 20px;
-          color: #888;
-          cursor: pointer;
-        }
-
-        .mb {
-          padding: 20px;
-          overflow-y: auto;
-          flex: 1;
-        }
-
-        .mt2 {
-          display: flex;
-          gap: 8px;
-          background: #f7f9f8;
-          padding: 4px;
-          border-radius: 10px;
-        }
-
-        .mb2 {
-          flex: 1;
-          padding: 8px 12px;
-          border: none;
-          background: transparent;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 12px;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-
-        .mb2.active {
-          background: #fff;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          color: #1fae5b;
-        }
-
-        .mf {
-          padding: 14px 20px;
-          border-top: 0.5px solid rgba(0, 0, 0, 0.08);
-          display: flex;
-          justify-content: flex-end;
-          gap: 8px;
-        }
-
-        .btn-outline {
-          font-size: 11px;
-          padding: 6px 14px;
-          border-radius: 8px;
-          border: 0.5px solid rgba(0, 0, 0, 0.2);
-          background: transparent;
-          color: #555;
-          cursor: pointer;
-        }
-
-        .btn-primary {
-          font-size: 11px;
-          padding: 6px 14px;
-          border-radius: 8px;
-          border: none;
-          background: #1fae5b;
-          color: #fff;
-          cursor: pointer;
-        }
-
-        .btn-primary:hover {
-          background: #0f6b3e;
-        }
-
-        .ppl {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          border: 0.5px solid rgba(0, 0, 0, 0.1);
-          border-radius: 8px;
-          padding: 8px;
-          max-height: 250px;
-          overflow-y: auto;
-        }
-
-        .ppr {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 10px;
-          border-radius: 7px;
-          cursor: pointer;
-        }
-
-        .ppr:hover {
-          background: #f7f9f8;
-        }
-
-        .ppr.sel {
-          background: #f0faf5;
-        }
-
-        .pck {
-          width: 18px;
-          height: 18px;
-          border-radius: 4px;
-          border: 1.5px solid #ccc;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 11px;
-        }
-
-        .ppr.sel .pck {
-          background: #1fae5b;
-          border-color: #1fae5b;
-          color: #fff;
-        }
-
-        .fr {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 12px;
-        }
-
-        .fg2 {
-          flex: 1;
-        }
-
-        .fl {
-          font-size: 11px;
-          color: #555;
-          margin-bottom: 4px;
-          font-weight: 500;
-        }
-
-        .req {
-          color: #e24b4a;
-          font-size: 10px;
-        }
-
-        .opt {
-          color: #888;
-          font-size: 10px;
-          font-weight: normal;
-        }
-
-        .fi {
-          width: 100%;
-          padding: 6px 10px;
-          border-radius: 7px;
-          border: 0.5px solid rgba(0, 0, 0, 0.15);
-          font-size: 12px;
-          font-family: inherit;
-        }
-
-        .fi:focus {
-          outline: none;
-          border-color: #1fae5b;
-        }
-
-        textarea.fi {
-          resize: vertical;
-        }
-      `}</style>
     </div>
   )
 }
