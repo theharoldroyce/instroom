@@ -114,7 +114,10 @@ export async function GET(
       orderBy: { created_at: "asc" },
     })
 
-    const data = brandInfluencers.map((bi) => {
+    // Filter out records where influencer is null (orphaned records)
+    const validBrandInfluencers = brandInfluencers.filter(bi => bi.influencer !== null)
+
+    const data = validBrandInfluencers.map((bi) => {
       const inf = bi.influencer
 
       const pipelineStatus = derivePipelineStatus(

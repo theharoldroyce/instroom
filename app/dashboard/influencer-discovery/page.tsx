@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { ChevronDown, Search, Plus, Loader2, CheckCircle2, AlertCircle, X, Users, UserPlus, Check } from "lucide-react"
+import { SubscriptionGate } from "@/components/ui/subscription-gate"
 
 // ─── API Config ─────────────────────────────────────────────────────────────
 const API_ENDPOINTS = {
@@ -152,7 +154,21 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
 function InfluencerDiscoveryContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
   const [brandId, setBrandId] = useState<string | null>(null)
+
+  // Subscription status for SubscriptionGate
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{ status: string; isExpired: boolean } | null>(null)
+
+  useEffect(() => {
+    if (!session?.user?.id) return
+    fetch("/api/subscription/status")
+      .then(res => res.json())
+      .then(data => {
+        setSubscriptionStatus(data)
+      })
+      .catch(() => setSubscriptionStatus({ status: "inactive", isExpired: false }))
+  }, [session?.user?.id])
 
   const [topic, setTopic] = useState("")
   const [selectedPlatform, setSelectedPlatform] = useState("Instagram")
@@ -410,7 +426,17 @@ function InfluencerDiscoveryContent() {
     ? addedToList.has(`${quickResult.username.toLowerCase()}:${selectedPlatform.toLowerCase()}`)
     : false
 
+  // Check subscription status
+  const isActive = subscriptionStatus?.status === "active" && !subscriptionStatus?.isExpired
+  const isSubscribed = subscriptionStatus === null ? null : isActive
+
   return (
+    <SubscriptionGate
+      isSubscribed={isSubscribed}
+      status={subscriptionStatus?.status || "inactive"}
+      featureName="influencer discovery"
+      plans={["Solo", "Team"]}
+    >
     <div className="min-h-screen bg-gradient-to-br from-[#F7F9F8] via-white to-[#F7F9F8]">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
@@ -698,7 +724,8 @@ function InfluencerDiscoveryContent() {
           </div>
         </div>
       </div>
-    </div>
+     </div>
+    </SubscriptionGate>
   )
 }
 

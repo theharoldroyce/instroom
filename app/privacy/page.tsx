@@ -91,7 +91,7 @@ export default function InstroomPrivacyPolicy() {
             alt="Instroom Logo"
             width={36}
             height={36}
-            className="w-9 h-9 rounded-full border-2 border-[#3dbd72] object-cover bg-white"
+            className="w-9 h-9 rounded-full object-cover"
           />
           <span className="font-semibold text-[18px] text-white tracking-[-0.3px]">
             instroom

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
@@ -125,12 +125,12 @@ const SUCCESS_STAGE_CHIPS: { label: string; bg: string; color: string; border: s
 function StepDot({ active }: { active: boolean }) {
   return (
     <div
+      className="transition-all duration-200"
       style={{
         width: active ? 18 : 6,
         height: 6,
         borderRadius: active ? 3 : "50%",
         background: active ? "#1FAE5B" : "#e0e0e0",
-        transition: "all 0.2s",
       }}
     />
   )
@@ -140,50 +140,30 @@ function PipelineRow({ stage }: { stage: PipeStage }) {
   const isExit = stage.isExit
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "8px 12px",
-        border: `1px solid ${isExit ? "#f5e5e5" : "#f0f0f0"}`,
-        borderRadius: 8,
-        background: isExit ? "#fdf8f8" : "#fafafa",
-        opacity: isExit ? 0.82 : 1,
-      }}
+      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border ${
+        isExit ? "border-red-100 bg-red-50/40 opacity-80" : "border-gray-100 bg-gray-50"
+      }`}
     >
       <div
+        className="shrink-0"
         style={{
           width: 8,
           height: 8,
           borderRadius: stage.dotShape === "square" ? 2 : "50%",
           background: stage.color,
-          flexShrink: 0,
         }}
       />
-      <span
-        style={{
-          fontSize: 12,
-          fontWeight: 600,
-          color: isExit ? "#999" : "#111",
-          flex: 1,
-        }}
-      >
+      <span className={`text-xs font-semibold flex-1 ${isExit ? "text-gray-400" : "text-gray-900"}`}>
         {stage.name}
       </span>
-      <span style={{ fontSize: 11, color: "#aaa" }}>{stage.desc}</span>
+      <span className="text-[11px] text-gray-400">{stage.desc}</span>
       {isExit && (
         <span
+          className="text-[9px] font-semibold px-1.5 py-px rounded uppercase tracking-wide shrink-0"
           style={{
-            fontSize: 9,
-            fontWeight: 600,
-            padding: "1px 6px",
-            borderRadius: 4,
             border: `1px solid ${stage.color === "#E24B4A" ? "#f7c1c1" : "#e0e0e0"}`,
             background: stage.color === "#E24B4A" ? "#fef0f0" : "#f5f5f5",
             color: stage.color === "#E24B4A" ? "#E24B4A" : "#888",
-            textTransform: "uppercase",
-            letterSpacing: "0.04em",
-            flexShrink: 0,
           }}
         >
           exit
@@ -200,7 +180,13 @@ export default function CreateBrandPage() {
   const { data: session } = useSession()
 
   const [step, setStep] = useState(1)
-  const TOTAL = 4
+  const TOTAL = 3
+
+  const isMounted = useRef(false)
+  useEffect(() => {
+    const t = setTimeout(() => { isMounted.current = true }, 100)
+    return () => clearTimeout(t)
+  }, [])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -229,7 +215,7 @@ export default function CreateBrandPage() {
       }
       setNameError(false)
     }
-    if (step === 3) {
+    if (step === 2) {
       handleConfirm()
       return
     }
@@ -255,7 +241,7 @@ export default function CreateBrandPage() {
         setLoading(false)
         return
       }
-      setStep(4)
+      setStep(3)
     } catch {
       setError("An error occurred. Please try again.")
     } finally {
@@ -268,14 +254,18 @@ export default function CreateBrandPage() {
   if (!session) {
     return (
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
-        <div style={styles.modal}>
-          <div style={styles.progressBar}>
-            <div style={{ ...styles.progressFill, width: "25%" }} />
+        <div className="bg-white rounded-2xl w-full max-w-[480px] overflow-hidden shadow-2xl">
+          <div className="h-1 bg-gray-100">
+            <div className="h-full bg-[#1FAE5B] rounded-r-sm" style={{ width: "25%" }} />
           </div>
-          <div style={{ padding: "28px 28px 24px" }}>
-            <div style={styles.eyebrow}>Sign in required</div>
-            <div style={styles.title}>Access restricted</div>
-            <p style={styles.sub}>You need to be signed in to create a workspace.</p>
+          <div className="px-7 pt-7 pb-6">
+            <div className="text-[11px] font-semibold text-[#1FAE5B] uppercase tracking-widest mb-1.5">
+              Sign in required
+            </div>
+            <div className="text-xl font-bold text-gray-900 mb-1 leading-snug">Access restricted</div>
+            <p className="text-[13px] text-gray-400 leading-relaxed">
+              You need to be signed in to create a workspace.
+            </p>
           </div>
         </div>
       </div>
@@ -286,35 +276,69 @@ export default function CreateBrandPage() {
 
   const progressWidth = `${(step / TOTAL) * 100}%`
 
+  const handleBackdropClose = () => {
+    if (!isMounted.current) return
+    if (step < 3) router.back()
+  }
+
+  const handleXClose = () => {
+    if (step < 3) router.back()
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,0.7)" }}>
-      <div style={styles.modal}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70"
+      onClick={handleBackdropClose}
+    >
+      <div
+        className="relative bg-white rounded-2xl w-full max-w-[480px] overflow-hidden shadow-[0_24px_60px_rgba(0,0,0,0.35)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* X button */}
+        {step < 3 && (
+          <button
+            onClick={handleXClose}
+            className="absolute top-3.5 right-3.5 z-10 text-gray-300 hover:text-gray-500 transition-colors p-1"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
 
         {/* Progress bar */}
-        <div style={styles.progressBar}>
-          <div style={{ ...styles.progressFill, width: progressWidth, transition: "width 0.35s ease" }} />
+        <div className="h-1 bg-gray-100">
+          <div
+            className="h-full bg-[#1FAE5B] rounded-r-sm transition-[width] duration-300 ease-in-out"
+            style={{ width: progressWidth }}
+          />
         </div>
 
         {/* Body */}
-        <div style={{ padding: "28px 28px 20px" }}>
+        <div className="px-7 pt-7 pb-5">
 
           {/* ── Step 1: Workspace info ── */}
           {step === 1 && (
             <div>
-              <div style={styles.eyebrow}>Step 1 of 4</div>
-              <div style={styles.title}>Set up your workspace</div>
-              <p style={styles.sub}>Tell us about your brand so we can configure your workspace correctly.</p>
+              <div className="text-[11px] font-semibold text-[#1FAE5B] uppercase tracking-widest mb-1.5">
+                Step 1 of 3
+              </div>
+              <div className="text-xl font-bold text-gray-900 mb-1 leading-snug">Set up your workspace</div>
+              <p className="text-[13px] text-gray-400 mb-5 leading-relaxed">
+                Tell us about your brand so we can configure your workspace correctly.
+              </p>
 
               {error && (
-                <div style={styles.errorBox}>
-                  <AlertCircle style={{ width: 14, height: 14, flexShrink: 0 }} />
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-200 bg-red-50 text-xs text-red-600 mb-3.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
-              <div style={styles.field}>
-                <div style={styles.fieldLabel}>
-                  Brand name <span style={{ color: "#1FAE5B" }}>*</span>
+              <div className="mb-4">
+                <div className="text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1">
+                  Brand name <span className="text-[#1FAE5B]">*</span>
                 </div>
                 <Input
                   name="name"
@@ -322,32 +346,31 @@ export default function CreateBrandPage() {
                   onChange={handleChange}
                   placeholder="e.g., My Fashion Brand"
                   autoComplete="off"
-                  style={{
-                    ...styles.input,
-                    borderColor: nameError ? "#E24B4A" : "#e0e0e0",
-                  }}
+                  className={`w-full text-[13px] text-gray-900 bg-white rounded-lg border px-3 py-2.5 outline-none ${
+                    nameError ? "border-[#E24B4A]" : "border-gray-200"
+                  }`}
                   disabled={loading}
                 />
                 {nameError && (
-                  <p style={{ fontSize: 11, color: "#E24B4A", marginTop: 4 }}>Brand name is required.</p>
+                  <p className="text-[11px] text-[#E24B4A] mt-1">Brand name is required.</p>
                 )}
               </div>
 
-              <div style={styles.field}>
-                <div style={styles.fieldLabel}>Description</div>
+              <div className="mb-4">
+                <div className="text-xs font-semibold text-gray-700 mb-1.5">Description</div>
                 <Input
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
                   placeholder="What does your brand do?"
                   autoComplete="off"
-                  style={styles.input}
+                  className="w-full text-[13px] text-gray-900 bg-white rounded-lg border border-gray-200 px-3 py-2.5 outline-none"
                   disabled={loading}
                 />
               </div>
 
-              <div style={styles.field}>
-                <div style={styles.fieldLabel}>Website URL</div>
+              <div className="mb-4">
+                <div className="text-xs font-semibold text-gray-700 mb-1.5">Website URL</div>
                 <Input
                   name="website_url"
                   value={formData.website_url}
@@ -355,74 +378,44 @@ export default function CreateBrandPage() {
                   placeholder="https://example.com"
                   type="url"
                   autoComplete="off"
-                  style={styles.input}
+                  className="w-full text-[13px] text-gray-900 bg-white rounded-lg border border-gray-200 px-3 py-2.5 outline-none"
                   disabled={loading}
                 />
               </div>
             </div>
           )}
 
-          {/* ── Step 2: Business type ── */}
+
+          {/* ── Step 2: Pipeline review ── */}
           {step === 2 && (
             <div>
-              <div style={styles.eyebrow}>Step 2 of 4</div>
-              <div style={styles.title}>What type of business are you?</div>
-              <p style={styles.sub}>
-                This sets your pipeline stages — no generic labels, just names that match how your brand actually works.
+              <div className="text-[11px] font-semibold text-[#1FAE5B] uppercase tracking-widest mb-1.5">
+                Step 2 of 3
+              </div>
+              <div className="text-xl font-bold text-gray-900 mb-1 leading-snug">Your DTC pipeline stages</div>
+              <p className="text-[13px] text-gray-400 mb-5 leading-relaxed">
+                These will appear across your pipeline, campaign tracker, and analytics.
               </p>
 
-              <div style={styles.bizGrid}>
-                {BIZ_OPTIONS.map((biz) => (
-                  <div
-                    key={biz.id}
-                    style={{
-                      ...styles.bizCard,
-                      ...(biz.id === selectedBiz && !biz.locked ? styles.bizCardSelected : {}),
-                      ...(biz.locked ? styles.bizCardLocked : {}),
-                    }}
-                  >
-                    <div
-                      style={{
-                        ...styles.bizBadge,
-                        ...(biz.badgeMain ? styles.bizBadgeMain : {}),
-                      }}
-                    >
-                      {biz.badge}
-                    </div>
-                    <span style={{ fontSize: 18, display: "block", marginBottom: 6 }}>{biz.icon}</span>
-                    <div style={styles.bizName}>{biz.name}</div>
-                    <div style={styles.bizDesc}>{biz.desc}</div>
-                  </div>
-                ))}
-              </div>
-              <p style={styles.bizNote}>More business types coming soon — update anytime in settings.</p>
-            </div>
-          )}
-
-          {/* ── Step 3: Pipeline review ── */}
-          {step === 3 && (
-            <div>
-              <div style={styles.eyebrow}>Step 3 of 4</div>
-              <div style={styles.title}>Your DTC pipeline stages</div>
-              <p style={styles.sub}>These will appear across your pipeline, campaign tracker, and analytics.</p>
-
-              <div style={styles.scrollable}>
+              <div className="max-h-64 overflow-y-auto pr-0.5">
                 {DTC_PIPELINE.map((group) => (
-                  <div key={group.label} style={{ marginBottom: 14 }}>
-                    <div style={styles.groupLabel}>{group.label}</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div key={group.label} className="mb-3.5">
+                    <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1.5 pl-0.5">
+                      {group.label}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
                       {group.stages.map((stage) => (
                         <PipelineRow key={stage.name} stage={stage} />
                       ))}
                     </div>
                     {group.exitStage && (
                       <>
-                        <div style={styles.dividerLabel}>
-                          <span style={styles.dividerLine} />
+                        <div className="flex items-center gap-2 text-[10px] font-semibold text-gray-300 uppercase tracking-wide my-2">
+                          <span className="flex-1 h-px bg-gray-100 block" />
                           exit
-                          <span style={styles.dividerLine} />
+                          <span className="flex-1 h-px bg-gray-100 block" />
                         </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                        <div className="flex flex-col gap-1.5">
                           <PipelineRow stage={group.exitStage} />
                         </div>
                       </>
@@ -432,50 +425,56 @@ export default function CreateBrandPage() {
               </div>
 
               {error && (
-                <div style={{ ...styles.errorBox, marginTop: 12 }}>
-                  <AlertCircle style={{ width: 14, height: 14, flexShrink: 0 }} />
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-red-200 bg-red-50 text-xs text-red-600 mt-3">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
             </div>
           )}
 
-          {/* ── Step 4: Success ── */}
-          {step === 4 && (
-            <div style={{ padding: "4px 0 8px", textAlign: "center" }}>
-              <div style={styles.checkCircle}>
+          {/* ── Step 3: Success ── */}
+          {step === 3 && (
+            <div className="py-1 pb-2 text-center">
+              <div className="w-[52px] h-[52px] rounded-full bg-[#e0f7ec] flex items-center justify-center mx-auto mb-4">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                  <path d="M5 12l5 5L19 7" stroke="#1FAE5B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="M5 12l5 5L19 7"
+                    stroke="#1FAE5B"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </div>
-              <div style={styles.title}>{formData.name ? `${formData.name} is ready!` : "Workspace ready!"}</div>
-              <p style={{ ...styles.sub, marginBottom: 0 }}>
-                Your workspace is configured with 11 DTC pipeline stages. Every status now matches exactly how your fulfillment works.
+
+              <div className="text-xl font-bold text-gray-900 mb-1 leading-snug">
+                {formData.name ? `${formData.name} is ready!` : "Workspace ready!"}
+              </div>
+              <p className="text-[13px] text-gray-400 leading-relaxed">
+                Your workspace is configured with 11 DTC pipeline stages. Every status now matches exactly how your
+                fulfillment works.
               </p>
 
-              <div style={styles.chipsWrap}>
-                <span style={{ ...styles.chip, background: "#f0fbf5", color: "#0e7a42", borderColor: "#9FE1CB" }}>
+              <div className="flex flex-wrap gap-1.5 mt-3.5 justify-center">
+                <span className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-[#9FE1CB] bg-[#f0fbf5] text-[#0e7a42]">
                   📦 DTC / E-commerce
                 </span>
-                <span style={{ ...styles.chip, background: "#f5f5f5", color: "#555", borderColor: "#e0e0e0" }}>
+                <span className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-gray-200 bg-gray-50 text-gray-500">
                   11 stages configured
                 </span>
               </div>
 
-              <div style={styles.pipelineSummary}>
-                <div style={styles.pipelineSummaryLabel}>Pipeline at a glance</div>
-                <div style={styles.stageChips}>
+              <div className="mt-4 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 text-left">
+                <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-2.5">
+                  Pipeline at a glance
+                </div>
+                <div className="flex flex-wrap gap-1.5">
                   {SUCCESS_STAGE_CHIPS.map((c) => (
                     <span
                       key={c.label}
-                      style={{
-                        fontSize: 10,
-                        padding: "3px 9px",
-                        borderRadius: 20,
-                        border: `1px solid ${c.border}`,
-                        background: c.bg,
-                        color: c.color,
-                      }}
+                      className="text-[10px] font-medium px-2.5 py-0.5 rounded-full border"
+                      style={{ background: c.bg, color: c.color, borderColor: c.border }}
                     >
                       {c.label}
                     </span>
@@ -485,7 +484,7 @@ export default function CreateBrandPage() {
 
               <Button
                 onClick={() => router.push(`/dashboard/manage-influencers`)}
-                style={styles.btnGo}
+                className="mt-5 text-[13px] font-semibold text-white bg-[#1FAE5B] hover:bg-[#18a050] border-none rounded-lg px-7 py-2.5 cursor-pointer"
               >
                 Go to my workspace →
               </Button>
@@ -493,17 +492,21 @@ export default function CreateBrandPage() {
           )}
         </div>
 
-        {/* Footer (hidden on step 4) */}
-        {step < 4 && (
-          <div style={styles.footer}>
-            <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+        {/* Footer (hidden on step 3) */}
+        {step < 3 && (
+          <div className="flex items-center justify-between px-7 pt-3.5 pb-5 border-t border-gray-100 gap-2.5">
+            <div className="flex gap-1.5 items-center">
               {Array.from({ length: TOTAL }).map((_, i) => (
                 <StepDot key={i} active={i === step - 1} />
               ))}
             </div>
 
             {step > 1 && (
-              <button onClick={goBack} disabled={loading} style={styles.btnBack}>
+              <button
+                onClick={goBack}
+                disabled={loading}
+                className="text-[13px] text-gray-400 bg-transparent border border-gray-200 rounded-lg px-4 py-2.5 cursor-pointer flex items-center gap-1.5 font-[inherit] hover:bg-gray-50 disabled:opacity-50"
+              >
                 ← Back
               </button>
             )}
@@ -511,273 +514,13 @@ export default function CreateBrandPage() {
             <button
               onClick={goNext}
               disabled={loading}
-              style={{
-                ...styles.btnPrimary,
-                opacity: loading ? 0.7 : 1,
-              }}
+              className="text-[13px] font-semibold text-white bg-[#1FAE5B] border-none rounded-lg px-5 py-2.5 cursor-pointer font-[inherit] flex-1 hover:bg-[#18a050] transition-colors disabled:opacity-70"
             >
-              {loading
-                ? "Creating..."
-                : step === 3
-                ? "Confirm & create workspace"
-                : "Next →"}
+              {loading ? "Creating..." : step === 2 ? "Confirm & create workspace" : "Next →"}
             </button>
           </div>
         )}
       </div>
     </div>
   )
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles: Record<string, React.CSSProperties> = {
-  modal: {
-    background: "#fff",
-    borderRadius: 16,
-    width: "100%",
-    maxWidth: 480,
-    overflow: "hidden",
-    boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
-  },
-  progressBar: {
-    height: 4,
-    background: "#f0f0f0",
-  },
-  progressFill: {
-    height: "100%",
-    background: "#1FAE5B",
-    borderRadius: "0 2px 2px 0",
-  },
-  eyebrow: {
-    fontSize: 11,
-    fontWeight: 600,
-    color: "#1FAE5B",
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
-    marginBottom: 6,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 700,
-    color: "#111",
-    marginBottom: 5,
-    lineHeight: 1.3,
-  },
-  sub: {
-    fontSize: 13,
-    color: "#888",
-    marginBottom: 22,
-    lineHeight: 1.55,
-  },
-  field: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: "#333",
-    marginBottom: 6,
-    display: "flex",
-    alignItems: "center",
-    gap: 3,
-  },
-  input: {
-    width: "100%",
-    padding: "10px 12px",
-    border: "1px solid #e0e0e0",
-    borderRadius: 8,
-    fontSize: 13,
-    color: "#111",
-    background: "#fff",
-    outline: "none",
-  },
-  errorBox: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid #fccac9",
-    background: "#fff5f5",
-    fontSize: 12,
-    color: "#c0392b",
-    marginBottom: 14,
-  },
-  bizGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-    marginBottom: 16,
-  },
-  bizCard: {
-    border: "1.5px solid #e8e8e8",
-    borderRadius: 10,
-    padding: "14px 12px",
-    cursor: "pointer",
-    background: "#fff",
-    userSelect: "none",
-  },
-  bizCardSelected: {
-    borderColor: "#1FAE5B",
-    background: "#f0fbf5",
-  },
-  bizCardLocked: {
-    opacity: 0.42,
-    cursor: "not-allowed",
-  },
-  bizBadge: {
-    fontSize: 9,
-    fontWeight: 600,
-    padding: "2px 7px",
-    borderRadius: 20,
-    background: "#f0f0f0",
-    color: "#888",
-    display: "inline-block",
-    marginBottom: 8,
-    letterSpacing: "0.03em",
-    textTransform: "uppercase",
-  },
-  bizBadgeMain: {
-    background: "#e0f7ec",
-    color: "#0e7a42",
-  },
-  bizName: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: "#111",
-    marginBottom: 2,
-  },
-  bizDesc: {
-    fontSize: 11,
-    color: "#999",
-    lineHeight: 1.35,
-  },
-  bizNote: {
-    fontSize: 11,
-    color: "#bbb",
-    textAlign: "center",
-    marginTop: 4,
-  },
-  scrollable: {
-    maxHeight: 260,
-    overflowY: "auto",
-    paddingRight: 2,
-  },
-  groupLabel: {
-    fontSize: 10,
-    fontWeight: 700,
-    color: "#bbb",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
-    marginBottom: 7,
-    paddingLeft: 2,
-  },
-  dividerLabel: {
-    fontSize: 10,
-    color: "#ccc",
-    fontWeight: 600,
-    letterSpacing: "0.05em",
-    textTransform: "uppercase",
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    margin: "8px 0 7px",
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    background: "#f0f0f0",
-    display: "block",
-  } as React.CSSProperties,
-  checkCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: "50%",
-    background: "#e0f7ec",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    margin: "0 auto 16px",
-  },
-  chipsWrap: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: 14,
-    justifyContent: "center",
-  },
-  chip: {
-    fontSize: 11,
-    fontWeight: 500,
-    padding: "4px 10px",
-    borderRadius: 20,
-    border: "1px solid",
-  },
-  pipelineSummary: {
-    marginTop: 18,
-    background: "#fafafa",
-    border: "1px solid #f0f0f0",
-    borderRadius: 10,
-    padding: "14px 16px",
-    textAlign: "left",
-  },
-  pipelineSummaryLabel: {
-    fontSize: 10,
-    fontWeight: 700,
-    color: "#bbb",
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
-    marginBottom: 10,
-  },
-  stageChips: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 5,
-  },
-  footer: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "14px 28px 22px",
-    borderTop: "1px solid #f5f5f5",
-    gap: 10,
-  },
-  btnBack: {
-    fontSize: 13,
-    color: "#888",
-    background: "none",
-    border: "1px solid #e8e8e8",
-    borderRadius: 8,
-    padding: "10px 18px",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    fontFamily: "inherit",
-  },
-  btnPrimary: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#fff",
-    background: "#1FAE5B",
-    border: "none",
-    borderRadius: 8,
-    padding: "10px 22px",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    flex: 1,
-  },
-  btnGo: {
-    display: "inline-block",
-    marginTop: 20,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#fff",
-    background: "#1FAE5B",
-    border: "none",
-    borderRadius: 8,
-    padding: "11px 28px",
-    cursor: "pointer",
-  },
 }

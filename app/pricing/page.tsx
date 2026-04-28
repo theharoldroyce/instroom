@@ -207,15 +207,7 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
         </div>
       </section>
 
-      <div className="mx-auto max-w-5xl px-6 pb-20 flex justify-end">
-        <Link
-          href="/dashboard"
-          className="text-base text-[#1E1E1E] font-medium hover:text-[#1FAE5B] transition-colors flex items-center gap-2 group"
-        >
-          Skip for now
-          <span className="group-hover:translate-x-1 transition-transform">→</span>
-        </Link>
-      </div>
+
 
       <section className="mx-auto max-w-3xl px-6 pb-20">
         <h2 className="text-3xl font-bold mb-12 text-center text-[#1E1E1E]">Frequently Asked Questions</h2>

@@ -3,6 +3,7 @@
 
 import { useState, useRef, Suspense, useCallback, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 
 import TableSheet, {
@@ -207,13 +208,26 @@ function InfluencersContent() {
 
   const idSwapCallback = useRef<((tempId: string, realId: string) => void) | null>(null)
 
+  const { data: session } = useSession()
+
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false)
   const [showWorkspaceUnavailableModal, setShowWorkspaceUnavailableModal] = useState(false)
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{ status: string; isExpired: boolean } | null>(null)
+  const [showTrialLimitModal, setShowTrialLimitModal] = useState(false)
 
   const handleWorkspaceUnavailableClose = () => {
     setShowWorkspaceUnavailableModal(false)
     router.push("/dashboard")
   }
+
+  // ── Fetch subscription status for trial limit detection ────────────────────
+  useEffect(() => {
+    if (!session?.user?.id) return
+    fetch("/api/subscription/status")
+      .then(res => res.json())
+      .then(data => setSubscriptionStatus(data))
+      .catch(() => setSubscriptionStatus({ status: "inactive", isExpired: false }))
+  }, [session?.user?.id])
 
   // ── scheduleUpdate: debounced PUT for already-saved rows ──────────────────
   const scheduleUpdate = useCallback(
@@ -299,8 +313,16 @@ function InfluencersContent() {
 
         } else if (res.status === 403) {
           const body = await res.json().catch(() => ({}))
-          if (body.requiresSubscription) setShowSubscriptionDialog(true)
-          else toast.error(body.error || "Influencer limit reached")
+          if (body.requiresSubscription) {
+            // Show trial-specific modal if user is on trial
+            if (body.subscriptionStatus === "trialing") {
+              setShowTrialLimitModal(true)
+            } else {
+              setShowSubscriptionDialog(true)
+            }
+          } else {
+            toast.error(body.error || "Influencer limit reached")
+          }
           savedHandles.current.delete(key)
           return null
 
@@ -528,11 +550,7 @@ function InfluencersContent() {
         <div className="text-center">
           <p className="text-gray-600 mb-2 font-medium">No brand selected</p>
           <p className="text-sm text-gray-500">
-            Add{" "}
-            <code className="bg-gray-100 px-1 rounded text-xs">
-              ?brandId=your-brand-id
-            </code>{" "}
-            to the URL
+            Please select a brand from the brand selector above to continue.
           </p>
         </div>
       </div>
@@ -602,7 +620,7 @@ function InfluencersContent() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4 p-4 relative min-h-screen">
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <div className="flex flex-col items-center gap-3">
@@ -623,6 +641,8 @@ function InfluencersContent() {
             idSwapCallback.current = fn
           }}
           brandId={brandId}
+          subscriptionStatus={subscriptionStatus}
+          onShowTrialModal={() => setShowTrialLimitModal(true)}
         />
       )}
 
@@ -643,6 +663,102 @@ function InfluencersContent() {
         onClose={handleWorkspaceUnavailableClose}
         workspaceName={selectedBrandName}
       />
+
+      {showTrialLimitModal && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center">
+          {/* Overlay covering only content area (not sidebar/navbar) */}
+          <div
+            className="absolute inset-0"
+            style={{ background: "rgba(10,20,15,0.45)", backdropFilter: "blur(1px)" }}
+            onClick={() => setShowTrialLimitModal(false)}
+          />
+          
+          {/* Card centered on overlay */}
+          <div
+            className="flex flex-col items-center gap-6 rounded-2xl px-8 py-9 text-center relative"
+            style={{
+              background: "rgba(255,255,255,0.98)",
+              boxShadow:
+                "0 2px 0px rgba(15,107,62,0.08) inset, 0 32px 72px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(31,174,91,0.2)",
+              maxWidth: 380,
+              width: "88%",
+              borderRadius: 20,
+            }}
+          >
+            {/* Clock icon */}
+            <div
+              className="flex items-center justify-center"
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: "linear-gradient(145deg, #fef3c7 0%, #fde68a 100%)",
+                boxShadow: "0 1px 3px rgba(180,83,9,0.15), 0 0 0 1px rgba(180,83,9,0.1)",
+              }}
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#b45309"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+            </div>
+
+            {/* Text */}
+            <div className="flex flex-col gap-2">
+              <h2
+                className="text-xl font-semibold leading-tight"
+                style={{ color: "#111827", letterSpacing: "-0.025em" }}
+              >
+                Upgrade to use the influencer list
+              </h2>
+              <p
+                className="text-sm leading-relaxed mx-auto"
+                style={{ color: "#6b7280", maxWidth: 280 }}
+              >
+                You're currently on a free trial. Upgrade to a paid plan to access the influencer list.
+              </p>
+            </div>
+
+            {/* Plan pills */}
+            <div className="flex flex-wrap justify-center gap-2">
+              {["Solo", "Team"].map((plan) => (
+                <span
+                  key={plan}
+                  className="rounded-full px-4 py-1.5 text-xs font-semibold tracking-wide"
+                  style={{
+                    background: "#f0faf5",
+                    color: "#0F6B3E",
+                    border: "1px solid #c3e6d4",
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  {plan}
+                </span>
+              ))}
+            </div>
+
+            {/* CTA */}
+            <a
+              href="/pricing"
+              className="block w-full rounded-xl py-3 text-center text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-[0.98]"
+              style={{
+                background: "linear-gradient(135deg,#22c55e 0%,#0F6B3E 100%)",
+                boxShadow: "0 4px 16px rgba(15,107,62,0.32), 0 1px 0 rgba(255,255,255,0.15) inset",
+              }}
+            >
+              View pricing & upgrade
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

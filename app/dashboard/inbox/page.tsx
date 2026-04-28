@@ -206,15 +206,20 @@ export default function InboxPage() {
   // ── Subscription gate ──────────────────────────────────────────────────────
   // null = still loading (no flash), true/false = resolved
   const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null)
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{ status: string; isExpired: boolean } | null>(null)
 
   useEffect(() => {
     if (!session?.user?.id) return
     fetch("/api/subscription/status")
       .then(res => res.json())
       .then(data => {
-        setIsSubscribed(data.status === "active" && !data.isExpired)
+        setSubscriptionStatus(data)
+        setIsSubscribed(data.status === "active" && !data.isExpired ? true : false)
       })
-      .catch(() => setIsSubscribed(false))
+      .catch(() => {
+        setSubscriptionStatus({ status: "inactive", isExpired: false })
+        setIsSubscribed(false)
+      })
   }, [session?.user?.id])
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -506,6 +511,7 @@ export default function InboxPage() {
   return (
     <SubscriptionGate
       isSubscribed={isSubscribed}
+      status={subscriptionStatus?.status || "inactive"}
       featureName="the inbox"
       plans={["Solo", "Team"]}
     >

@@ -33,6 +33,7 @@ export async function POST(req: Request) {
             requiresSubscription: true,
             current: limitCheck.current,
             max: limitCheck.max,
+            subscriptionStatus: limitCheck.subscriptionStatus,
           },
           { status: 403 }
         )
