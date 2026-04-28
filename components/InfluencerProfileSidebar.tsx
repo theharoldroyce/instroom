@@ -1,8 +1,6 @@
-// C:\Users\reyme\Videos\instroom\components\InfluencerProfileSidebar.tsx
-
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface MonthlyData {
@@ -36,12 +34,14 @@ export interface Partner {
   roi_val: number; roas_val: number
   monthly: MonthlyData[]
   ppm: number; hClicks: number; hSales: number; hRev: number; hCVR: number; hPosts: number
-  // ── From Influencer DB table ──
   avg_likes?: number | null
   avg_comments?: number | null
   avg_views?: number | null
   follower_count?: number | null
   engagement_rate?: number | null
+  // ── For history lookup ──
+  brandInfluencerId?: string  // bi.id — pass this when opening from pipeline/manage page
+  brandId?: string
 }
 
 interface Deliverable { name: string; posted: boolean }
@@ -55,12 +55,189 @@ export interface Campaign {
   budget: number; type: string; notes: string; partners: CampaignPartner[]
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Activity log types ──────────────────────────────────────────────────────
+interface ActivityLog {
+  id: string
+  action: string
+  label: string
+  details: Record<string, unknown>
+  created_at: string
+  user: {
+    id: string
+    name: string | null
+    image: string | null
+    initials: string
+  } | null
+}
+
+const ACTION_COLORS: Record<string, { bg: string; color: string }> = {
+  "influencer.added":            { bg: "#dcfce7", color: "#166534" },
+  "influencer.removed":          { bg: "#fee2e2", color: "#991b1b" },
+  "influencer.approval_changed": { bg: "#f3e8ff", color: "#6b21a8" },
+  "pipeline.stage_changed":      { bg: "#dbeafe", color: "#1e40af" },
+  "pipeline.status_changed":     { bg: "#fef9c3", color: "#854d0e" },
+  "posttracker.stage_changed":   { bg: "#ccfbf1", color: "#0f766e" },
+  "influencer.submitted":        { bg: "#ffedd5", color: "#9a3412" },
+}
+
+function formatActivityDate(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit",
+  })
+}
+
+function formatActivityDetails(action: string, details: Record<string, unknown>): string {
+  switch (action) {
+    case "pipeline.stage_changed":
+      return `Stage ${details.from} → ${details.to}`
+    case "pipeline.status_changed":
+      if (details.ni_reason) return `${details.from} → ${details.to} · "${details.ni_reason}"`
+      return `${details.from} → ${details.to}`
+    case "influencer.approval_changed":
+      return `${details.from ?? "—"} → ${details.to}${details.notes ? ` · "${details.notes}"` : ""}`
+    case "influencer.added":
+      return `via ${details.method ?? "manual"}${details.platform ? ` on ${details.platform}` : ""}`
+    case "posttracker.stage_changed":
+      return `${details.from} → ${details.to}`
+    default:
+      return ""
+  }
+}
+
+// ─── History Tab ─────────────────────────────────────────────────────────────
+function HistoryTab({ brandId, biId }: { brandId?: string; biId?: string }) {
+  const [logs, setLogs] = useState<ActivityLog[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!brandId || !biId) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    fetch(`/api/brand/${brandId}/influencers/${biId}/activity`)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then(d => { setLogs(d.logs ?? []); setLoading(false) })
+      .catch(err => { console.error("[HistoryTab]", err); setError("Failed to load history"); setLoading(false) })
+  }, [brandId, biId])
+
+  if (!brandId || !biId) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 20px", color: "#9ca3af", fontSize: 12 }}>
+        No activity tracking context available
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 13 }}>
+        Loading history…
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px" }}>
+        <div style={{ fontSize: 13, color: "#ef4444", marginBottom: 4 }}>{error}</div>
+      </div>
+    )
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px" }}>
+        <div style={{ fontSize: 28, marginBottom: 10, opacity: 0.2 }}>🕐</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#6b7280", marginBottom: 6 }}>
+          No activity yet
+        </div>
+        <div style={{ fontSize: 11, color: "#d1d5db", maxWidth: 220, margin: "0 auto" }}>
+          Actions like adding, approving, or moving this influencer will appear here
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      {/* Timeline line */}
+      <div style={{
+        position: "absolute", left: 19, top: 8, bottom: 8,
+        width: 1, background: "#f3f4f6",
+      }} />
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {logs.map(log => {
+          const colorScheme = ACTION_COLORS[log.action] ?? { bg: "#f3f4f6", color: "#374151" }
+          const detail = formatActivityDetails(log.action, log.details)
+          return (
+            <div key={log.id} style={{ display: "flex", gap: 14, paddingBottom: 22, position: "relative" }}>
+              {/* Avatar */}
+              <div style={{ flexShrink: 0, zIndex: 1 }}>
+                {log.user?.image ? (
+                  <img
+                    src={log.user.image}
+                    alt={log.user.name ?? ""}
+                    style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: "2px solid #f0fdf4" }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 38, height: 38, borderRadius: "50%",
+                    background: "#dcfce7", border: "2px solid #f0fdf4",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, fontWeight: 700, color: "#1fae5b",
+                  }}>
+                    {log.user?.initials ?? "?"}
+                  </div>
+                )}
+              </div>
+              {/* Content */}
+              <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                      {log.user?.name ?? "Unknown user"}
+                    </span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: "2px 8px",
+                      borderRadius: 20, background: colorScheme.bg, color: colorScheme.color,
+                    }}>
+                      {log.label}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 10, color: "#9ca3af", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    {formatActivityDate(log.created_at)}
+                  </span>
+                </div>
+                {detail && (
+                  <div style={{
+                    fontSize: 11, color: "#6b7280",
+                    background: "#f9fafb", borderRadius: 8,
+                    padding: "5px 10px", display: "inline-block", marginTop: 2,
+                  }}>
+                    {detail}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatMoney(v: number) { return "$" + Math.round(v).toLocaleString() }
 function formatROAS(rev: number, spend: number) { return spend > 0 ? (rev / spend).toFixed(1) + "x" : "—" }
 function autoTier(rev: number) { return rev >= 10001 ? "Gold" : rev >= 2001 ? "Silver" : "Bronze" }
 
-// Safely format a numeric metric from the DB
 function fmt(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—"
   const num = Number(n)
@@ -70,7 +247,7 @@ function fmt(n: number | null | undefined): string {
   return String(num)
 }
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// ─── Component ───────────────────────────────────────────────────────────────
 export default function InfluencerProfileSidebar({
   partner, campaigns, allPartners, onClose,
 }: {
@@ -108,13 +285,15 @@ export default function InfluencerProfileSidebar({
   const bestMonth = partner.monthly.reduce((a, x) => (x.rev > a.rev ? x : a), partner.monthly[0])
   const campCount = campaigns.filter(c => c.partners.some(cp => cp.pid === partner.id)).length
 
-  // ── Resolve DB metrics — prefer explicit DB fields, fall back to legacy props ──
   const avgLikes    = fmt(partner.avg_likes)
   const avgComments = fmt(partner.avg_comments)
   const avgViews    = fmt(partner.avg_views ?? partner.avgV)
   const followers   = fmt(partner.follower_count ?? partner.fol)
   const engRate     = partner.engagement_rate != null ? `${partner.engagement_rate}%`
                     : partner.eng != null ? `${partner.eng}%` : "—"
+
+  // Tabs: 0=Basic, 1=Order, 2=Post, 3=Stats, 4=History
+  const TABS = ["Basic", "Order", "Post", "Stats", "History"]
 
   return (
     <>
@@ -157,46 +336,33 @@ export default function InfluencerProfileSidebar({
 
         {/* ── Tabs ── */}
         <div className="pit-bar">
-          {["Basic","Order","Post","Stats"].map((tab,idx) => (
-            <div key={idx} className={`pit ${profileTab===idx?"active":""}`} onClick={() => setProfileTab(idx)}>{tab}</div>
+          {TABS.map((tab, idx) => (
+            <div key={idx} className={`pit ${profileTab === idx ? "active" : ""}`} onClick={() => setProfileTab(idx)}>
+              {tab}
+            </div>
           ))}
         </div>
 
         {/* ── Body ── */}
         <div className="ppb">
 
-          {/* ════════ BASIC TAB ════════ */}
+          {/* ════ BASIC TAB ════ */}
           {profileTab === 0 && (
             <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-
-              {/* Stat strip — 4 cols */}
               <div className="sr4">
                 <div className="sbox"><div className="slb">Followers</div><div className="svl">{followers}</div></div>
                 <div className="sbox"><div className="slb">Eng Rate</div><div className="svl" style={{ color:"#2c8ec4" }}>{engRate}</div></div>
                 <div className="sbox"><div className="slb">Avg Views</div><div className="svl">{avgViews}</div></div>
                 <div className="sbox"><div className="slb">GMV</div><div className="svl" style={{ color:"#1fae5b" }}>{formatMoney(partner.gmv)}</div></div>
               </div>
-
-              {/* ── Avg Metrics — from Influencer DB table ── */}
               <div>
                 <div className="section-label">Avg Metrics</div>
                 <div className="avg-row">
-                  <div className="avg-card">
-                    <div className="avg-val">{avgLikes}</div>
-                    <div className="avg-lbl">Avg Likes</div>
-                  </div>
-                  <div className="avg-card">
-                    <div className="avg-val">{avgComments}</div>
-                    <div className="avg-lbl">Avg Comments</div>
-                  </div>
-                  <div className="avg-card">
-                    <div className="avg-val">{avgViews}</div>
-                    <div className="avg-lbl">Avg Views</div>
-                  </div>
+                  <div className="avg-card"><div className="avg-val">{avgLikes}</div><div className="avg-lbl">Avg Likes</div></div>
+                  <div className="avg-card"><div className="avg-val">{avgComments}</div><div className="avg-lbl">Avg Comments</div></div>
+                  <div className="avg-card"><div className="avg-val">{avgViews}</div><div className="avg-lbl">Avg Views</div></div>
                 </div>
               </div>
-
-              {/* Profile field grid */}
               <div className="fgrd">
                 <div className="frow"><div className="flbl">Location</div><div className="fval">{partner.loc || "—"}</div></div>
                 <div className="frow"><div className="flbl">Niche</div><div className="fval">{partner.niche || "—"}</div></div>
@@ -210,7 +376,6 @@ export default function InfluencerProfileSidebar({
                 <div className="frow"><div className="flbl">Tier</div><div className="fval">{tier}</div></div>
                 <div className="frow"><div className="flbl">Community</div><div className="fval">{partner.commSt}</div></div>
               </div>
-
               <div>
                 <div style={{ fontSize:10, color:"#888", marginBottom:6 }}>Notes</div>
                 <textarea className="pfi" style={{ minHeight:80, resize:"vertical" }} placeholder="Add notes..." />
@@ -218,7 +383,7 @@ export default function InfluencerProfileSidebar({
             </div>
           )}
 
-          {/* ════════ ORDER TAB ════════ */}
+          {/* ════ ORDER TAB ════ */}
           {profileTab === 1 && (
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               <div className="pfr">
@@ -239,7 +404,7 @@ export default function InfluencerProfileSidebar({
             </div>
           )}
 
-          {/* ════════ POST TAB ════════ */}
+          {/* ════ POST TAB ════ */}
           {profileTab === 2 && (
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               <div className="pfr">
@@ -270,7 +435,7 @@ export default function InfluencerProfileSidebar({
             </div>
           )}
 
-          {/* ════════ STATS TAB ════════ */}
+          {/* ════ STATS TAB ════ */}
           {profileTab === 3 && (
             <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
               <div className="stit">Performance — all campaigns combined</div>
@@ -286,7 +451,6 @@ export default function InfluencerProfileSidebar({
                 <strong>Spend breakdown:</strong>{" "}
                 {formatMoney(partner.prodCost)} product COGS + {formatMoney(partner.feesPaid)} fees + {formatMoney(partner.commPaid)} commission
               </div>
-
               <div className="stit">Engagement</div>
               <div className="skg">
                 <div className="skc"><div className="skv-dark">{followers}</div><div className="skl">Followers</div></div>
@@ -296,15 +460,12 @@ export default function InfluencerProfileSidebar({
                 <div className="skc"><div className="skv-green">{formatMoney(partner.gmv||0)}</div><div className="skl">GMV</div></div>
                 <div className="skc"><div className="skv-dark">{campCount}</div><div className="skl">Campaigns</div></div>
               </div>
-
-              {/* ── Avg Metrics from DB ── */}
               <div className="stit">Avg Metrics</div>
               <div className="skg">
                 <div className="skc"><div className="skv-dark">{avgLikes}</div><div className="skl">Avg Likes</div></div>
                 <div className="skc"><div className="skv-dark">{avgComments}</div><div className="skl">Avg Comments</div></div>
                 <div className="skc"><div className="skv-dark">{avgViews}</div><div className="skl">Avg Views</div></div>
               </div>
-
               <div className="stit">Monthly breakdown</div>
               <div className="mg">
                 {partner.monthly.map(m => (
@@ -318,13 +479,19 @@ export default function InfluencerProfileSidebar({
               </div>
             </div>
           )}
+
+          {/* ════ HISTORY TAB ════ */}
+          {profileTab === 4 && (
+            <HistoryTab
+              brandId={partner.brandId}
+              biId={partner.brandInfluencerId}
+            />
+          )}
+
         </div>
 
         <style jsx>{`
-          /* ── Shell ── */
           .pp { position:fixed; top:0; right:0; width:520px; max-width:100vw; height:100%; background:#fff; box-shadow:-8px 0 40px rgba(0,0,0,0.14); z-index:500; display:flex; flex-direction:column; font-family:"Inter",system-ui,sans-serif; }
-
-          /* ── Header ── */
           .pph { padding:16px 20px; border-bottom:1px solid #f0f0f0; }
           .ppt { font-size:11px; font-weight:600; color:#9ca3af; letter-spacing:.1em; text-transform:uppercase; margin-bottom:12px; }
           .pav { width:44px; height:44px; border-radius:50%; background:#1fae5b; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; color:#fff; flex-shrink:0; box-shadow:0 0 0 3px #dcfce7; }
@@ -335,36 +502,24 @@ export default function InfluencerProfileSidebar({
           .close-btn:hover { background:#fee2e2; color:#dc2626; border-color:#fca5a5; }
           .atag { font-size:12px; font-weight:500; padding:6px 14px; border-radius:20px; cursor:pointer; border:1px solid #e5e7eb; background:#f9fafb; color:#555; }
           .atag.plat { background:#1fae5b; color:#fff; border-color:#1fae5b; }
-
-          /* ── Tabs ── */
-          .pit-bar { display:flex; gap:0; padding:0 20px; border-bottom:1px solid #f0f0f0; }
-          .pit { font-size:12px; font-weight:600; padding:11px 16px; cursor:pointer; color:#9ca3af; border-bottom:2px solid transparent; white-space:nowrap; transition:color .15s; }
+          .pit-bar { display:flex; gap:0; padding:0 20px; border-bottom:1px solid #f0f0f0; overflow-x:auto; }
+          .pit { font-size:12px; font-weight:600; padding:11px 14px; cursor:pointer; color:#9ca3af; border-bottom:2px solid transparent; white-space:nowrap; transition:color .15s; flex-shrink:0; }
           .pit.active { color:#1fae5b; border-bottom-color:#1fae5b; }
           .ppb { flex:1; overflow-y:auto; padding:18px 20px; }
-
-          /* ── Stat strip ── */
           .sr4 { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; background:linear-gradient(135deg,#f0fdf4 0%,#f9fafb 100%); border-radius:12px; padding:14px; margin-bottom:4px; border:1px solid #dcfce7; }
           .sbox { text-align:center; }
           .slb { font-size:9px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.07em; }
           .svl { font-size:16px; font-weight:700; color:#111827; margin-top:3px; }
-
-          /* ── Section label ── */
           .section-label { font-size:10px; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; padding-top:12px; border-top:1px solid #f3f4f6; }
-
-          /* ── Avg Metrics cards ── */
           .avg-row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
           .avg-card { background:#fff; border:1.5px solid #e5e7eb; border-radius:10px; padding:12px 8px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.05); }
           .avg-val { font-size:18px; font-weight:700; color:#111827; }
           .avg-lbl { font-size:9px; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:.07em; margin-top:3px; }
-
-          /* ── Field grid ── */
           .fgrd { display:grid; grid-template-columns:1fr 1fr; }
           .frow { padding:8px 0; border-bottom:.5px solid rgba(0,0,0,.05); }
           .flbl { font-size:9px; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:.06em; margin-bottom:2px; }
           .fval { font-size:13px; color:#111827; font-weight:500; }
           .bp { display:inline-block; font-size:10px; padding:1px 7px; border-radius:6px; background:#fce4ec; color:#880e4f; margin-left:6px; }
-
-          /* ── Form fields ── */
           .pfr { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
           .pfg { display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
           .pfl { font-size:10px; font-weight:600; color:#6b7280; }
@@ -372,8 +527,6 @@ export default function InfluencerProfileSidebar({
           .pfi:focus { border-color:#1fae5b; background:#fff; }
           .pfi::placeholder { color:#c4c4c4; }
           textarea.pfi { resize:vertical; min-height:70px; }
-
-          /* ── Stats tab ── */
           .stit { font-size:10px; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:.08em; padding:12px 0 8px; border-bottom:1px solid #f3f4f6; margin-bottom:10px; }
           .skg { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
           .skc { background:#f9fafb; border-radius:10px; padding:10px 12px; text-align:center; border:1px solid #f3f4f6; }
@@ -390,7 +543,6 @@ export default function InfluencerProfileSidebar({
           .mv { font-size:12px; font-weight:600; color:#1e1e1e; margin-top:2px; }
           .mv-best { color:#1fae5b; }
           .ms-txt { font-size:10px; color:#888; }
-
           .btn-primary { background:#1fae5b; color:#fff; border:none; padding:8px 18px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; font-family:inherit; transition:background .15s; }
           .btn-primary:hover { background:#0f6b3e; }
         `}</style>

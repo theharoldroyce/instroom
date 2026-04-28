@@ -1,5 +1,7 @@
 // app/dashboard/post-tracker/page.tsx
 // UI consistent with pipeline kanban:
+// - Same column header style (colored bg, title, count badge, ⓘ info tooltip)
+// - Description text removed from below header — moved into tooltip
 // - Same card style (name, handle, platform, location, followers, eng)
 // - Stage action buttons on cards (→ Next Stage arrows)
 // - Profile drawer shows current stage with ability to change it
@@ -29,15 +31,45 @@ import {
 const NICHES    = ["Beauty","Fitness","Lifestyle","Food","Tech","Fashion","Travel"]
 const LOCATIONS = ["Philippines","Singapore","United States","Australia","United Kingdom","Malaysia","Indonesia","Thailand","Vietnam"]
 
-const COLUMNS: { key: ClosedColumn; title: string; color: string; description: string }[] = [
-  { key: "For Order Creation", title: "For Order Creation", color: "bg-[#1FAE5B]",  description: "Order not yet placed"                  },
-  { key: "In-Transit",         title: "In-Transit",         color: "bg-yellow-500", description: "Order shipped, waiting for delivery"    },
-  { key: "Delivered",          title: "Delivered",          color: "bg-cyan-500",   description: "Product delivered, awaiting content"    },
-  { key: "Posted",             title: "Posted",             color: "bg-[#0F6B3E]",  description: "Content live"                          },
-  { key: "No post",            title: "No post",            color: "bg-red-400",    description: "Exit — no content published"            },
+const COLUMNS: { key: ClosedColumn; title: string; color: string; description: string; move?: string; terminal?: boolean }[] = [
+  {
+    key:   "For Order Creation",
+    title: "For Order Creation",
+    color: "bg-[#1FAE5B]",
+    description: "Order has not been placed yet. The influencer's deal is agreed and shipping address is confirmed — ready for fulfilment.",
+    move: "Move to In-Transit once the order has been shipped.",
+  },
+  {
+    key:   "In-Transit",
+    title: "In-Transit",
+    color: "bg-yellow-500",
+    description: "Order shipped and tracking number obtained. Waiting for the product to arrive at the influencer's address.",
+    move: "Move to Delivered once the influencer confirms receipt.",
+  },
+  {
+    key:   "Delivered",
+    title: "Delivered",
+    color: "bg-cyan-500",
+    description: "Product delivered. The influencer has the product and content creation is underway.",
+    move: "Move to Posted once the content goes live.",
+  },
+  {
+    key:      "Posted",
+    title:    "Posted",
+    color:    "bg-[#0F6B3E]",
+    description: "Content is live. Track engagement metrics, download content, and log the post link.",
+    terminal: true,
+  },
+  {
+    key:      "No post",
+    title:    "No post",
+    color:    "bg-red-400",
+    description: "No content was published. Product was sent but the influencer did not post. Flag for follow-up or mark as a loss.",
+    terminal: true,
+  },
 ]
 
-// Forward flow: what's the next stage from each column
+// Forward flow
 const NEXT_STAGE: Record<ClosedColumn, ClosedColumn | null> = {
   "For Order Creation": "In-Transit",
   "In-Transit":         "Delivered",
@@ -94,40 +126,86 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   )
 }
 
-// ─── Pipeline-style Card ──────────────────────────────────────────────────────
+// ─── Column Info Tooltip — identical pattern to pipeline ──────────────────────
+function ColumnInfoTooltip({ colKey, variant }: { colKey: ClosedColumn; variant: "dark" | "light" }) {
+  const col = COLUMNS.find(c => c.key === colKey)
+  if (!col) return null
+
+  const borderColor = variant === "dark" ? "border-white/60" : "border-red-400/60"
+  const textColor   = variant === "dark" ? "text-white"      : "text-red-700"
+
+  return (
+    <div className="relative group/info flex-shrink-0">
+      <span
+        className={`text-[10px] font-medium border ${borderColor} ${textColor} rounded-full w-4 h-4 flex items-center justify-center opacity-70 cursor-default select-none hover:opacity-100 transition-opacity`}
+      >
+        i
+      </span>
+      <div className="absolute top-full right-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl p-3 text-xs text-gray-700 leading-relaxed z-[60] hidden group-hover/info:block shadow-lg pointer-events-none">
+        <p className="font-semibold text-gray-900 mb-1 text-[11px]">{col.title}</p>
+        <p className="text-gray-600">{col.description}</p>
+        {col.move && (
+          <p className="mt-1.5 text-gray-400 border-t border-gray-100 pt-1.5">
+            <span className="font-medium text-gray-500">Next → </span>{col.move}
+          </p>
+        )}
+        {col.terminal && (
+          <p className="mt-1.5 text-[10px] font-medium text-red-500 border-t border-gray-100 pt-1.5 uppercase tracking-wide">
+            Terminal — cannot be moved
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Post Tracker Card — consistent with pipeline card ────────────────────────
 function PostTrackerCard({ inf, onOpen, onMove }: {
   inf: ClosedInfluencer
   onOpen: (inf: ClosedInfluencer) => void
   onMove: (id: string, col: ClosedColumn) => void
 }) {
-  const nextStage    = NEXT_STAGE[inf.closedStatus]
-  const isExit       = inf.closedStatus === "No post"
-  const isTerminal   = inf.closedStatus === "Posted" || isExit
+  const nextStage  = NEXT_STAGE[inf.closedStatus]
+  const isExit     = inf.closedStatus === "No post"
+  const isTerminal = inf.closedStatus === "Posted" || isExit
 
   return (
     <div className={`bg-white border rounded-lg p-3 hover:shadow-md transition-shadow ${
       isExit ? "border-red-100 bg-red-50/30" : "border-gray-200"
     }`}>
-      {/* Clickable body */}
+      {/* Clickable body — same layout as pipeline card */}
       <div className="cursor-pointer" onClick={() => onOpen(inf)}>
+        {/* Name + handle */}
         <div className="flex flex-col text-sm mb-2">
           <span className="font-medium text-gray-900">{inf.influencer}</span>
           <span className="text-xs text-gray-500">@{inf.handle}</span>
         </div>
+
+        {/* Platform + location */}
         <div className="flex items-center gap-2 text-xs text-gray-500 mb-1.5">
           <span>{inf.platform || "Instagram"}</span>
           <span>•</span>
-          <span className="flex items-center gap-0.5"><IconLocation size={11}/>{inf.location || "—"}</span>
+          <span className="flex items-center gap-0.5">
+            <IconLocation size={11} />{inf.location || "—"}
+          </span>
         </div>
+
+        {/* Stats */}
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{inf.followers} followers</span>
-          <span>{inf.engagementRate || "—"} eng</span>
+          <span>{inf.engagementRate || "—"}% eng</span>
         </div>
+
+        {/* Campaign badge */}
         <div className="mt-2">
           <CampaignBadge type={inf.campaignType} />
         </div>
+
+        {/* Status pills */}
         {inf.closedStatus === "Delivered" && !inf.postedAt && (
-          <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded-full px-2.5 py-1 inline-block font-medium">⚠️ Awaiting content</div>
+          <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 rounded-full px-2.5 py-1 inline-block font-medium">
+            ⚠️ Awaiting content
+          </div>
         )}
         {inf.closedStatus === "Posted" && inf.postUrl && (
           <div className="mt-2 text-[10px] text-green-600 bg-green-50 rounded-full px-2.5 py-1 inline-flex items-center gap-1 font-medium">
@@ -135,21 +213,27 @@ function PostTrackerCard({ inf, onOpen, onMove }: {
           </div>
         )}
         {isExit && (
-          <div className="mt-2 text-[10px] text-red-500 bg-red-50 rounded-full px-2.5 py-1 inline-block font-medium">✕ No content published</div>
+          <div className="mt-2 text-[10px] text-red-500 bg-red-50 rounded-full px-2.5 py-1 inline-block font-medium">
+            ✕ No content published
+          </div>
         )}
       </div>
 
-      {/* Stage action buttons — same pattern as pipeline */}
+      {/* Stage action buttons — same pattern as pipeline cards */}
       {!isTerminal && (
         <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
           {nextStage && (
-            <button onClick={e=>{e.stopPropagation();onMove(inf.id, nextStage)}}
-              className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition flex items-center gap-1">
+            <button
+              onClick={e => { e.stopPropagation(); onMove(inf.id, nextStage) }}
+              className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200 transition flex items-center gap-1"
+            >
               <IconArrowRight size={11}/> {nextStage}
             </button>
           )}
-          <button onClick={e=>{e.stopPropagation();onMove(inf.id,"No post")}}
-            className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition">
+          <button
+            onClick={e => { e.stopPropagation(); onMove(inf.id, "No post") }}
+            className="text-xs px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition"
+          >
             ✕ No post
           </button>
         </div>
@@ -163,7 +247,9 @@ function DroppableColumn({ id, children, isExit }: { id: string; children: React
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
     <div ref={setNodeRef}
-      className={`flex flex-col gap-3 transition-all rounded-lg ${isOver?(isExit?"bg-red-50 ring-2 ring-red-300":"bg-green-50 ring-2 ring-[#1FAE5B]"):""}`}>
+      className={`flex flex-col gap-3 transition-all rounded-lg ${
+        isOver ? (isExit ? "bg-red-50" : "bg-gray-50") : ""
+      }`}>
       {children}
     </div>
   )
@@ -173,7 +259,7 @@ function DraggableCard({ id, children, onClick }: { id: string; children: React.
   const style = transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined
   return (
     <div ref={setNodeRef} style={style}
-      className={`cursor-grab active:cursor-grabbing ${isDragging?"opacity-50":""}`}
+      className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-50" : ""}`}
       onClick={onClick} {...listeners} {...attributes}>
       {children}
     </div>
@@ -186,16 +272,16 @@ function StepCard({ title, optional, expanded, onToggle, done, badge, rightExtra
   done: boolean; badge?: React.ReactNode; rightExtra?: React.ReactNode; children: React.ReactNode
 }) {
   return (
-    <div className={`border rounded-xl overflow-hidden transition-all ${done?"border-green-200 bg-green-50/30":"border-gray-200 bg-white"}`}>
+    <div className={`border rounded-xl overflow-hidden transition-all ${done ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white"}`}>
       <button className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/50 transition" onClick={onToggle}>
-        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${done?"bg-green-500 text-white":"bg-gray-100 text-gray-400"}`}>
+        <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${done ? "bg-green-500 text-white" : "bg-gray-100 text-gray-400"}`}>
           {done ? <IconCheck size={12}/> : <span className="text-[10px]">●</span>}
         </div>
         <div className="flex-1">
           <span className="text-[13px] font-semibold text-gray-700">{title}</span>
           {optional && <span className="text-[11px] text-gray-400 font-normal ml-1.5">optional</span>}
         </div>
-        <div className="flex items-center gap-2" onClick={e=>e.stopPropagation()}>{badge}{rightExtra}</div>
+        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>{badge}{rightExtra}</div>
         {expanded ? <IconChevronUp size={14} className="text-gray-400 flex-shrink-0"/> : <IconChevronDown size={14} className="text-gray-400 flex-shrink-0"/>}
       </button>
       {expanded && <div className="border-t border-gray-100 p-4 bg-gray-50/30">{children}</div>}
@@ -245,7 +331,6 @@ function PaidCollabPanel({ data, onChange }: { data: PaidCollabData; onChange: (
         <p className="text-[10px] text-gray-400 mt-1.5">{doneCnt} of {steps.length} steps complete</p>
       </div>
 
-      {/* Deliverables setup */}
       <div className="border border-gray-200 rounded-xl bg-white mb-3 overflow-hidden">
         <button onClick={()=>setSetupOpen(p=>!p)} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50">
           <div className="flex-1"><p className="text-[12px] font-semibold text-gray-700 flex items-center gap-2"><IconFileText size={14} className="text-gray-400"/>Step 1 — Define deliverables</p><p className="text-[11px] text-gray-400 mt-0.5">{data.deliverables.length===0?"No deliverables added yet":`${data.deliverables.length} deliverable(s) configured`}</p></div>
@@ -298,7 +383,6 @@ function PaidCollabPanel({ data, onChange }: { data: PaidCollabData; onChange: (
 }
 
 // ─── Profile Drawer ───────────────────────────────────────────────────────────
-// Stage pipeline shown at top — same pattern as pipeline sidebar
 function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampaignTypeChange }: {
   inf: ClosedInfluencer; onClose: () => void
   onColumnChange: (id: string, col: ClosedColumn) => Promise<boolean>
@@ -321,7 +405,6 @@ function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampa
     finally { setSaving(false) }
   }
 
-  // Stage pipeline visual — same concept as pipeline kanban columns
   const stageOrder: ClosedColumn[] = ["For Order Creation","In-Transit","Delivered","Posted"]
   const currentIdx = stageOrder.indexOf(inf.closedStatus)
 
@@ -329,7 +412,6 @@ function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampa
     <>
       <div className="fixed inset-0 z-[400]" onClick={onClose}/>
       <div className="fixed top-0 right-0 w-[560px] max-w-full h-full bg-white shadow-2xl z-[500] flex flex-col font-sans overflow-hidden animate-in slide-in-from-right duration-300">
-        {/* Header */}
         <div className="px-6 pt-5 pb-0 border-b border-gray-100 bg-white sticky top-0 z-10">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -338,37 +420,28 @@ function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampa
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-full border border-gray-200 bg-gray-50 text-gray-500 flex items-center justify-center hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition"><IconX size={16}/></button>
           </div>
-
-          {/* Stage pipeline — clickable steps like pipeline board */}
           <div className="mb-4">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Post Tracker Stage</p>
             {inf.closedStatus === "No post" ? (
               <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
                 <div className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0"/>
                 <span className="text-[12px] font-semibold text-red-600">No post — exited</span>
-                <button onClick={async()=>{const ok=await onColumnChange(inf.id,"For Order Creation");if(ok)showToast("Moved back to For Order Creation")}} className="ml-auto text-[11px] px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition">
-                  ↩ Restore
-                </button>
+                <button onClick={async()=>{const ok=await onColumnChange(inf.id,"For Order Creation");if(ok)showToast("Moved back to For Order Creation")}} className="ml-auto text-[11px] px-2 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition">↩ Restore</button>
               </div>
             ) : (
               <div className="flex items-center gap-1">
                 {stageOrder.map((stage, idx) => {
-                  const isActive  = stage === inf.closedStatus
-                  const isPast    = idx < currentIdx
-                  const isFuture  = idx > currentIdx
-                  const colData   = COLUMNS.find(c => c.key === stage)!
+                  const isActive = stage === inf.closedStatus
+                  const isPast   = idx < currentIdx
+                  const colData  = COLUMNS.find(c => c.key === stage)!
                   return (
                     <div key={stage} className="flex items-center flex-1">
                       <button
-                        onClick={async () => {
-                          if (isActive) return
-                          const ok = await onColumnChange(inf.id, stage)
-                          if (ok) showToast(`Moved to ${stage}`)
-                        }}
+                        onClick={async () => { if (isActive) return; const ok = await onColumnChange(inf.id, stage); if (ok) showToast(`Moved to ${stage}`) }}
                         className={`flex-1 text-center py-1.5 px-1 rounded-lg text-[10px] font-semibold transition-all border ${
-                          isActive  ? `${colData.color} text-white border-transparent shadow-sm` :
-                          isPast    ? "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200" :
-                                      "bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100"
+                          isActive ? `${colData.color} text-white border-transparent shadow-sm` :
+                          isPast   ? "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200" :
+                                     "bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100"
                         }`}
                       >
                         {stage === "For Order Creation" ? "Order" : stage}
@@ -386,8 +459,6 @@ function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampa
               </div>
             )}
           </div>
-
-          {/* Campaign type + badges */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <CampaignBadge type={campaignType}/>
             <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{inf.platform}</span>
@@ -397,35 +468,17 @@ function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampa
               {CAMPAIGN_TYPES.map(ct=><option key={ct.value} value={ct.value}>{ct.label}</option>)}
             </select>
           </div>
-
-          {/* Tabs */}
           <div className="flex gap-1 overflow-x-auto pb-1">
             {tabs.map((t,idx)=><button key={idx} onClick={()=>setTab(idx)} className={`text-[12px] font-semibold px-4 py-2.5 whitespace-nowrap border-b-2 transition-colors ${tab===idx?"text-[#1FAE5B] border-[#1FAE5B]":"text-gray-400 border-transparent hover:text-gray-600"}`}>{t}</button>)}
           </div>
         </div>
-
-        {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 bg-gray-50/30">
-          {tab===0&&<div className="flex flex-col gap-4">
-            <div className="grid grid-cols-4 gap-2 bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-              {[{label:"Followers",val:inf.followers,color:"text-gray-900"},{label:"Eng Rate",val:inf.engagementRate||"—",color:"text-blue-600"},{label:"Platform",val:inf.platform||"Instagram",color:"text-gray-900"},{label:"Rate",val:inf.agreedRate?`$${inf.agreedRate.toLocaleString()}`:"—",color:"text-[#1FAE5B]"}].map(s=><div key={s.label} className="text-center"><p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">{s.label}</p><p className={`text-[14px] font-bold mt-1 ${s.color}`}>{s.val}</p></div>)}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {[{label:"Niche",val:inf.niche||"—"},{label:"Location",val:inf.location||"—"},{label:"Email",val:inf.email||"—"},{label:"Campaign",val:inf.campaignName||"—"}].map(f=><div key={f.label} className="bg-white rounded-lg p-3 border border-gray-100"><span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{f.label}</span><p className="text-[13px] font-medium text-gray-700 mt-1">{f.val}</p></div>)}
-            </div>
-            {inf.notes&&<div className="bg-white rounded-lg p-3 border border-gray-100"><p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Notes</p><p className="text-[12px] text-gray-600">{inf.notes}</p></div>}
-          </div>}
-
+          {tab===0&&<div className="flex flex-col gap-4"><div className="grid grid-cols-4 gap-2 bg-white rounded-xl p-4 border border-gray-100 shadow-sm">{[{label:"Followers",val:inf.followers,color:"text-gray-900"},{label:"Eng Rate",val:inf.engagementRate||"—",color:"text-blue-600"},{label:"Platform",val:inf.platform||"Instagram",color:"text-gray-900"},{label:"Rate",val:inf.agreedRate?`$${inf.agreedRate.toLocaleString()}`:"—",color:"text-[#1FAE5B]"}].map(s=><div key={s.label} className="text-center"><p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">{s.label}</p><p className={`text-[14px] font-bold mt-1 ${s.color}`}>{s.val}</p></div>)}</div><div className="grid grid-cols-2 gap-3">{[{label:"Niche",val:inf.niche||"—"},{label:"Location",val:inf.location||"—"},{label:"Email",val:inf.email||"—"},{label:"Campaign",val:inf.campaignName||"—"}].map(f=><div key={f.label} className="bg-white rounded-lg p-3 border border-gray-100"><span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{f.label}</span><p className="text-[13px] font-medium text-gray-700 mt-1">{f.val}</p></div>)}</div>{inf.notes&&<div className="bg-white rounded-lg p-3 border border-gray-100"><p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Notes</p><p className="text-[12px] text-gray-600">{inf.notes}</p></div>}</div>}
           {tab===1&&<div className="flex flex-col gap-4"><div className="bg-white rounded-xl p-4 border border-gray-100"><p className="text-[11px] font-semibold text-gray-700 mb-3 flex items-center gap-2"><IconFileText size={14} className="text-gray-400"/>Order Details</p><div className="space-y-3">{[{label:"Order Status",val:inf.orderStatus||"Not placed"},{label:"Shipped At",val:inf.shippedAt?new Date(inf.shippedAt).toLocaleDateString():"—"},{label:"Delivered At",val:inf.deliveredAt?new Date(inf.deliveredAt).toLocaleDateString():"—"},{label:"Tracking #",val:inf.trackingNumber||"—"}].map(f=><div key={f.label} className="flex justify-between items-center py-1 border-b border-gray-50"><span className="text-[11px] text-gray-500">{f.label}</span><span className="text-[12px] font-medium text-gray-700">{f.val}</span></div>)}</div></div></div>}
-
           {tab===2&&<div className="bg-white rounded-xl p-4 border border-gray-100"><p className="text-[11px] font-semibold text-gray-700 mb-3 flex items-center gap-2"><IconPhoto size={14} className="text-gray-400"/>Content Status</p><div className="space-y-3"><div className="flex justify-between items-center py-2 border-b border-gray-50"><span className="text-[11px] text-gray-500">Script</span><span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${inf.scriptStatus==="approved"?"bg-green-100 text-green-700":"bg-amber-100 text-amber-700"}`}>{inf.scriptStatus||"Not started"}</span></div><div className="flex justify-between items-center py-2 border-b border-gray-50"><span className="text-[11px] text-gray-500">Content</span><span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${inf.contentStatus==="approved"?"bg-green-100 text-green-700":"bg-amber-100 text-amber-700"}`}>{inf.contentStatus||"Not started"}</span></div>{inf.postUrl&&<div className="mt-2"><p className="text-[10px] text-gray-400 mb-1">Live post</p><a href={inf.postUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[#1FAE5B] font-medium break-all hover:underline">{inf.postUrl}</a></div>}</div></div>}
-
           {tab===3&&<div className="grid grid-cols-2 gap-3">{[{label:"Followers",val:inf.followers},{label:"Engagement Rate",val:inf.engagementRate||"—"},{label:"Agreed Rate",val:inf.agreedRate?`$${inf.agreedRate.toLocaleString()}`:"—"},{label:"Likes",val:inf.likesCount?.toLocaleString()||"—"},{label:"Comments",val:inf.commentsCount?.toLocaleString()||"—"},{label:"Internal Rating",val:inf.internalRating?`${inf.internalRating}/5`:"—"}].map(f=><div key={f.label} className="bg-white rounded-lg p-3 border border-gray-100"><p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider">{f.label}</p><p className="text-[14px] font-bold text-gray-800 mt-1">{f.val}</p></div>)}</div>}
-
           {tab===4&&isPaid&&<PaidCollabPanel data={paidCollab} onChange={setPaidCollab}/>}
         </div>
-
-        {/* Footer */}
         <div className="px-5 py-3 border-t border-gray-100 bg-white flex justify-end gap-2 sticky bottom-0">
           <button onClick={onClose} className="text-[13px] px-4 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="text-[13px] font-semibold px-4 py-2 rounded-lg bg-[#1FAE5B] text-white hover:bg-[#0f6b3e] transition disabled:opacity-60 flex items-center gap-2">{saving&&<IconLoader2 size={14} className="animate-spin"/>}Save Changes</button>
@@ -439,7 +492,7 @@ function ProfileDrawer({ inf, onClose, onColumnChange, onPaidCollabSave, onCampa
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ClosedPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-64"><span className="animate-spin text-[#1FAE5B]">⏳</span></div>}>
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><IconLoader2 size={32} className="animate-spin text-[#1FAE5B]"/></div>}>
       <PostTrackerContent />
     </Suspense>
   )
@@ -459,17 +512,16 @@ function PostTrackerContent() {
   const [showFilterPanel,      setShowFilterPanel]      = useState(false)
   const [filters,              setFilters]              = useState({influencer:"",handle:"",location:"all",niche:"all"})
   const [selectedColumnStatus, setSelectedColumnStatus] = useState<ClosedColumn|null>(null)
+  const [sortOrder,            setSortOrder]            = useState<"newest"|"oldest">("newest")
 
   const showToast = (msg: string) => { setToastMsg(msg); setTimeout(()=>setToastMsg(null),3000) }
   const sensors   = useSensors(useSensor(PointerSensor,{activationConstraint:{distance:5}}))
 
-  // Handle move from card buttons or drawer stage pipeline
   const handleMove = useCallback(async (id: string, col: ClosedColumn) => {
     const inf = data.find(d=>d.id===id)
     const ok  = await updateColumn(id, col)
     if (ok) {
       showToast(`${inf?.influencer} moved to ${col}`)
-      // Update drawer if open
       setSelectedInf(p => p?.id===id ? {...p, closedStatus: col} : p)
     } else {
       showToast("Failed to move")
@@ -481,11 +533,16 @@ function PostTrackerContent() {
     inf.influencer.toLowerCase().includes(search.toLowerCase()) ||
     inf.handle.toLowerCase().includes(search.toLowerCase())
   )
-  if (selectedColumnStatus)       filteredData = filteredData.filter(inf=>inf.closedStatus===selectedColumnStatus)
-  if (filters.influencer)         filteredData = filteredData.filter(inf=>inf.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
-  if (filters.handle)             filteredData = filteredData.filter(inf=>inf.handle.toLowerCase().includes(filters.handle.toLowerCase()))
-  if (filters.location!=="all")   filteredData = filteredData.filter(inf=>inf.location===filters.location)
-  if (filters.niche!=="all")      filteredData = filteredData.filter(inf=>inf.niche===filters.niche)
+  if (selectedColumnStatus)     filteredData = filteredData.filter(inf=>inf.closedStatus===selectedColumnStatus)
+  if (filters.influencer)       filteredData = filteredData.filter(inf=>inf.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
+  if (filters.handle)           filteredData = filteredData.filter(inf=>inf.handle.toLowerCase().includes(filters.handle.toLowerCase()))
+  if (filters.location!=="all") filteredData = filteredData.filter(inf=>inf.location===filters.location)
+  if (filters.niche!=="all")    filteredData = filteredData.filter(inf=>inf.niche===filters.niche)
+  filteredData = [...filteredData].sort((a,b)=>{
+    const da = new Date(a.createdAt ?? 0).getTime()
+    const db = new Date(b.createdAt ?? 0).getTime()
+    return sortOrder === "newest" ? db - da : da - db
+  })
 
   const hasActiveFilters   = filters.influencer!==""||filters.handle!==""||filters.location!=="all"||filters.niche!=="all"||search!==""||selectedColumnStatus!==null
   const activeInf          = activeId ? data.find(d=>d.id===activeId) : null
@@ -508,10 +565,14 @@ function PostTrackerContent() {
     const ok = await updateCampaignType(id, type)
     if (ok) { setSelectedInf(p=>p?.id===id?{...p,campaignType:type}:p); showToast("Campaign type updated") }
     else showToast("Failed to update campaign type")
-    return ok;
+    return ok
   }, [updateCampaignType])
 
-  const handleColumnClick = (column: typeof COLUMNS[0]) => { setSelectedColumnStatus(column.key); setView("list"); showToast(`Showing "${column.title}"`) }
+  const handleColumnClick = (column: typeof COLUMNS[0]) => {
+    setSelectedColumnStatus(column.key)
+    setView("list")
+    showToast(`Showing "${column.title}"`)
+  }
   const clearColumnFilter = () => { setSelectedColumnStatus(null); showToast("Showing all influencers") }
 
   if (isLoading) return <div className="flex items-center justify-center h-64"><IconLoader2 size={32} className="animate-spin text-[#1FAE5B]"/></div>
@@ -526,66 +587,99 @@ function PostTrackerContent() {
           onColumnChange={handleMove} onPaidCollabSave={updatePaidCollab} onCampaignTypeChange={handleCampaignTypeChange}/>
       )}
 
-      {/* Search */}
-      <div className="flex items-center gap-3">
-        <div className="relative w-full max-w-md">
+      {/* ── Single inline toolbar row — matches Manage Influencers layout ── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
           <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search influencer..."
-            className="w-full pl-9 pr-3 h-10 border border-[#0F6B3E]/20 rounded-lg outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm"/>
+            className="w-full pl-9 pr-3 h-9 border border-[#0F6B3E]/20 rounded-lg outline-none focus:ring-2 focus:ring-[#1FAE5B] text-sm"/>
         </div>
-        <span className="text-sm text-gray-500 whitespace-nowrap">{filteredData.length} of {data.length} influencer{data.length!==1?"s":""}</span>
-      </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
-          <div className="bg-gray-100 text-gray-700 px-4 py-1.5 rounded-full text-sm font-medium">Follow up 0</div>
-        </div>
-        <div className="flex gap-2">
-          <div className="relative">
-            <button onClick={()=>setShowFilterPanel(!showFilterPanel)}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 border ${hasActiveFilters?"bg-[#1FAE5B] text-white border-[#1FAE5B]":"border-[#0F6B3E]/20"}`}>
-              <IconFilter size={16}/> Filters
-            </button>
-            {showFilterPanel&&(
-              <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[340px] p-5">
-                <div className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-4">Filter by</div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                  <div className="flex flex-col gap-1"><label className="text-xs text-gray-500">Influencer</label><input type="text" value={filters.influencer} onChange={e=>setFilters(p=>({...p,influencer:e.target.value}))} placeholder="Search by name..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]"/></div>
-                  <div className="flex flex-col gap-1"><label className="text-xs text-gray-500">Handle</label><input type="text" value={filters.handle} onChange={e=>setFilters(p=>({...p,handle:e.target.value}))} placeholder="@username..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]"/></div>
-                  <div className="flex flex-col gap-1"><label className="text-xs text-gray-500">Location</label><select value={filters.location} onChange={e=>setFilters(p=>({...p,location:e.target.value}))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"><option value="all">All Locations</option>{LOCATIONS.map(l=><option key={l}>{l}</option>)}</select></div>
-                  <div className="flex flex-col gap-1"><label className="text-xs text-gray-500">Niche</label><select value={filters.niche} onChange={e=>setFilters(p=>({...p,niche:e.target.value}))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"><option value="all">All Niches</option>{NICHES.map(n=><option key={n}>{n}</option>)}</select></div>
-                </div>
-                <div className="flex items-center justify-end gap-3 mt-5">
-                  <button className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition" onClick={()=>setFilters({influencer:"",handle:"",location:"all",niche:"all"})}>Clear all</button>
-                  <button className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition" onClick={()=>setShowFilterPanel(false)}>Apply</button>
+        {/* Filters */}
+        <div className="relative">
+          <button onClick={()=>setShowFilterPanel(!showFilterPanel)}
+            className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${hasActiveFilters?"bg-[#1FAE5B] text-white border-[#1FAE5B]":"border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
+            <IconFilter size={15}/> Filters
+          </button>
+          {showFilterPanel&&(
+            <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-30 w-[340px] p-5">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs font-bold text-gray-800 uppercase tracking-wide">Filter by</span>
+                {hasActiveFilters&&<button className="text-xs text-gray-400 hover:text-red-500 transition flex items-center gap-1" onClick={()=>setFilters({influencer:"",handle:"",location:"all",niche:"all"})}><IconX size={12}/> Clear all</button>}
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                <div className="flex flex-col gap-1"><label className="text-xs text-gray-500">Influencer</label><input type="text" value={filters.influencer} onChange={e=>setFilters(p=>({...p,influencer:e.target.value}))} placeholder="Search by name..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]"/></div>
+                <div className="flex flex-col gap-1"><label className="text-xs text-gray-500">Handle</label><input type="text" value={filters.handle} onChange={e=>setFilters(p=>({...p,handle:e.target.value}))} placeholder="@username..." className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B]"/></div>
+                <div className="flex flex-col gap-1"><label className="text-xs text-gray-500">Location</label><select value={filters.location} onChange={e=>setFilters(p=>({...p,location:e.target.value}))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"><option value="all">All Locations</option>{LOCATIONS.map(l=><option key={l}>{l}</option>)}</select></div>
+                <div className="flex flex-col gap-1"><label className="text-xs text-gray-500">Niche</label><select value={filters.niche} onChange={e=>setFilters(p=>({...p,niche:e.target.value}))} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1FAE5B] appearance-none cursor-pointer"><option value="all">All Niches</option>{NICHES.map(n=><option key={n}>{n}</option>)}</select></div>
+              </div>
+              {/* Sort inside filter panel */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <label className="text-xs text-gray-500 block mb-2">Sort by date</label>
+                <div className="flex gap-2">
+                  <button onClick={()=>setSortOrder("newest")}
+                    className={`flex-1 h-9 rounded-lg text-sm flex items-center justify-center gap-1.5 border font-medium transition-colors ${sortOrder==="newest"?"bg-[#1FAE5B] text-white border-[#1FAE5B]":"border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                    <IconChevronDown size={14}/> Newest
+                  </button>
+                  <button onClick={()=>setSortOrder("oldest")}
+                    className={`flex-1 h-9 rounded-lg text-sm flex items-center justify-center gap-1.5 border font-medium transition-colors ${sortOrder==="oldest"?"bg-[#1FAE5B] text-white border-[#1FAE5B]":"border-gray-200 text-gray-600 hover:border-gray-300"}`}>
+                    <IconChevronUp size={14}/> Oldest
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={()=>{setView("Board");setSelectedColumnStatus(null)}} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view==="Board"?"bg-[#1FAE5B] text-white":"border border-[#0F6B3E]/20"}`}><IconLayoutKanban size={16}/> Board</button>
-            <button onClick={()=>{setView("list");setSelectedColumnStatus(null)}}  className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1 ${view==="list"?"bg-[#1FAE5B] text-white":"border border-[#0F6B3E]/20"}`}><IconList size={16}/> List</button>
-          </div>
+              <div className="flex items-center justify-end mt-4">
+                <button className="px-5 py-1.5 bg-[#1FAE5B] text-white rounded-lg text-sm font-medium hover:bg-[#178a48] transition" onClick={()=>setShowFilterPanel(false)}>Apply</button>
+              </div>
+            </div>
+          )}
         </div>
+        {/* Count */}
+        <span className="text-sm text-gray-500 whitespace-nowrap ml-1">
+          {filteredData.length} of {data.length} influencer{data.length!==1?"s":""}
+        </span>
+
+        {/* Spacer */}
+        <div className="flex-1"/>
+
+        {/* View toggle */}
+        <button onClick={()=>{setView("Board");setSelectedColumnStatus(null)}}
+          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${view==="Board"?"bg-[#1FAE5B] text-white border-[#1FAE5B]":"border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
+          <IconLayoutKanban size={16}/> Board
+        </button>
+        <button onClick={()=>{setView("list");setSelectedColumnStatus(null)}}
+          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${view==="list"?"bg-[#1FAE5B] text-white border-[#1FAE5B]":"border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
+          <IconList size={16}/> List
+        </button>
       </div>
 
-      {/* KANBAN */}
+      {/* ── KANBAN ── */}
       {view==="Board"&&(
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
             <div className="flex gap-4 min-w-max">
-              {COLUMNS.filter(c=>c.key!=="No post").map(col=>{
+
+              {/* Main columns */}
+              {COLUMNS.filter(c=>c.key!=="No post").map(col => {
                 const items = getItemsByColumn(col.key)
                 return (
                   <div key={col.key} className="w-[240px] flex-shrink-0">
                     <DroppableColumn id={col.key}>
-                      <div onClick={()=>handleColumnClick(col)} className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between cursor-pointer hover:opacity-90 transition-opacity`}>
-                        <span>{col.title}</span>
-                        <span className="bg-white/20 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                      {/* ── Column header — identical structure to pipeline ── */}
+                      <div className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between`}>
+                        <span
+                          onClick={() => handleColumnClick(col)}
+                          className="flex-1 cursor-pointer hover:opacity-90 transition-opacity truncate mr-2"
+                        >
+                          {col.title}
+                        </span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                          <ColumnInfoTooltip colKey={col.key} variant="dark" />
+                        </div>
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1 mb-2 px-1">{col.description}</p>
-                      <div className="flex flex-col gap-2 min-h-[400px]">
+                      {/* No description text here — it's in the tooltip */}
+                      <div className="flex flex-col gap-2 min-h-[400px] mt-2">
                         {items.length===0?(
                           <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center text-xs text-gray-400">Drop here</div>
                         ):items.map(inf=>(
@@ -599,24 +693,34 @@ function PostTrackerContent() {
                 )
               })}
 
+              {/* Exit separator */}
               <div className="flex flex-col items-center justify-center px-2 flex-shrink-0">
                 <div className="h-16 w-px bg-gray-200"/>
                 <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest py-2">exit</span>
                 <div className="h-16 w-px bg-gray-200"/>
               </div>
 
+              {/* No post — exit column, consistent with pipeline NI column */}
               {(()=>{
                 const col   = COLUMNS.find(c=>c.key==="No post")!
                 const items = getItemsByColumn(col.key)
                 return (
                   <div className="w-[240px] flex-shrink-0">
                     <DroppableColumn id={col.key} isExit>
+                      {/* Soft red style matching pipeline NI header */}
                       <div className="bg-red-100 text-red-700 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between">
-                        <span>{col.title}</span>
-                        <span className="bg-red-200 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                        <span
+                          onClick={() => handleColumnClick(col)}
+                          className="flex-1 cursor-pointer hover:opacity-90 transition-opacity truncate mr-2"
+                        >
+                          {col.title}
+                        </span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className="bg-red-200 text-red-700 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                          <ColumnInfoTooltip colKey={col.key} variant="light" />
+                        </div>
                       </div>
-                      <p className="text-[10px] text-red-400 mt-1 mb-2 px-1">{col.description}</p>
-                      <div className="flex flex-col gap-2 min-h-[400px]">
+                      <div className="flex flex-col gap-2 min-h-[400px] mt-2">
                         {items.length===0?(
                           <div className="border-2 border-dashed border-red-200 rounded-lg p-4 text-center text-xs text-gray-400">Drop here</div>
                         ):items.map(inf=>(
@@ -643,7 +747,7 @@ function PostTrackerContent() {
         </DndContext>
       )}
 
-      {/* LIST */}
+      {/* ── LIST ── */}
       {view==="list"&&(
         <div className="bg-white border rounded-xl overflow-hidden">
           {selectedColumnStatus&&selectedColumnInfo&&(

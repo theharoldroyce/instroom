@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { canAddInfluencer } from "@/lib/subscription-limits"
+import { logActivity } from "@/lib/activity-log"
 
 export async function POST(req: Request) {
   try {
@@ -13,7 +14,6 @@ export async function POST(req: Request) {
 
     const data = await req.json()
 
-    // Validate required fields
     if (!data.handle || !data.platform) {
       return NextResponse.json(
         { error: "handle and platform are required" },
@@ -21,7 +21,9 @@ export async function POST(req: Request) {
       )
     }
 
-    // Check subscription FIRST before checking duplicates
+    const handle = data.handle.trim().toLowerCase()
+    const platform = data.platform.trim().toLowerCase()
+
     if (data.brandId) {
       const limitCheck = await canAddInfluencer(session.user.id, data.brandId)
       if (!limitCheck.allowed) {
@@ -37,80 +39,79 @@ export async function POST(req: Request) {
       }
     }
 
-    // Check for duplicate handle+platform combination
-    const existing = await prisma.influencer.findUnique({
-      where: {
-        handle_platform: {
-          handle: data.handle,
-          platform: data.platform,
-        },
-      },
+    let influencer = await prisma.influencer.findUnique({
+      where: { handle_platform: { handle, platform } },
     })
 
-    if (existing) {
-      return NextResponse.json(
-        { error: "Influencer with this handle and platform already exists" },
-        { status: 409 }
-      )
+    const isNew = !influencer
+
+    if (!influencer) {
+      influencer = await prisma.influencer.create({
+        data: {
+          handle,
+          platform,
+          full_name: data.full_name || null,
+          email: data.email || null,
+          gender: data.gender || null,
+          niche: data.niche || null,
+          location: data.location || null,
+          bio: data.bio || null,
+          profile_image_url: data.profile_image_url || null,
+          social_link: data.social_link || null,
+          follower_count: data.follower_count || 0,
+          engagement_rate: data.engagement_rate || 0,
+          avg_likes: data.avg_likes || 0,
+          avg_comments: data.avg_comments || 0,
+          avg_views: data.avg_views || 0,
+        },
+      })
     }
 
-    // Create influencer
-    const influencer = await prisma.influencer.create({
-      data: {
-        handle: data.handle,
-        platform: data.platform,
-        full_name: data.full_name || null,
-        email: data.email || null,
-        gender: data.gender || null,
-        niche: data.niche || null,
-        location: data.location || null,
-        bio: data.bio || null,
-        profile_image_url: data.profile_image_url || null,
-        social_link: data.social_link || null,
-        follower_count: data.follower_count || 0,
-        engagement_rate: data.engagement_rate || 0,
-        avg_likes: data.avg_likes || 0,
-        avg_comments: data.avg_comments || 0,
-        avg_views: data.avg_views || 0,
-      },
-    })
-
-    // If brandId is provided, link influencer to brand with proper error handling
     if (data.brandId) {
       try {
-        await prisma.brandInfluencer.create({
-          data: {
-            brand_id: data.brandId,
-            influencer_id: influencer.id,
-            contact_status: "not_contacted",
-            stage: 1,
-          },
+        const existingLink = await prisma.brandInfluencer.findFirst({
+          where: { brand_id: data.brandId, influencer_id: influencer.id },
         })
+
+        if (!existingLink) {
+          const brandInfluencer = await prisma.brandInfluencer.create({
+            data: {
+              brand_id: data.brandId,
+              influencer_id: influencer.id,
+              contact_status: "not_contacted",
+              stage: 1,
+            },
+          })
+
+          logActivity({
+            brandId: data.brandId,
+            userId: session.user.id,
+            action: "influencer.added",
+            entityType: "brand_influencer",
+            entityId: brandInfluencer.id,
+            details: {
+              method: data.method ?? "manual",
+              handle,
+              platform,
+              is_new_global: isNew,
+            },
+          }).catch(console.error)
+        }
       } catch (brandLinkError) {
-        // Log the error but don't fail the entire request
-        // The influencer was created successfully, just the brand link failed
         console.error(
           `Failed to link influencer ${influencer.id} to brand ${data.brandId}:`,
           brandLinkError
         )
-        // Return success but notify that brand linking failed
         return NextResponse.json(
-          {
-            ...influencer,
-            warning:
-              "Influencer created but brand linking failed. Please try linking manually.",
-          },
+          { ...influencer, warning: "Influencer created/reused but brand linking failed." },
           { status: 201 }
         )
       }
     }
 
-    return NextResponse.json(influencer, { status: 201 })
+    return NextResponse.json({ ...influencer, reused: !isNew }, { status: 201 })
   } catch (error) {
     console.error("Error in POST /api/influencers/create:", error)
-    return NextResponse.json(
-      { error: "Failed to create influencer" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to create influencer" }, { status: 500 })
   }
 }

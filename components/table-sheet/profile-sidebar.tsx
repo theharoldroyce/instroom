@@ -1,7 +1,5 @@
 "use client"
 // table-sheet/profile-sidebar.tsx
-// Redesigned Basic tab: clean card-based field grid with icons, better selects,
-// email/link chips, and consistent visual language matching Instroom green theme.
 
 import React, { useState, useEffect } from "react"
 import type { InfluencerRow, CustomColumn } from "./types"
@@ -11,6 +9,189 @@ import { getProfileUrl, handleApprovalChange, formatFollowers } from "./utils"
 import { ProfilePicture } from "./ui-atoms"
 import { DeclineConfirmationModal } from "./modals"
 
+// ─── Activity log types ───────────────────────────────────────────────────────
+interface ActivityLog {
+  id: string
+  action: string
+  label: string
+  details: Record<string, unknown>
+  created_at: string
+  user: {
+    id: string
+    name: string | null
+    image: string | null
+    initials: string
+  } | null
+}
+
+const ACTION_COLORS: Record<string, { bg: string; color: string }> = {
+  "influencer.added":            { bg: "#dcfce7", color: "#166534" },
+  "influencer.removed":          { bg: "#fee2e2", color: "#991b1b" },
+  "influencer.approval_changed": { bg: "#f3e8ff", color: "#6b21a8" },
+  "pipeline.stage_changed":      { bg: "#dbeafe", color: "#1e40af" },
+  "pipeline.status_changed":     { bg: "#fef9c3", color: "#854d0e" },
+  "posttracker.stage_changed":   { bg: "#ccfbf1", color: "#0f766e" },
+  "influencer.submitted":        { bg: "#ffedd5", color: "#9a3412" },
+}
+
+function formatActivityDate(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit",
+  })
+}
+
+function formatActivityDetails(action: string, details: Record<string, unknown>): string {
+  switch (action) {
+    case "pipeline.stage_changed":
+      return `Stage ${details.from} → ${details.to}`
+    case "pipeline.status_changed":
+      if (details.ni_reason) return `${details.from} → ${details.to} · "${details.ni_reason}"`
+      return `${details.from} → ${details.to}`
+    case "influencer.approval_changed":
+      return `${details.from ?? "—"} → ${details.to}${details.notes ? ` · "${details.notes}"` : ""}`
+    case "influencer.added":
+      return `via ${details.method ?? "manual"}${details.platform ? ` on ${details.platform}` : ""}`
+    case "posttracker.stage_changed":
+      return `${details.from} → ${details.to}`
+    default:
+      return ""
+  }
+}
+
+// ─── History Tab Component ────────────────────────────────────────────────────
+function HistoryTab({ brandId, biId }: { brandId?: string; biId: string }) {
+  const [logs, setLogs] = useState<ActivityLog[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!brandId || !biId) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    fetch(`/api/brand/${brandId}/influencers/${biId}/activity`)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then(d => { setLogs(d.logs ?? []); setLoading(false) })
+      .catch(err => { console.error("[HistoryTab]", err); setError("Failed to load history"); setLoading(false) })
+  }, [brandId, biId])
+
+  if (!brandId) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 20px", color: "#9ca3af", fontSize: 12 }}>
+        Brand context required to view history
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px", color: "#9ca3af", fontSize: 13 }}>
+        Loading history…
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px" }}>
+        <div style={{ fontSize: 13, color: "#ef4444", marginBottom: 4 }}>{error}</div>
+        <div style={{ fontSize: 11, color: "#9ca3af" }}>bi.id: {biId}</div>
+      </div>
+    )
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px" }}>
+        <div style={{ fontSize: 28, marginBottom: 10, opacity: 0.2 }}>🕐</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#6b7280", marginBottom: 6 }}>
+          No activity yet
+        </div>
+        <div style={{ fontSize: 11, color: "#d1d5db", maxWidth: 220, margin: "0 auto" }}>
+          Actions like adding, approving, or moving this influencer will appear here
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      {/* Timeline line */}
+      <div style={{
+        position: "absolute", left: 19, top: 8, bottom: 8,
+        width: 1, background: "#f3f4f6",
+      }} />
+
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {logs.map(log => {
+          const colorScheme = ACTION_COLORS[log.action] ?? { bg: "#f3f4f6", color: "#374151" }
+          const detail = formatActivityDetails(log.action, log.details)
+
+          return (
+            <div key={log.id} style={{ display: "flex", gap: 14, paddingBottom: 22, position: "relative" }}>
+              {/* Avatar */}
+              <div style={{ flexShrink: 0, zIndex: 1 }}>
+                {log.user?.image ? (
+                  <img
+                    src={log.user.image}
+                    alt={log.user.name ?? ""}
+                    style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: "2px solid #f0fdf4" }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 38, height: 38, borderRadius: "50%",
+                    background: "#dcfce7", border: "2px solid #f0fdf4",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, fontWeight: 700, color: "#1fae5b",
+                  }}>
+                    {log.user?.initials ?? "?"}
+                  </div>
+                )}
+              </div>
+
+              {/* Content */}
+              <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                      {log.user?.name ?? "Unknown user"}
+                    </span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: "2px 8px",
+                      borderRadius: 20, background: colorScheme.bg, color: colorScheme.color,
+                    }}>
+                      {log.label}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 10, color: "#9ca3af", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    {formatActivityDate(log.created_at)}
+                  </span>
+                </div>
+                {detail && (
+                  <div style={{
+                    fontSize: 11, color: "#6b7280",
+                    background: "#f9fafb", borderRadius: 8,
+                    padding: "5px 10px", display: "inline-block", marginTop: 2,
+                  }}>
+                    {detail}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function displayMetric(val: string | number | undefined | null): string {
   if (val === null || val === undefined || val === "") return "—"
   const n = Number(val)
@@ -18,11 +199,7 @@ function displayMetric(val: string | number | undefined | null): string {
   return formatFollowers(n)
 }
 
-// ── Tiny field components for the redesigned grid ─────────────────────────────
-
-function FieldSelect({
-  label, icon, value, options, onChange, readOnly,
-}: {
+function FieldSelect({ label, icon, value, options, onChange, readOnly }: {
   label: string; icon: string; value: string
   options: { value: string; label: string }[]
   onChange: (v: string) => void; readOnly?: boolean
@@ -42,14 +219,7 @@ function FieldSelect({
           <select
             value={value}
             onChange={e => onChange(e.target.value)}
-            style={{
-              width: "100%", fontSize: 13, fontWeight: 500,
-              padding: "7px 28px 7px 10px",
-              borderRadius: 8, border: "1.5px solid #e5e7eb",
-              background: "#f9fafb", color: "#111827",
-              cursor: "pointer", appearance: "none" as const,
-              outline: "none", transition: "border-color 0.15s",
-            }}
+            style={{ width: "100%", fontSize: 13, fontWeight: 500, padding: "7px 28px 7px 10px", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#f9fafb", color: "#111827", cursor: "pointer", appearance: "none" as const, outline: "none", transition: "border-color 0.15s" }}
             onFocus={e => { e.currentTarget.style.borderColor = "#1fae5b"; e.currentTarget.style.background = "#fff" }}
             onBlur={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "#f9fafb" }}
           >
@@ -65,9 +235,7 @@ function FieldSelect({
   )
 }
 
-function FieldInfo({
-  label, icon, value, href, truncate,
-}: {
+function FieldInfo({ label, icon, value, href, truncate }: {
   label: string; icon: string; value?: string | null; href?: string; truncate?: boolean
 }) {
   const displayVal = value || "—"
@@ -78,27 +246,11 @@ function FieldInfo({
         <span style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{label}</span>
       </div>
       {href && value ? (
-        <a
-          href={href.startsWith("http") ? href : `https://${href}`}
-          target="_blank" rel="noopener noreferrer"
-          style={{
-            fontSize: 12, fontWeight: 500, color: "#1fae5b",
-            textDecoration: "none", overflow: "hidden",
-            textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
-            display: "block",
-          }}
-          title={value}
-        >
-          {value.replace(/^https?:\/\//, "")}
-        </a>
+        <a href={href.startsWith("http") ? href : `https://${href}`} target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 12, fontWeight: 500, color: "#1fae5b", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, display: "block" }}
+          title={value}>{value.replace(/^https?:\/\//, "")}</a>
       ) : (
-        <div style={{
-          fontSize: 13, fontWeight: value ? 500 : 400,
-          color: value ? "#111827" : "#d1d5db",
-          overflow: truncate ? "hidden" : undefined,
-          textOverflow: truncate ? "ellipsis" : undefined,
-          whiteSpace: truncate ? "nowrap" as const : undefined,
-        }}>
+        <div style={{ fontSize: 13, fontWeight: value ? 500 : 400, color: value ? "#111827" : "#d1d5db", overflow: truncate ? "hidden" : undefined, textOverflow: truncate ? "ellipsis" : undefined, whiteSpace: truncate ? "nowrap" as const : undefined }}>
           {displayVal}
         </div>
       )}
@@ -218,7 +370,7 @@ export default function ProfileSidebar({
     pipeSel: { fontSize: 11, padding: "5px 10px", borderRadius: 8, border: "0.5px solid #f4b740", background: "#fffbeb", color: "#854f0b", cursor: "pointer", fontWeight: 500 },
     atag: { fontSize: 12, fontWeight: 500, padding: "6px 14px", borderRadius: 20, cursor: "pointer", border: "1px solid #e5e7eb", background: "#f9fafb", color: "#555", transition: "all 0.15s" },
     atagPlat: { fontSize: 12, fontWeight: 500, padding: "6px 14px", borderRadius: 20, cursor: "pointer", border: "1px solid #1fae5b", background: "#1fae5b", color: "#fff" },
-    tabBar: { display: "flex", gap: 0, padding: "0 20px", borderBottom: "1px solid #f0f0f0" },
+    tabBar: { display: "flex", gap: 0, padding: "0 20px", borderBottom: "1px solid #f0f0f0", overflowX: "auto" as const },
     tab: (a: boolean) => ({ fontSize: 12, fontWeight: 600, padding: "11px 16px", cursor: "pointer", color: a ? "#1fae5b" : "#9ca3af", borderBottom: a ? "2px solid #1fae5b" : "2px solid transparent", whiteSpace: "nowrap" as const, transition: "color 0.15s" }),
     body: { flex: 1, overflowY: "auto" as const, padding: "20px" },
     statRow: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, background: "linear-gradient(135deg, #f0fdf4 0%, #f9fafb 100%)", borderRadius: 12, padding: 14, marginBottom: 18, border: "1px solid #dcfce7" },
@@ -250,6 +402,9 @@ export default function ProfileSidebar({
     { value: "youtube", label: "YouTube" },
     { value: "twitter", label: "X (Twitter)" },
   ]
+
+  // Tabs: 0=Basic, 1=Order, 2=Post, 3=Stats, 4=History
+  const TABS = ["Basic", "Order", "Post", "Stats", "History"]
 
   return (
     <>
@@ -307,153 +462,61 @@ export default function ProfileSidebar({
           </div>
         </div>
 
-        {/* ── Tab bar ── */}
+        {/* ── Tab bar — now 5 tabs ── */}
         <div style={S.tabBar}>
-          {["Basic", "Order", "Post", "Stats"].map((tab, idx) => (
-            <div key={idx} style={S.tab(profileTab === idx)} onClick={() => setProfileTab(idx)}>{tab}</div>
+          {TABS.map((tab, idx) => (
+            <div key={idx} style={S.tab(profileTab === idx)} onClick={() => setProfileTab(idx)}>
+              {tab === "History" ? "History" : tab}
+            </div>
           ))}
         </div>
 
         {/* ── Body ── */}
         <div style={S.body}>
 
-          {/* ════════════════════════════════════
-              BASIC TAB — redesigned
-              ════════════════════════════════════ */}
+          {/* ════ BASIC TAB ════ */}
           {profileTab === 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-
-              {/* Stat strip */}
               <div style={S.statRow}>
-                <div style={S.statBox}>
-                  <div style={S.statLabel}>Followers</div>
-                  <div style={S.statVal}>{displayMetric(editedRow.follower_count)}</div>
-                </div>
-                <div style={S.statBox}>
-                  <div style={S.statLabel}>Eng Rate</div>
-                  <div style={{ ...S.statVal, color: "#2c8ec4" }}>{editedRow.engagement_rate ? `${editedRow.engagement_rate}%` : "—"}</div>
-                </div>
-                <div style={S.statBox}>
-                  <div style={S.statLabel}>Tier</div>
-                  <div style={{ ...S.statVal, fontSize: 13 }}>{editedRow.tier || "Bronze"}</div>
-                </div>
-                <div style={S.statBox}>
-                  <div style={S.statLabel}>Rate</div>
-                  <div style={{ ...S.statVal, color: "#1fae5b" }}>{editedRow.agreed_rate ? "$" + Number(editedRow.agreed_rate).toLocaleString() : "—"}</div>
-                </div>
+                <div style={S.statBox}><div style={S.statLabel}>Followers</div><div style={S.statVal}>{displayMetric(editedRow.follower_count)}</div></div>
+                <div style={S.statBox}><div style={S.statLabel}>Eng Rate</div><div style={{ ...S.statVal, color: "#2c8ec4" }}>{editedRow.engagement_rate ? `${editedRow.engagement_rate}%` : "—"}</div></div>
+                <div style={S.statBox}><div style={S.statLabel}>Tier</div><div style={{ ...S.statVal, fontSize: 13 }}>{editedRow.tier || "Bronze"}</div></div>
+                <div style={S.statBox}><div style={S.statLabel}>Rate</div><div style={{ ...S.statVal, color: "#1fae5b" }}>{editedRow.agreed_rate ? "$" + Number(editedRow.agreed_rate).toLocaleString() : "—"}</div></div>
               </div>
-
-              {/* ── Info grid — 2 columns of polished field cards ── */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-
-                <FieldSelect
-                  label="Location" icon=""
-                  value={editedRow.location || ""}
-                  options={locationOptions}
-                  onChange={v => handleFieldChange("location", v)}
-                  readOnly={readOnly}
-                />
-
-                <FieldSelect
-                  label="Niche" icon=""
-                  value={editedRow.niche || ""}
-                  options={nicheOptions}
-                  onChange={v => handleFieldChange("niche", v)}
-                  readOnly={readOnly}
-                />
-
-                <FieldSelect
-                  label="Gender" icon=""
-                  value={editedRow.gender || ""}
-                  options={genderOptions}
-                  onChange={v => handleFieldChange("gender", v)}
-                  readOnly={readOnly}
-                />
-
-                <FieldSelect
-                  label="Platform" icon=""
-                  value={editedRow.platform}
-                  options={platformOptions}
-                  onChange={v => handleFieldChange("platform", v)}
-                  readOnly={readOnly}
-                />
+                <FieldSelect label="Location" icon="" value={editedRow.location || ""} options={locationOptions} onChange={v => handleFieldChange("location", v)} readOnly={readOnly} />
+                <FieldSelect label="Niche" icon="" value={editedRow.niche || ""} options={nicheOptions} onChange={v => handleFieldChange("niche", v)} readOnly={readOnly} />
+                <FieldSelect label="Gender" icon="" value={editedRow.gender || ""} options={genderOptions} onChange={v => handleFieldChange("gender", v)} readOnly={readOnly} />
+                <FieldSelect label="Platform" icon="" value={editedRow.platform} options={platformOptions} onChange={v => handleFieldChange("platform", v)} readOnly={readOnly} />
               </div>
-
-              {/* ── Contact info row — full width cards ── */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-                {/* Email chip */}
                 <div style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px", border: "1px solid #f3f4f6" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 5 }}>
-                    <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Email</span>
-                  </div>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 5 }}>Email</div>
                   {editedRow.contact_info ? (
-                    <a
-                      href={`mailto:${editedRow.contact_info}`}
-                      style={{ fontSize: 12, fontWeight: 500, color: "#374151", textDecoration: "none", wordBreak: "break-all" as const, display: "block" }}
-                    >
-                      {editedRow.contact_info}
-                    </a>
-                  ) : (
-                    <span style={{ fontSize: 12, color: "#d1d5db" }}>—</span>
-                  )}
+                    <a href={`mailto:${editedRow.contact_info}`} style={{ fontSize: 12, fontWeight: 500, color: "#374151", textDecoration: "none", wordBreak: "break-all" as const, display: "block" }}>{editedRow.contact_info}</a>
+                  ) : <span style={{ fontSize: 12, color: "#d1d5db" }}>—</span>}
                 </div>
-
-                {/* Social link chip */}
                 <div style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px", border: "1px solid #f3f4f6" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 5 }}>
-                    <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Social Link</span>
-                  </div>
+                  <div style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 5 }}>Social Link</div>
                   {editedRow.social_link ? (
-                    <a
-                      href={editedRow.social_link.startsWith("http") ? editedRow.social_link : `https://${editedRow.social_link}`}
-                      target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize: 12, fontWeight: 500, color: "#1fae5b", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, display: "block" }}
-                      title={editedRow.social_link}
-                    >
-                      {editedRow.social_link.replace(/^https?:\/\//, "").slice(0, 28)}{editedRow.social_link.replace(/^https?:\/\//, "").length > 28 ? "…" : ""}
-                    </a>
-                  ) : (
-                    <span style={{ fontSize: 12, color: "#d1d5db" }}>—</span>
-                  )}
+                    <a href={editedRow.social_link.startsWith("http") ? editedRow.social_link : `https://${editedRow.social_link}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 500, color: "#1fae5b", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, display: "block" }} title={editedRow.social_link}>{editedRow.social_link.replace(/^https?:\/\//, "").slice(0, 28)}{editedRow.social_link.replace(/^https?:\/\//, "").length > 28 ? "…" : ""}</a>
+                  ) : <span style={{ fontSize: 12, color: "#d1d5db" }}>—</span>}
                 </div>
               </div>
-
-              {/* ── Notes ── */}
               <div style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
-                  <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Approval Notes</span>
-                </div>
+                <div style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 6 }}>Approval Notes</div>
                 {readOnly
                   ? <div style={{ fontSize: 12, color: "#374151", background: "#f9fafb", borderRadius: 8, padding: 10, minHeight: 38, border: "1px solid #f3f4f6" }}>{editedRow.approval_notes || <span style={{ color: "#d1d5db" }}>No notes</span>}</div>
-                  : <textarea
-                      style={{ ...S.formInput, minHeight: 60, resize: "vertical" as const, fontFamily: "inherit" }}
-                      value={editedRow.approval_notes || ""}
-                      onChange={e => handleFieldChange("approval_notes", e.target.value)}
-                      placeholder="Add approval notes…"
-                      onFocus={e => { e.currentTarget.style.borderColor = "#1fae5b"; e.currentTarget.style.background = "#fff" }}
-                      onBlur={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "#f9fafb" }}
-                    />
+                  : <textarea style={{ ...S.formInput, minHeight: 60, resize: "vertical" as const, fontFamily: "inherit" }} value={editedRow.approval_notes || ""} onChange={e => handleFieldChange("approval_notes", e.target.value)} placeholder="Add approval notes…" onFocus={e => { e.currentTarget.style.borderColor = "#1fae5b"; e.currentTarget.style.background = "#fff" }} onBlur={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "#f9fafb" }} />
                 }
               </div>
-
               <div style={{ marginBottom: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
-                  <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>Notes</span>
-                </div>
+                <div style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 6 }}>Notes</div>
                 {readOnly
                   ? <div style={{ fontSize: 12, color: "#374151", background: "#f9fafb", borderRadius: 8, padding: 10, minHeight: 56, border: "1px solid #f3f4f6" }}>{editedRow.notes || <span style={{ color: "#d1d5db" }}>No notes</span>}</div>
-                  : <textarea
-                      style={{ ...S.formInput, minHeight: 80, resize: "vertical" as const, fontFamily: "inherit" }}
-                      value={editedRow.notes}
-                      onChange={e => handleFieldChange("notes", e.target.value)}
-                      placeholder="Add notes…"
-                      onFocus={e => { e.currentTarget.style.borderColor = "#1fae5b"; e.currentTarget.style.background = "#fff" }}
-                      onBlur={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "#f9fafb" }}
-                    />
+                  : <textarea style={{ ...S.formInput, minHeight: 80, resize: "vertical" as const, fontFamily: "inherit" }} value={editedRow.notes} onChange={e => handleFieldChange("notes", e.target.value)} placeholder="Add notes…" onFocus={e => { e.currentTarget.style.borderColor = "#1fae5b"; e.currentTarget.style.background = "#fff" }} onBlur={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "#f9fafb" }} />
                 }
               </div>
-
-              {/* Custom fields */}
               {customCols.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={S.sectionTitle}>Custom Fields</div>
@@ -463,13 +526,10 @@ export default function ProfileSidebar({
                       return (
                         <div key={col.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                           <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{col.field_name}</span>
-                          {readOnly
-                            ? <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>{val || "—"}</div>
-                            : col.field_type === "boolean"
-                              ? <select style={S.formInput} value={val} onChange={e => handleFieldChange(`custom.${col.field_key}`, e.target.value)}><option value="No">No</option><option value="Yes">Yes</option></select>
-                              : col.field_type === "dropdown"
-                                ? <select style={S.formInput} value={val} onChange={e => handleFieldChange(`custom.${col.field_key}`, e.target.value)}><option value="">—</option>{col.field_options?.map(o => <option key={o} value={o}>{o}</option>)}</select>
-                                : <input style={S.formInput} type={col.field_type === "number" ? "number" : "text"} value={val} onChange={e => handleFieldChange(`custom.${col.field_key}`, e.target.value)} />
+                          {readOnly ? <div style={{ fontSize: 13, fontWeight: 500, color: "#111827" }}>{val || "—"}</div>
+                            : col.field_type === "boolean" ? <select style={S.formInput} value={val} onChange={e => handleFieldChange(`custom.${col.field_key}`, e.target.value)}><option value="No">No</option><option value="Yes">Yes</option></select>
+                            : col.field_type === "dropdown" ? <select style={S.formInput} value={val} onChange={e => handleFieldChange(`custom.${col.field_key}`, e.target.value)}><option value="">—</option>{col.field_options?.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                            : <input style={S.formInput} type={col.field_type === "number" ? "number" : "text"} value={val} onChange={e => handleFieldChange(`custom.${col.field_key}`, e.target.value)} />
                           }
                         </div>
                       )
@@ -477,21 +537,15 @@ export default function ProfileSidebar({
                   </div>
                 </div>
               )}
-
               {!readOnly && (
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button
-                    style={{ ...S.saveBtn, opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }}
-                    onClick={handleSave} disabled={isSaving}
-                    onMouseEnter={e => { if (!isSaving) e.currentTarget.style.background = "#0f6b3e" }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "#1fae5b" }}
-                  >{isSaving ? "Saving…" : "Save Changes"}</button>
+                  <button style={{ ...S.saveBtn, opacity: isSaving ? 0.6 : 1, cursor: isSaving ? "not-allowed" : "pointer" }} onClick={handleSave} disabled={isSaving} onMouseEnter={e => { if (!isSaving) e.currentTarget.style.background = "#0f6b3e" }} onMouseLeave={e => { e.currentTarget.style.background = "#1fae5b" }}>{isSaving ? "Saving…" : "Save Changes"}</button>
                 </div>
               )}
             </div>
           )}
 
-          {/* ── Order tab ── */}
+          {/* ════ ORDER TAB ════ */}
           {profileTab === 1 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               <div style={S.formRow}>
@@ -514,7 +568,7 @@ export default function ProfileSidebar({
             </div>
           )}
 
-          {/* ── Post tab ── */}
+          {/* ════ POST TAB ════ */}
           {profileTab === 2 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               <div style={S.formRow}><div style={S.formGroup}><div style={S.formLabel}>Post Link</div><input style={S.formInput} value={postData.postLink} onChange={e => setPostData(d => ({ ...d, postLink: e.target.value }))} onFocus={e => { e.currentTarget.style.borderColor="#1fae5b"; e.currentTarget.style.background="#fff" }} onBlur={e => { e.currentTarget.style.borderColor="#e5e7eb"; e.currentTarget.style.background="#f9fafb" }} /></div><div style={S.formGroup}><div style={S.formLabel}>Likes</div><input style={S.formInput} value={postData.likes} onChange={e => setPostData(d => ({ ...d, likes: e.target.value }))} onFocus={e => { e.currentTarget.style.borderColor="#1fae5b"; e.currentTarget.style.background="#fff" }} onBlur={e => { e.currentTarget.style.borderColor="#e5e7eb"; e.currentTarget.style.background="#f9fafb" }} /></div></div>
@@ -528,7 +582,7 @@ export default function ProfileSidebar({
             </div>
           )}
 
-          {/* ── Stats tab ── */}
+          {/* ════ STATS TAB ════ */}
           {profileTab === 3 && (
             <div style={{ display: "flex", flexDirection: "column" }}>
               <div style={S.sectionTitle}>Performance</div>
@@ -557,6 +611,15 @@ export default function ProfileSidebar({
               )}
             </div>
           )}
+
+          {/* ════ HISTORY TAB ════ */}
+          {profileTab === 4 && (
+            <HistoryTab
+              brandId={brandId}
+              biId={row.id}
+            />
+          )}
+
         </div>
       </div>
     </>
