@@ -1,10 +1,10 @@
 // app/dashboard/pipeline/kanban/kanban-board.tsx
+// FIXED: Collaboration Type modal now fires BEFORE moving to Deal Agreed
+// FIXED: Quick-move buttons simplified to "→ Deal Agreed" + "✕ Not Interested" only
+// FIXED: Move to Post Tracker goes directly to For Order Creation (no modal)
 // FIXED: For Order Creation and Not Interested cards persist on refresh
-// For Order Creation shows a "Moved to Post Tracker" badge, no forward actions
-// Not Interested shows the NI reason pill, no forward actions
 // ADDED: Column info tooltips (ⓘ) on all column headers
 // ADDED: Niche + Location tag-based multi-select filters
-// ADDED: Collaboration type selection when moving to Post Tracker
 
 "use client"
 
@@ -190,18 +190,18 @@ const columns = [
 const COLUMN_INFO: Record<string, { short: string; move?: string; terminal?: boolean }> = {
   "For Outreach": {
     short: "Influencers you've identified and want to contact. No message sent yet — this is your ready-to-contact queue.",
-    move:  "Move to Contacted once you've sent the first message, or Not Interested to skip them.",
+    move:  "Move to Deal Agreed once you've locked terms, or Not Interested to skip them.",
   },
   "Contacted": {
     short: "Initial outreach sent via email, DM, or phone. Waiting for their reply — the ball is in their court.",
-    move:  "Move to In Conversation when they reply, or Not Interested if they decline or go cold.",
+    move:  "Move to Deal Agreed when terms are locked, or Not Interested if they decline or go cold.",
   },
   "In Conversation": {
     short: "They replied and you're actively negotiating — rate, deliverables, timeline, or product fit.",
     move:  "Move to Deal Agreed when terms are locked, or Not Interested if negotiations fall apart.",
   },
   "Deal Agreed": {
-    short: "Terms confirmed. Click 'Move to Post Tracker' to select collaboration type and send product.",
+    short: "Terms confirmed and collaboration type selected. Click 'Move to Post Tracker' to proceed with shipping.",
     move:  "Click the 'Move to Post Tracker' button on the card to proceed.",
   },
   "For Order Creation": {
@@ -272,11 +272,22 @@ const getAvatarColor    = (name: string) => {
   return colors[name.charCodeAt(0) % colors.length]
 }
 
+// ─── Sequential pipeline: each stage only moves to the NEXT stage + Not Interested ──
+// For Outreach    → Contacted
+// Contacted       → In Conversation
+// In Conversation → Deal Agreed (triggers collab type modal)
+// Deal Agreed     → (only Move to Post Tracker button, + Not Interested)
+// Terminal stages → nothing
 const getNextStages = (currentStatus: string): string[] => {
   if (isTerminal(currentStatus)) return []
-  if (currentStatus === "Deal Agreed") return ["Not Interested"]
-  const allStages = ["For Outreach", "Contacted", "In Conversation", "Deal Agreed"]
-  return [...allStages.filter(s => s !== currentStatus), "Not Interested"]
+  const sequence: Record<string, string> = {
+    "For Outreach":    "Contacted",
+    "Contacted":       "In Conversation",
+    "In Conversation": "Deal Agreed",
+  }
+  const next = sequence[currentStatus]
+  if (!next) return ["Not Interested"] // Deal Agreed: only NI (move to PT is a dedicated button)
+  return [next, "Not Interested"]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -485,6 +496,7 @@ function NotInterestedModal({ influencer, onConfirm, onCancel }: NIModalProps) {
 }
 
 // ─── Collaboration Type Modal ─────────────────────────────────────────────────
+// Now fires when moving TO "Deal Agreed" — user picks collab type first, THEN it moves
 interface CollabTypeModalProps {
   influencer: PipelineInfluencer
   onConfirm: (collabType: CollabType) => void
@@ -504,7 +516,7 @@ function CollabTypeModal({ influencer, onConfirm, onCancel }: CollabTypeModalPro
         <div className="flex items-start justify-between px-7 pt-6 pb-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-semibold text-gray-900">Select Collaboration Type</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Choose the type of collaboration before moving to Post Tracker.</p>
+            <p className="text-xs text-gray-500 mt-0.5">Choose the collaboration type before marking this deal as agreed.</p>
           </div>
           <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition ml-4 mt-0.5">
             <IconX size={18} />
@@ -517,15 +529,15 @@ function CollabTypeModal({ influencer, onConfirm, onCancel }: CollabTypeModalPro
             {influencer.profileImageUrl ? (
               <img src={influencer.profileImageUrl} alt={influencer.influencer} className="w-10 h-10 rounded-full object-cover" />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-semibold text-sm">{initials}</div>
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-semibold text-sm">{initials}</div>
             )}
             <div>
               <p className="text-sm font-semibold text-gray-900">{influencer.influencer}</p>
               <p className="text-xs text-gray-500">{influencer.instagramHandle}</p>
             </div>
             <div className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
-              <IconPackage size={14} />
-              <span>Moving to Post Tracker</span>
+              <IconArrowRight size={14} />
+              <span>Moving to Deal Agreed</span>
             </div>
           </div>
         </div>
@@ -578,7 +590,7 @@ function CollabTypeModal({ influencer, onConfirm, onCancel }: CollabTypeModalPro
         {/* Footer */}
         <div className="flex items-center justify-between px-7 py-4 border-t border-gray-100 bg-gray-50/50 rounded-b-2xl">
           <p className="text-[11px] text-gray-400">
-            This will move the influencer to Post Tracker
+            This will move the influencer to Deal Agreed
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -590,10 +602,10 @@ function CollabTypeModal({ influencer, onConfirm, onCancel }: CollabTypeModalPro
             <button
               onClick={() => selectedType && onConfirm(selectedType)}
               disabled={!selectedType}
-              className="px-6 py-2 text-sm font-medium text-white bg-[#1FAE5B] rounded-lg hover:bg-[#0f6b3e] transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              className="px-6 py-2 text-sm font-medium text-white bg-green-500 rounded-lg hover:bg-green-600 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
-              <IconPackage size={14} />
-              Move to Post Tracker
+              <IconArrowRight size={14} />
+              Confirm Deal Agreed
             </button>
           </div>
         </div>
@@ -602,7 +614,7 @@ function CollabTypeModal({ influencer, onConfirm, onCancel }: CollabTypeModalPro
   )
 }
 
-// ─── Deal Agreed Move to Post Tracker ───────────────────────────────────────
+// ─── Deal Agreed → Move to Post Tracker (no modal, direct action) ────────────
 function DealAgreedMoveButton({ onMarkOrderPlaced }: {
   onMarkOrderPlaced: () => void
 }) {
@@ -629,6 +641,8 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onMarkOrderPl
   onStatusChange: (id: string, newStatus: string) => void
   onMarkOrderPlaced?: (id: string) => void
 }) {
+  // nextStages is now always ["Deal Agreed", "Not Interested"] for pre-deal cards,
+  // ["Not Interested"] for Deal Agreed cards, and [] for terminal cards
   const nextStages = getNextStages(influencer.pipelineStatus)
   const terminal   = isTerminal(influencer.pipelineStatus)
 
@@ -652,19 +666,24 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onMarkOrderPl
           <span>{influencer.followerCount?.toLocaleString() || influencer.followers || "—"} followers</span>
           <span>{influencer.engagementRate || "—"}% eng</span>
         </div>
+
+        {/* NI reason pill */}
         {influencer.pipelineStatus === "Not Interested" && influencer.niReason && (
           <div className="mt-2 text-xs text-red-600 bg-red-100 rounded-full px-2.5 py-1 inline-block font-medium">
             {influencer.niReason}
           </div>
         )}
+
+        {/* For Order Creation badge */}
         {influencer.pipelineStatus === "For Order Creation" && (
           <div className="mt-2 flex items-center gap-1 text-xs text-emerald-700 bg-emerald-100 rounded-full px-2.5 py-1 inline-flex font-medium">
             <IconPackage size={12} />
             In Post Tracker
           </div>
         )}
-        {/* Show collaboration type badge for For Order Creation */}
-        {influencer.pipelineStatus === "For Order Creation" && influencer.collabType && (
+
+        {/* Collab type badge — shown on both Deal Agreed and For Order Creation */}
+        {(influencer.pipelineStatus === "For Order Creation" || influencer.pipelineStatus === "Deal Agreed") && influencer.collabType && (
           <div className="mt-1.5">
             {(() => {
               const collab = COLLAB_TYPES.find((c) => c.id === influencer.collabType)
@@ -679,13 +698,16 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onMarkOrderPl
           </div>
         )}
       </div>
+
+      {/* Move to Post Tracker button — only on Deal Agreed cards */}
       {influencer.pipelineStatus === "Deal Agreed" && onMarkOrderPlaced && (
         <DealAgreedMoveButton
           onMarkOrderPlaced={() => onMarkOrderPlaced(influencer.id)}
         />
       )}
-      {/* Quick-move buttons: only show for non-Deal Agreed, non-terminal cards */}
-      {nextStages.length > 0 && !terminal && influencer.pipelineStatus !== "Deal Agreed" && (
+
+      {/* Quick-move buttons — only for non-terminal cards */}
+      {nextStages.length > 0 && !terminal && (
         <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
           {nextStages.map((stage) => (
             <button key={stage}
@@ -693,22 +715,11 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onMarkOrderPl
               className={`text-xs px-2 py-1 rounded transition-all ${
                 stage === "Not Interested"
                   ? "bg-red-50 text-red-600 hover:bg-red-100"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-green-50 text-green-700 hover:bg-green-100 border border-green-200"
               }`}>
               {stage === "Not Interested" ? "✕ Not Interested" : `→ ${stage}`}
             </button>
           ))}
-        </div>
-      )}
-      {/* Show only NI button for Deal Agreed cards */}
-      {influencer.pipelineStatus === "Deal Agreed" && (
-        <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
-          <button
-            onClick={(e) => { e.stopPropagation(); onStatusChange(influencer.id, "Not Interested") }}
-            className="text-xs px-2 py-1 rounded transition-all bg-red-50 text-red-600 hover:bg-red-100"
-          >
-            ✕ Not Interested
-          </button>
         </div>
       )}
     </div>
@@ -834,8 +845,10 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
   const [niModalInfluencer,    setNiModalInfluencer]    = useState<PipelineInfluencer | null>(null)
   const [pendingNiId,          setPendingNiId]          = useState<string | null>(null)
   const [sortOrder,            setSortOrder]            = useState<"newest"|"oldest">("newest")
+
+  // ── Collab type modal — fires when moving TO "Deal Agreed" ──
   const [collabModalInfluencer, setCollabModalInfluencer] = useState<PipelineInfluencer | null>(null)
-  const [pendingCollabId,      setPendingCollabId]      = useState<string | null>(null)
+  const [pendingCollabId,       setPendingCollabId]       = useState<string | null>(null)
 
   const { data, isLoading, error, updateStatus, refetch } = usePipelineData(brandId)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -845,21 +858,26 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     setTimeout(() => setShowSuccessMessage(null), duration)
   }
 
-  const handleMarkOrderPlaced = (id: string) => {
+  // ── Move to Post Tracker: NO modal, direct status update ──────────────────
+  const handleMarkOrderPlaced = async (id: string) => {
     const influencer = data.find((i) => i.id === id)
     if (!influencer) return
-    // Open the collaboration type modal instead of directly moving
-    setPendingCollabId(id)
-    setCollabModalInfluencer(influencer)
+    const success = await updateStatus(id, "For Order Creation")
+    toast(
+      success
+        ? `${influencer.influencer} moved to Post Tracker ✓`
+        : `Failed to move ${influencer.influencer}`
+    )
   }
 
+  // ── Collab type confirmed → move to Deal Agreed ───────────────────────────
   const handleCollabTypeConfirm = async (collabType: CollabType) => {
     if (!pendingCollabId || !collabModalInfluencer) return
-    const success = await updateStatus(pendingCollabId, "For Order Creation",)
+    const success = await updateStatus(pendingCollabId, "Deal Agreed", {  })
     const collabName = COLLAB_TYPES.find((c) => c.id === collabType)?.title ?? collabType
     toast(
       success
-        ? `${collabModalInfluencer.influencer} moved to Post Tracker · ${collabName} ✓`
+        ? `${collabModalInfluencer.influencer} moved to Deal Agreed · ${collabName} ✓`
         : `Failed to move ${collabModalInfluencer.influencer}`
     )
     setCollabModalInfluencer(null)
@@ -891,9 +909,16 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
       return
     }
 
-    // Drag protection: Deal Agreed cannot be dragged directly to For Order Creation
-    if (dragged.pipelineStatus === "Deal Agreed" && newStatus === "For Order Creation") {
-      toast("Please use the Move to Post Tracker button on the card to select collaboration type.", 4000)
+    // Drag to Deal Agreed → open collab type modal first
+    if (newStatus === "Deal Agreed") {
+      setPendingCollabId(draggedId)
+      setCollabModalInfluencer(dragged)
+      return
+    }
+
+    // Drag to For Order Creation directly is blocked — must use button on Deal Agreed card
+    if (newStatus === "For Order Creation") {
+      toast("Please use the 'Move to Post Tracker' button on the Deal Agreed card.", 4000)
       return
     }
 
@@ -920,10 +945,20 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
 
   const handleNiCancel = () => { setNiModalInfluencer(null); setPendingNiId(null) }
 
+  // ── Status update from card buttons / list dropdown ───────────────────────
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     if (newStatus === "Not Interested") {
       const influencer = data.find((i) => i.id === id)
       if (influencer) { setPendingNiId(id); setNiModalInfluencer(influencer) }
+      return
+    }
+    // Moving to Deal Agreed → show collab type modal first
+    if (newStatus === "Deal Agreed") {
+      const influencer = data.find((i) => i.id === id)
+      if (influencer) {
+        setPendingCollabId(id)
+        setCollabModalInfluencer(influencer)
+      }
       return
     }
     const influencer = data.find((i) => i.id === id)
@@ -957,8 +992,8 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     )
     .filter((d) => selectedColumnStatus ? d.pipelineStatus === selectedColumnStatus : true)
 
-  if (filters.influencer)          filteredData = filteredData.filter((p) => p.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
-  if (filters.handle)              filteredData = filteredData.filter((p) => p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase()))
+  if (filters.influencer)           filteredData = filteredData.filter((p) => p.influencer.toLowerCase().includes(filters.influencer.toLowerCase()))
+  if (filters.handle)               filteredData = filteredData.filter((p) => p.instagramHandle.toLowerCase().includes(filters.handle.toLowerCase()))
   if (filters.locations.length > 0) filteredData = filteredData.filter((p) => filters.locations.includes(p.location ?? ""))
   if (filters.niches.length > 0)    filteredData = filteredData.filter((p) => filters.niches.includes(p.niche ?? ""))
   filteredData = [...filteredData].sort((a, b) => {
@@ -975,9 +1010,9 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     (search ? 1 : 0) +
     (selectedColumnStatus ? 1 : 0)
 
-  const hasActiveFilters      = activeFilterCount > 0
-  const activeInfluencer      = activeId ? data.find((item) => item.id === activeId) : null
-  const selectedColumnInfo    = selectedColumnStatus ? columns.find((col) => col.status === selectedColumnStatus) : null
+  const hasActiveFilters   = activeFilterCount > 0
+  const activeInfluencer   = activeId ? data.find((item) => item.id === activeId) : null
+  const selectedColumnInfo = selectedColumnStatus ? columns.find((col) => col.status === selectedColumnStatus) : null
 
   const getItemsByColumn = (columnKey: string) =>
     filteredData.filter((item) => item.pipelineStatus === getStatusFromColumnKey(columnKey))
@@ -1014,6 +1049,7 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
         <NotInterestedModal influencer={niModalInfluencer} onConfirm={handleNiConfirm} onCancel={handleNiCancel} />
       )}
 
+      {/* Collab type modal — fires before Deal Agreed */}
       {collabModalInfluencer && (
         <CollabTypeModal
           influencer={collabModalInfluencer}
@@ -1143,36 +1179,29 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
         {/* Spacer */}
         <div className="flex-1" />
 
-      {/* View toggle */}
-      <div className="inline-flex h-9 items-center rounded-lg border border-[#0F6B3E]/20 bg-white p-1">
-        <button
-          onClick={() => {
-            setView("Board")
-            setSelectedColumnStatus(null)
-          }}
-          className={`h-7 px-3 rounded-md text-sm flex items-center gap-1.5 transition-all ${
-            view === "Board"
-              ? "bg-[#1FAE5B] text-white shadow-sm"
-              : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
-          }`}
-        >
-          <IconLayoutKanban size={15} />
-        </button>
-
-        <button
-          onClick={() => {
-            setView("list")
-            setSelectedColumnStatus(null)
-          }}
-          className={`h-7 px-3 rounded-md text-sm flex items-center gap-1.5 transition-all ${
-            view === "list"
-              ? "bg-[#1FAE5B] text-white shadow-sm"
-              : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
-          }`}
-        >
-          <IconList size={15} />
-        </button>
-      </div>
+        {/* View toggle */}
+        <div className="inline-flex h-9 items-center rounded-lg border border-[#0F6B3E]/20 bg-white p-1">
+          <button
+            onClick={() => { setView("Board"); setSelectedColumnStatus(null) }}
+            className={`h-7 px-3 rounded-md text-sm flex items-center gap-1.5 transition-all ${
+              view === "Board"
+                ? "bg-[#1FAE5B] text-white shadow-sm"
+                : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+            }`}
+          >
+            <IconLayoutKanban size={15} />
+          </button>
+          <button
+            onClick={() => { setView("list"); setSelectedColumnStatus(null) }}
+            className={`h-7 px-3 rounded-md text-sm flex items-center gap-1.5 transition-all ${
+              view === "list"
+                ? "bg-[#1FAE5B] text-white shadow-sm"
+                : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+            }`}
+          >
+            <IconList size={15} />
+          </button>
+        </div>
       </div>
 
       {/* ── KANBAN VIEW ── */}
@@ -1324,6 +1353,11 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                                   </p>
                                 )}
                               </>
+                            )}
+                            {inf.pipelineStatus === "Deal Agreed" && inf.collabType && (
+                              <p className="text-[10px] text-green-600 mt-0.5">
+                                {COLLAB_TYPES.find((c) => c.id === inf.collabType)?.title}
+                              </p>
                             )}
                           </div>
                         </div>
