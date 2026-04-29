@@ -1,7 +1,7 @@
 // app/analytics/page.tsx
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, Suspense } from "react"
 import { Filter, Download, Loader2 } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -339,7 +339,7 @@ const DonutChart = ({ segments, centerLabel, centerSub, size = 130 }: { segments
 // Main Analytics Component
 // ============================================================
 
-export default function AnalyticsPage() {
+function AnalyticsPageContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1016,5 +1016,22 @@ export default function AnalyticsPage() {
         .group:hover .group-hover\\:block { display: block; }
       `}</style>
     </div>
+  )
+}
+
+export default function AnalyticsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-green-600 mx-auto mb-4" />
+            <p className="text-gray-600">Loading analytics data...</p>
+          </div>
+        </div>
+      }
+    >
+      <AnalyticsPageContent />
+    </Suspense>
   )
 }

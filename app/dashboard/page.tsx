@@ -2,9 +2,9 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect } from "react"
+import { Suspense, useEffect } from "react"
 
-export default function DashboardPage() {
+function DashboardRedirect() {
   const { status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -26,4 +26,12 @@ export default function DashboardPage() {
   }, [status, router, searchParams])
 
   return null
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardRedirect />
+    </Suspense>
+  )
 }
