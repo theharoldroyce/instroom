@@ -668,14 +668,38 @@ function PostTrackerContent() {
         <div className="flex-1"/>
 
         {/* View toggle */}
-        <button onClick={()=>{setView("Board");setSelectedColumnStatus(null)}}
-          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${view==="Board"?"bg-[#1FAE5B] text-white border-[#1FAE5B]":"border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
-          <IconLayoutKanban size={16}/> Board
-        </button>
-        <button onClick={()=>{setView("list");setSelectedColumnStatus(null)}}
-          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${view==="list"?"bg-[#1FAE5B] text-white border-[#1FAE5B]":"border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
-          <IconList size={16}/> List
-        </button>
+{/* View toggle */}
+<div className="inline-flex h-9 items-center rounded-lg border border-[#0F6B3E]/20 bg-white p-1">
+  <button
+    onClick={() => {
+      setView("Board")
+      setSelectedColumnStatus(null)
+    }}
+    className={`h-7 px-3 rounded-md text-sm flex items-center gap-1.5 transition-all ${
+      view === "Board"
+        ? "bg-[#1FAE5B] text-white shadow-sm"
+        : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+    }`}
+  >
+    <IconLayoutKanban size={15} />
+    {/* Board */}
+  </button>
+
+  <button
+    onClick={() => {
+      setView("list")
+      setSelectedColumnStatus(null)
+    }}
+    className={`h-7 px-3 rounded-md text-sm flex items-center gap-1.5 transition-all ${
+      view === "list"
+        ? "bg-[#1FAE5B] text-white shadow-sm"
+        : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+    }`}
+  >
+    <IconList size={15} />
+    {/* List */}
+  </button>
+</div>
       </div>
 
       {/* ── KANBAN ── */}
@@ -698,10 +722,10 @@ function PostTrackerContent() {
                         >
                           {col.title}
                         </span>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
-                          <ColumnInfoTooltip colKey={col.key} variant="dark" />
-                        </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <ColumnInfoTooltip colKey={col.key} variant="dark" />
+                        <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
+                      </div>
                       </div>
                       {/* No description text here — it's in the tooltip */}
                       <div className="flex flex-col gap-2 min-h-[400px] mt-2">
@@ -741,8 +765,8 @@ function PostTrackerContent() {
                           {col.title}
                         </span>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <span className="bg-red-200 text-red-700 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
                           <ColumnInfoTooltip colKey={col.key} variant="light" />
+                          <span className="bg-red-200 text-red-700 rounded-full px-2 py-0.5 text-xs">{items.length}</span>
                         </div>
                       </div>
                       <div className="flex flex-col gap-2 min-h-[400px] mt-2">

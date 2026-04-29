@@ -25,7 +25,7 @@ import Image from "next/image"
 
 const navData = {
   navMain: [
-    { title: "Dashboard", url: "/dashboard", icon: IconDashboard },
+    // { title: "Dashboard", url: "/dashboard", icon: IconDashboard },
     { title: "Discovery", url: "/dashboard/influencer-discovery", icon: IconSearch },
     { title: "Inbox", url: "/dashboard/inbox", icon: IconMail },
     { title: "Influencers List", url: "/dashboard/manage-influencers", icon: IconUsers },

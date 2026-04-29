@@ -1,3 +1,6 @@
+// C:\Users\reyme\Videos\instroom\app\dashboard\brand-partners\TierSettingsModal.tsx
+
+
 "use client"
 
 import { useState, useEffect } from "react"

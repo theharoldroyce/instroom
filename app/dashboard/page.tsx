@@ -1,39 +1,29 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect } from "react"
-import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-import { DataTable } from "@/components/data-table"
-import { SectionCards } from "@/components/section-cards"
-
-import data from "./data.json"
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    // Redirect to login if no session
+    if (status === "loading") return
+
     if (status === "unauthenticated") {
-      router.push("/login")
+      router.replace("/login")
+      return
     }
-  }, [status, router])
 
-  // Show nothing while checking auth status
-  if (status === "loading" || status === "unauthenticated") {
-    return null
-  }
+    const brandId = searchParams.get("brandId")
+    const target = brandId
+      ? `/dashboard/influencer-discovery?brandId=${brandId}`
+      : "/dashboard/influencer-discovery"
 
-  return (
-    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-      <SectionCards />
+    router.replace(target)
+  }, [status, router, searchParams])
 
-      <div className="px-4 lg:px-6">
-        <ChartAreaInteractive />
-      </div>
-
-      <DataTable data={data} />
-    </div>
-  )
+  return null
 }

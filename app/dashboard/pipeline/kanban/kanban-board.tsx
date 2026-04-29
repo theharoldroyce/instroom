@@ -87,7 +87,7 @@ const columns = [
   { key: "contacted",          title: "Contacted",           color: "bg-orange-400", status: "Contacted"          },
   { key: "in-conversation",    title: "In Conversation",     color: "bg-blue-400",   status: "In Conversation"    },
   { key: "deal-agreed",        title: "Deal Agreed",         color: "bg-green-500",  status: "Deal Agreed"        },
-  { key: "for-order-creation", title: "For Order Creation",  color: "bg-[#1FAE5B]",  status: "For Order Creation" },
+  // { key: "for-order-creation", title: "For Order Creation",  color: "bg-[#1FAE5B]",  status: "For Order Creation" },
   { key: "not-interested",     title: "Not Interested",      color: "bg-red-500",    status: "Not Interested"     },
 ]
 
@@ -109,10 +109,10 @@ const COLUMN_INFO: Record<string, { short: string; move?: string; terminal?: boo
     short: "Terms confirmed. Now collect their shipping address before the product can be sent.",
     move:  "Check off \"Shipping address received\" on the card, then click Move to Post Tracker.",
   },
-  "For Order Creation": {
-    short: "Address confirmed — ready to order and ship the product. Cards here also appear in Post Tracker for your fulfilment team.",
-    terminal: true,
-  },
+  // "For Order Creation": {
+  //   short: "Address confirmed — ready to order and ship the product. Cards here also appear in Post Tracker for your fulfilment team.",
+  //   terminal: true,
+  // },
   "Not Interested": {
     short: "Collaboration didn't happen. Moving here requires a reason: Hard pass (don't contact again) or Soft pass (follow up next campaign).",
     terminal: true,
@@ -178,15 +178,9 @@ const getAvatarColor    = (name: string) => {
 }
 
 const getNextStages = (currentStatus: string): string[] => {
-  switch (currentStatus) {
-    case "For Outreach":    return ["Contacted", "Not Interested"]
-    case "Contacted":       return ["In Conversation", "Not Interested"]
-    case "In Conversation": return ["Deal Agreed", "Not Interested"]
-    case "Deal Agreed":     return []
-    case "For Order Creation":
-    case "Not Interested":  return []
-    default:                return []
-  }
+  if (isTerminal(currentStatus)) return []
+  const allStages = ["For Outreach", "Contacted", "In Conversation", "Deal Agreed"]
+  return [...allStages.filter(s => s !== currentStatus), "Not Interested"]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -407,7 +401,7 @@ function DealAgreedChecklist({ influencerId, onMarkOrderPlaced }: {
         className="w-full text-xs font-medium py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 bg-[#1FAE5B] text-white hover:bg-[#0f6b3e]"
       >
         <IconArrowRight size={12} />
-        Mark For Order Creation
+        Move For Order Creation
       </button>
     </div>
   )
@@ -455,12 +449,12 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onMarkOrderPl
           </div>
         )}
       </div>
-      {influencer.pipelineStatus === "Deal Agreed" && onMarkOrderPlaced && (
+      {/* {influencer.pipelineStatus === "Deal Agreed" && onMarkOrderPlaced && (
         <DealAgreedChecklist
           influencerId={influencer.id}
           onMarkOrderPlaced={onMarkOrderPlaced}
         />
-      )}
+      )} */}
       {nextStages.length > 0 && !terminal && (
         <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
           {nextStages.map((stage) => (
@@ -637,11 +631,11 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
       return
     }
 
-    const allowed = getNextStages(dragged.pipelineStatus)
-    if (!allowed.includes(newStatus)) {
-      toast(`Cannot move from "${dragged.pipelineStatus}" to "${newStatus}"`, 2000)
-      return
-    }
+    // const allowed = getNextStages(dragged.pipelineStatus)
+    // if (!allowed.includes(newStatus)) {
+    //   toast(`Cannot move from "${dragged.pipelineStatus}" to "${newStatus}"`, 2000)
+    //   return
+    // }
 
     if (newStatus === "Not Interested") {
       setPendingNiId(draggedId)
@@ -873,16 +867,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
           )}
         </div>
 
-        {/* Sort shortcut buttons — always visible */}
-        {/* <button onClick={() => setSortOrder("newest")}
-          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border font-medium transition-colors ${sortOrder === "newest" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 text-gray-600 hover:border-[#0F6B3E]/40"}`}>
-          <IconChevronDown size={14} /> Newest
-        </button>
-        <button onClick={() => setSortOrder("oldest")}
-          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border font-medium transition-colors ${sortOrder === "oldest" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 text-gray-600 hover:border-[#0F6B3E]/40"}`}>
-          <IconChevronDown size={14} className="rotate-180" /> Oldest
-        </button> */}
-
         {/* Count */}
         <span className="text-sm text-gray-500 whitespace-nowrap ml-1">
           {data.length} influencer{data.length !== 1 ? "s" : ""}
@@ -891,15 +875,38 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* View toggle */}
-        <button onClick={() => { setView("Board"); setSelectedColumnStatus(null) }}
-          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${view === "Board" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
-          <IconLayoutKanban size={16} /> Board
+      {/* View toggle */}
+      <div className="inline-flex h-9 items-center rounded-lg border border-[#0F6B3E]/20 bg-white p-1">
+        <button
+          onClick={() => {
+            setView("Board")
+            setSelectedColumnStatus(null)
+          }}
+          className={`h-7 px-3 rounded-md text-sm flex items-center gap-1.5 transition-all ${
+            view === "Board"
+              ? "bg-[#1FAE5B] text-white shadow-sm"
+              : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+          }`}
+        >
+          <IconLayoutKanban size={15} />
+          {/* Board */}
         </button>
-        <button onClick={() => { setView("list"); setSelectedColumnStatus(null) }}
-          className={`h-9 px-3 rounded-lg text-sm flex items-center gap-1.5 border transition-colors ${view === "list" ? "bg-[#1FAE5B] text-white border-[#1FAE5B]" : "border-[#0F6B3E]/20 hover:border-[#0F6B3E]/40"}`}>
-          <IconList size={16} /> List
+
+        <button
+          onClick={() => {
+            setView("list")
+            setSelectedColumnStatus(null)
+          }}
+          className={`h-7 px-3 rounded-md text-sm flex items-center gap-1.5 transition-all ${
+            view === "list"
+              ? "bg-[#1FAE5B] text-white shadow-sm"
+              : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+          }`}
+        >
+          <IconList size={15} />
+          {/* List */}
         </button>
+      </div>
       </div>
 
       {/* ── KANBAN VIEW ── */}
@@ -924,8 +931,8 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                         {col.title}
                       </span>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
                         <ColumnInfoTooltip status={col.status} variant="dark" />
+                        <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
                       </div>
                     </div>
 

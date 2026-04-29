@@ -3,437 +3,285 @@
 import { useState, useEffect } from "react"
 
 interface Partner {
-  id: number
+  id: string   // BrandInfluencer.id (cuid from DB)
   handle: string
-  firstName: string
-  lastName: string
   plat: string
   niche: string
-  loc: string
-  tier: string
-  tierOverride: string | null
-  onRet: boolean
-  retFee: number
-  defComm: number
-  commSt: string
-  clicks: number
-  cvr: number
-  sales: number
-  rev: number
-  fol: number
-  eng: number
-  avgV: number
-  gmv: number
-  added: Date
-  prodCost: number
-  feesPaid: number
-  commPaid: number
-  totalSpend: number
-  roi_val: number
-  roas_val: number
-  monthly: { month: string; posts: number; rev: number }[]
-}
-
-interface Deliverable {
-  id: string
-  name: string
-}
-
-interface PartnerFee {
-  partnerId: number
-  partnerHandle: string
-  deliverables: string[]
-  fee: number
 }
 
 interface NewCampaignModalProps {
   isOpen: boolean
   onClose: () => void
-  onCreate: (campaignData: {
-    name: string
-    type: string
-    startDate: string
-    endDate: string
-    budget: number
-    notes: string
-    partnerIds: number[]
-    deliverables: string[]
-    partnerFees: PartnerFee[]
-  }) => void
+  brandId: string
   partners: Partner[]
+  onCreated: () => void  // called after save so parent can re-fetch
 }
 
-export default function NewCampaignModal({ isOpen, onClose, onCreate, partners }: NewCampaignModalProps) {
-  const [currentStep, setCurrentStep] = useState(0)
-  const [selectedPartnerIds, setSelectedPartnerIds] = useState<Set<number>>(new Set())
-  const [searchQuery, setSearchQuery] = useState("")
-  
-  // Step 1: Campaign details
-  const [campaignName, setCampaignName] = useState("")
-  const [campaignType, setCampaignType] = useState("")
-  const [campaignStartDate, setCampaignStartDate] = useState("")
-  const [campaignEndDate, setCampaignEndDate] = useState("")
-  const [campaignBudget, setCampaignBudget] = useState("")
-  const [campaignNotes, setCampaignNotes] = useState("")
-  
-  // Step 3: Deliverables & fees
-  const [deliverables, setDeliverables] = useState<Deliverable[]>([])
-  const [newDeliverable, setNewDeliverable] = useState("")
-  const [partnerFees, setPartnerFees] = useState<Map<number, { deliverables: string[], fee: number }>>(new Map())
+interface Deliverable { id: string; name: string }
 
-  // Reset form when modal opens/closes
+export default function NewCampaignModal({ isOpen, onClose, brandId, partners, onCreated }: NewCampaignModalProps) {
+  const [step, setStep]   = useState(0)
+  const [search, setSearch] = useState("")
+
+  // Step 1
+  const [name,      setName]      = useState("")
+  const [type,      setType]      = useState("")
+  const [startDate, setStartDate] = useState("")
+  const [endDate,   setEndDate]   = useState("")
+  const [budget,    setBudget]    = useState("")
+  const [notes,     setNotes]     = useState("")
+
+  // Step 2
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  // Step 3
+  const [deliverables,    setDeliverables]    = useState<Deliverable[]>([])
+  const [newDeliverable,  setNewDeliverable]  = useState("")
+  const [fees, setFees] = useState<Map<string,{deliverables:string[];fee:number}>>(new Map())
+
+  // Status
+  const [saving,  setSaving]  = useState(false)
+  const [errMsg,  setErrMsg]  = useState<string|null>(null)
+  const [success, setSuccess] = useState(false)
+
   useEffect(() => {
     if (!isOpen) {
-      resetForm()
+      setStep(0); setSearch(""); setName(""); setType(""); setStartDate(""); setEndDate("")
+      setBudget(""); setNotes(""); setSelectedIds(new Set()); setDeliverables([])
+      setNewDeliverable(""); setFees(new Map()); setSaving(false); setErrMsg(null); setSuccess(false)
     }
   }, [isOpen])
 
-  const resetForm = () => {
-    setCurrentStep(0)
-    setSelectedPartnerIds(new Set())
-    setSearchQuery("")
-    setCampaignName("")
-    setCampaignType("")
-    setCampaignStartDate("")
-    setCampaignEndDate("")
-    setCampaignBudget("")
-    setCampaignNotes("")
-    setDeliverables([])
-    setNewDeliverable("")
-    setPartnerFees(new Map())
-  }
-
-  const togglePartnerSelection = (partnerId: number) => {
-    setSelectedPartnerIds(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(partnerId)) {
-        newSet.delete(partnerId)
-        // Remove from partnerFees as well
-        setPartnerFees(prevFees => {
-          const newFees = new Map(prevFees)
-          newFees.delete(partnerId)
-          return newFees
-        })
-      } else {
-        newSet.add(partnerId)
-        // Initialize partner fees
-        setPartnerFees(prevFees => {
-          const newFees = new Map(prevFees)
-          newFees.set(partnerId, { deliverables: [], fee: 0 })
-          return newFees
-        })
-      }
-      return newSet
+  const togglePartner = (id: string) => {
+    setSelectedIds(prev => {
+      const s = new Set(prev)
+      if (s.has(id)) { s.delete(id); setFees(f=>{ const m=new Map(f); m.delete(id); return m }) }
+      else           { s.add(id);    setFees(f=>{ const m=new Map(f); m.set(id,{deliverables:[],fee:0}); return m }) }
+      return s
     })
   }
 
   const addDeliverable = () => {
-    if (newDeliverable.trim()) {
-      setDeliverables(prev => [...prev, { id: Date.now().toString(), name: newDeliverable.trim() }])
-      setNewDeliverable("")
-    }
+    if (!newDeliverable.trim()) return
+    setDeliverables(prev=>[...prev,{id:Date.now().toString(),name:newDeliverable.trim()}])
+    setNewDeliverable("")
   }
 
-  const removeDeliverable = (id: string) => {
-    setDeliverables(prev => prev.filter(d => d.id !== id))
-  }
+  const toggleDeliverable = (partnerId:string, dName:string, checked:boolean) =>
+    setFees(prev=>{ const m=new Map(prev); const c=m.get(partnerId)||{deliverables:[],fee:0}; c.deliverables=checked?[...c.deliverables,dName]:c.deliverables.filter(d=>d!==dName); m.set(partnerId,c); return m })
 
-  const updatePartnerDeliverable = (partnerId: number, deliverableName: string, checked: boolean) => {
-    setPartnerFees(prev => {
-      const newFees = new Map(prev)
-      const current = newFees.get(partnerId) || { deliverables: [], fee: 0 }
-      if (checked) {
-        current.deliverables.push(deliverableName)
-      } else {
-        current.deliverables = current.deliverables.filter(d => d !== deliverableName)
-      }
-      newFees.set(partnerId, current)
-      return newFees
-    })
-  }
-
-  const updatePartnerFee = (partnerId: number, fee: number) => {
-    setPartnerFees(prev => {
-      const newFees = new Map(prev)
-      const current = newFees.get(partnerId) || { deliverables: [], fee: 0 }
-      current.fee = fee
-      newFees.set(partnerId, current)
-      return newFees
-    })
-  }
+  const setFee = (partnerId:string, fee:number) =>
+    setFees(prev=>{ const m=new Map(prev); const c=m.get(partnerId)||{deliverables:[],fee:0}; m.set(partnerId,{...c,fee}); return m })
 
   const handleNext = () => {
-    if (currentStep === 0) {
-      if (!campaignName.trim() || !campaignType || !campaignStartDate) {
-        alert("Please fill in all required fields (Campaign name, Type, and Start date)")
-        return
-      }
-      setCurrentStep(1)
-    } else if (currentStep === 1) {
-      if (selectedPartnerIds.size === 0) {
-        alert("Please select at least one partner")
-        return
-      }
-      setCurrentStep(2)
-    } else if (currentStep === 2) {
+    setErrMsg(null)
+    if (step===0) {
+      if (!name.trim()||!type||!startDate) { setErrMsg("Campaign name, type and start date are required."); return }
+      setStep(1)
+    } else if (step===1) {
+      if (selectedIds.size===0) { setErrMsg("Select at least one partner."); return }
+      setStep(2)
+    } else {
       handleCreate()
     }
   }
 
-  const handleBack = () => {
-    setCurrentStep(prev => prev - 1)
-  }
+  const handleCreate = async () => {
+    setSaving(true); setErrMsg(null)
+    try {
+      // 1. Create the campaign
+      const res = await fetch(`/api/brands/${brandId}/campaigns`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          description: notes || null,
+          status: "draft",
+          influencer_ids: Array.from(selectedIds),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setErrMsg(json.error||`Error ${res.status}`); setSaving(false); return }
 
-  const handleCreate = () => {
-    // Convert partnerFees Map to array
-    const partnerFeesArray = Array.from(partnerFees.entries()).map(([partnerId, data]) => {
-      const partner = partners.find(p => p.id === partnerId)
-      return {
-        partnerId,
-        partnerHandle: partner?.handle || "",
-        deliverables: data.deliverables,
-        fee: data.fee
+      const campaignId = json.data?.id
+      if (!campaignId) { setErrMsg("Campaign created but ID not returned."); setSaving(false); return }
+
+      // 2. If any partners have agreed fees, update their BrandInfluencer records
+      for (const [partnerId, data] of Array.from(fees.entries())) {
+        if (data.fee > 0 || data.deliverables.length > 0) {
+          await fetch(`/api/brands/${brandId}/partners/${partnerId}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              campaign_id: campaignId,
+              agreed_rate: data.fee > 0 ? data.fee : undefined,
+              deliverables: data.deliverables.length > 0 ? data.deliverables.join(", ") : undefined,
+            }),
+          }).catch(()=>{/* non-fatal */})
+        }
       }
-    })
 
-    onCreate({
-      name: campaignName,
-      type: campaignType,
-      startDate: campaignStartDate,
-      endDate: campaignEndDate,
-      budget: parseFloat(campaignBudget) || 0,
-      notes: campaignNotes,
-      partnerIds: Array.from(selectedPartnerIds),
-      deliverables: deliverables.map(d => d.name),
-      partnerFees: partnerFeesArray
-    })
-
-    resetForm()
-    onClose()
-  }
-
-  const getFilteredPartners = () => {
-    if (!searchQuery) return partners
-    const query = searchQuery.toLowerCase()
-    return partners.filter(p => 
-      p.handle.toLowerCase().includes(query) || 
-      p.niche.toLowerCase().includes(query) ||
-      p.plat.toLowerCase().includes(query)
-    )
+      setSuccess(true)
+      setTimeout(() => { onCreated(); onClose() }, 700)
+    } catch (e:any) {
+      setErrMsg(e.message||"Unexpected error.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!isOpen) return null
 
-  const filteredPartners = getFilteredPartners()
-  const selectedPartnersList = Array.from(selectedPartnerIds).map(id => partners.find(p => p.id === id)!)
+  const filtered = search
+    ? partners.filter(p=>`${p.handle} ${p.niche} ${p.plat}`.toLowerCase().includes(search.toLowerCase()))
+    : partners
+
+  const selectedList = Array.from(selectedIds).map(id=>partners.find(p=>p.id===id)).filter(Boolean) as Partner[]
+
+  const fs: React.CSSProperties = {
+    width:"100%",padding:"7px 10px",borderRadius:8,
+    border:"0.5px solid rgba(0,0,0,0.15)",fontSize:12,
+    fontFamily:"inherit",boxSizing:"border-box",
+  }
+
+  const STEPS = ["Details","Select partners","Deliverables & fees"]
 
   return (
-    <div className="mo open" id="camp-modal" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="md" onClick={(e) => e.stopPropagation()}>
-        {/* HEADER */}
-        <div className="mh">
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center" }} onClick={e=>{ if(e.target===e.currentTarget) onClose() }}>
+      <div style={{ background:"#fff",borderRadius:14,width:700,maxWidth:"90%",maxHeight:"88vh",display:"flex",flexDirection:"column",overflow:"hidden" }} onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ padding:"18px 24px",borderBottom:"0.5px solid rgba(0,0,0,0.08)",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
           <div>
-            <div className="mt">New Campaign</div>
-            <div style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}>
-              Saved as Draft
+            <div style={{ fontSize:17,fontWeight:600 }}>New Campaign</div>
+            <div style={{ fontSize:11,color:"#888",marginTop:2 }}>Saved as Draft</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none",border:"none",fontSize:22,color:"#888",cursor:"pointer" }}>×</button>
+        </div>
+
+        {/* Steps */}
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:12,padding:"16px 24px",background:"#fafaf9",borderBottom:"0.5px solid rgba(0,0,0,0.08)" }}>
+          {STEPS.map((label,i)=>(
+            <div key={i} style={{ display:"flex",alignItems:"center",gap:8 }}>
+              {i>0 && <div style={{ width:40,height:1,background:"#ddd" }} />}
+              <div style={{ display:"flex",alignItems:"center",gap:6,color:step===i?"#1FAE5B":"#aaa",fontSize:12 }}>
+                <div style={{ width:26,height:26,borderRadius:13,background:step===i?"#1FAE5B":"#e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,color:step===i?"#fff":"#666" }}>{i+1}</div>
+                <span>{label}</span>
+              </div>
             </div>
-          </div>
-          <button className="mc" onClick={onClose}>×</button>
+          ))}
         </div>
 
-        {/* STEP INDICATOR */}
-        <div className="msteps">
-          <div className={`mstep ${currentStep === 0 ? "active" : ""}`}>
-            <div className="sc">1</div>
-            <span>Details</span>
-          </div>
-          <div className="sdiv"></div>
-          <div className={`mstep ${currentStep === 1 ? "active" : ""}`}>
-            <div className="sc">2</div>
-            <span>Select partners</span>
-          </div>
-          <div className="sdiv"></div>
-          <div className={`mstep ${currentStep === 2 ? "active" : ""}`}>
-            <div className="sc">3</div>
-            <span>Deliverables & fees</span>
-          </div>
-        </div>
+        {/* Body */}
+        <div style={{ padding:24,overflowY:"auto",flex:1 }}>
 
-        <div className="mb">
-          {/* STEP 1 - Campaign Details */}
-          {currentStep === 0 && (
-            <div className="msc active">
-              <div className="fr">
-                <div className="fg2">
-                  <div className="fl">Campaign name <span className="req">*</span></div>
-                  <input 
-                    className="fi" 
-                    placeholder="e.g. Black Friday 2026" 
-                    value={campaignName}
-                    onChange={(e) => setCampaignName(e.target.value)}
-                  />
+          {/* Step 1 */}
+          {step===0 && (
+            <div style={{ display:"flex",flexDirection:"column",gap:14 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
+                <div>
+                  <div style={{ fontSize:12,fontWeight:500,marginBottom:5 }}>Campaign name <span style={{ color:"#E24B4A" }}>*</span></div>
+                  <input style={fs} placeholder="e.g. Black Friday 2026" value={name} onChange={e=>setName(e.target.value)} />
                 </div>
-                <div className="fg2">
-                  <div className="fl">Type <span className="req">*</span></div>
-                  <select 
-                    className="fi" 
-                    value={campaignType}
-                    onChange={(e) => setCampaignType(e.target.value)}
-                  >
-                    <option value="">Select...</option>
-                    <option>Gifting</option>
-                    <option>Paid</option>
-                    <option>Affiliate</option>
-                    <option>Paid + Gifting</option>
+                <div>
+                  <div style={{ fontSize:12,fontWeight:500,marginBottom:5 }}>Type <span style={{ color:"#E24B4A" }}>*</span></div>
+                  <select style={fs} value={type} onChange={e=>setType(e.target.value)}>
+                    <option value="">Select…</option>
+                    <option>Gifting</option><option>Paid</option>
+                    <option>Affiliate</option><option>Paid + Gifting</option>
                   </select>
                 </div>
               </div>
-
-              <div className="fr">
-                <div className="fg2">
-                  <div className="fl">Start date <span className="req">*</span></div>
-                  <input 
-                    className="fi" 
-                    type="date" 
-                    value={campaignStartDate}
-                    onChange={(e) => setCampaignStartDate(e.target.value)}
-                  />
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
+                <div>
+                  <div style={{ fontSize:12,fontWeight:500,marginBottom:5 }}>Start date <span style={{ color:"#E24B4A" }}>*</span></div>
+                  <input type="date" style={fs} value={startDate} onChange={e=>setStartDate(e.target.value)} />
                 </div>
-                <div className="fg2">
-                  <div className="fl">End date <span className="opt">(blank = open-ended)</span></div>
-                  <input 
-                    className="fi" 
-                    type="date" 
-                    value={campaignEndDate}
-                    onChange={(e) => setCampaignEndDate(e.target.value)}
-                  />
+                <div>
+                  <div style={{ fontSize:12,fontWeight:500,marginBottom:5 }}>End date <span style={{ fontSize:10,color:"#888",fontWeight:400 }}>(blank = open-ended)</span></div>
+                  <input type="date" style={fs} value={endDate} onChange={e=>setEndDate(e.target.value)} />
                 </div>
               </div>
-
-              <div className="fg2">
-                <div className="fl">Budget <span className="opt">(optional)</span></div>
-                <input 
-                  className="fi" 
-                  type="number" 
-                  placeholder="0"
-                  value={campaignBudget}
-                  onChange={(e) => setCampaignBudget(e.target.value)}
-                />
+              <div>
+                <div style={{ fontSize:12,fontWeight:500,marginBottom:5 }}>Budget <span style={{ fontSize:10,color:"#888",fontWeight:400 }}>(optional)</span></div>
+                <input type="number" style={fs} placeholder="0" value={budget} onChange={e=>setBudget(e.target.value)} />
               </div>
-
-              <div className="fg2">
-                <div className="fl">Goals / notes <span className="opt">(optional)</span></div>
-                <textarea 
-                  className="fi" 
-                  rows={3}
-                  value={campaignNotes}
-                  onChange={(e) => setCampaignNotes(e.target.value)}
-                />
+              <div>
+                <div style={{ fontSize:12,fontWeight:500,marginBottom:5 }}>Goals / notes <span style={{ fontSize:10,color:"#888",fontWeight:400 }}>(optional)</span></div>
+                <textarea style={{ ...fs,minHeight:70,resize:"vertical" }} value={notes} onChange={e=>setNotes(e.target.value)} />
               </div>
             </div>
           )}
 
-          {/* STEP 2 - Select Partners */}
-          {currentStep === 1 && (
-            <div className="msc active">
-              <div style={{ fontSize: "12px", color: "#888", marginBottom: "12px" }}>
-                Select partners for this campaign.
-              </div>
-
-              <input 
-                className="fi" 
-                style={{ marginBottom: "12px" }}
-                placeholder="Search partners" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-
-              <div className="ppl" style={{ maxHeight: 300, overflowY: "auto" }}>
-                {filteredPartners.map(p => (
-                  <div 
-                    key={p.id} 
-                    className={`ppr ${selectedPartnerIds.has(p.id) ? "sel" : ""}`} 
-                    onClick={() => togglePartnerSelection(p.id)}
-                  >
-                    <div className="pck">{selectedPartnerIds.has(p.id) ? "✓" : ""}</div>
+          {/* Step 2 */}
+          {step===1 && (
+            <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
+              <div style={{ fontSize:12,color:"#888" }}>Select which brand partners to include in this campaign.</div>
+              <input style={fs} placeholder="Search partners…" value={search} onChange={e=>setSearch(e.target.value)} />
+              <div style={{ border:"0.5px solid rgba(0,0,0,0.1)",borderRadius:8,maxHeight:300,overflowY:"auto" }}>
+                {filtered.length===0 ? (
+                  <div style={{ padding:20,textAlign:"center",color:"#888",fontSize:12 }}>No partners found</div>
+                ) : filtered.map(p=>(
+                  <div key={p.id} onClick={()=>togglePartner(p.id)} style={{ display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",background:selectedIds.has(p.id)?"#f0faf5":"transparent",borderBottom:"0.5px solid rgba(0,0,0,0.04)" }}>
+                    <div style={{ width:18,height:18,borderRadius:4,flexShrink:0,border:`1.5px solid ${selectedIds.has(p.id)?"#1FAE5B":"#ccc"}`,background:selectedIds.has(p.id)?"#1FAE5B":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff" }}>
+                      {selectedIds.has(p.id)?"✓":""}
+                    </div>
                     <div>
-                      <div style={{ fontWeight: 500 }}>{p.handle}</div>
-                      <div style={{ fontSize: 11, color: "#888" }}>{p.plat} · {p.niche}</div>
+                      <div style={{ fontWeight:500,fontSize:12 }}>{p.handle}</div>
+                      <div style={{ fontSize:11,color:"#888" }}>{p.plat} · {p.niche}</div>
                     </div>
                   </div>
                 ))}
               </div>
-
-              <div style={{ fontSize: "11px", color: "#888", marginTop: "12px" }}>
-                {selectedPartnerIds.size} selected
-              </div>
+              <div style={{ fontSize:11,color:"#888" }}>{selectedIds.size} selected</div>
             </div>
           )}
 
-          {/* STEP 3 - Deliverables & Fees */}
-          {currentStep === 2 && (
-            <div className="msc active">
-              <div style={{ marginBottom: "20px" }}>
-                <div className="fl" style={{ marginBottom: "8px" }}>Deliverable template</div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
-                  {deliverables.map(d => (
-                    <span key={d.id} style={{ background: "#f0f0f0", padding: "4px 10px", borderRadius: "16px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          {/* Step 3 */}
+          {step===2 && (
+            <div style={{ display:"flex",flexDirection:"column",gap:16 }}>
+              <div>
+                <div style={{ fontSize:12,fontWeight:500,marginBottom:8 }}>Deliverables</div>
+                <div style={{ display:"flex",flexWrap:"wrap",gap:6,marginBottom:10 }}>
+                  {deliverables.map(d=>(
+                    <span key={d.id} style={{ background:"#f0f0f0",padding:"3px 10px",borderRadius:16,fontSize:12,display:"inline-flex",alignItems:"center",gap:6 }}>
                       {d.name}
-                      <button onClick={() => removeDeliverable(d.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px" }}>×</button>
+                      <button onClick={()=>setDeliverables(p=>p.filter(x=>x.id!==d.id))} style={{ background:"none",border:"none",cursor:"pointer",fontSize:14,lineHeight:1 }}>×</button>
                     </span>
                   ))}
                 </div>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <input 
-                    className="fi" 
-                    placeholder="e.g. 1x IG Reel" 
-                    value={newDeliverable}
-                    onChange={(e) => setNewDeliverable(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && addDeliverable()}
-                  />
-                  <button className="btn-outline" onClick={addDeliverable}>+ Add</button>
+                <div style={{ display:"flex",gap:8 }}>
+                  <input style={{ ...fs,flex:1 }} placeholder="e.g. 1x IG Reel" value={newDeliverable} onChange={e=>setNewDeliverable(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addDeliverable()} />
+                  <button onClick={addDeliverable} style={{ padding:"6px 14px",borderRadius:8,border:"0.5px solid rgba(0,0,0,0.2)",background:"transparent",fontSize:12,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap" }}>+ Add</button>
                 </div>
               </div>
-
               <div>
-                <div className="fl" style={{ marginBottom: "12px" }}>Per-creator fees</div>
-                <table className="cft" style={{ width: "100%", borderCollapse: "collapse" }}>
+                <div style={{ fontSize:12,fontWeight:500,marginBottom:10 }}>Per-creator fees</div>
+                <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid #eee" }}>
-                      <th style={{ textAlign: "left", padding: "8px" }}>Creator</th>
-                      <th style={{ textAlign: "left", padding: "8px" }}>Deliverables</th>
-                      <th style={{ textAlign: "left", padding: "8px" }}>Agreed fee</th>
+                    <tr style={{ borderBottom:"0.5px solid #eee" }}>
+                      <th style={{ textAlign:"left",padding:"6px 8px",fontSize:11,color:"#666",fontWeight:600 }}>Creator</th>
+                      <th style={{ textAlign:"left",padding:"6px 8px",fontSize:11,color:"#666",fontWeight:600 }}>Deliverables</th>
+                      <th style={{ textAlign:"left",padding:"6px 8px",fontSize:11,color:"#666",fontWeight:600 }}>Agreed fee</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedPartnersList.map(partner => {
-                      const partnerData = partnerFees.get(partner.id)
+                    {selectedList.map(p=>{
+                      const d = fees.get(p.id)
                       return (
-                        <tr key={partner.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                          <td style={{ padding: "8px", fontWeight: 500 }}>{partner.handle}</td>
-                          <td style={{ padding: "8px" }}>
-                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                              {deliverables.map(d => (
-                                <label key={d.id} style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px" }}>
-                                  <input 
-                                    type="checkbox" 
-                                    checked={partnerData?.deliverables.includes(d.name) || false}
-                                    onChange={(e) => updatePartnerDeliverable(partner.id, d.name, e.target.checked)}
-                                  />
-                                  {d.name}
+                        <tr key={p.id} style={{ borderBottom:"0.5px solid #f0f0f0" }}>
+                          <td style={{ padding:"8px",fontWeight:500 }}>{p.handle}</td>
+                          <td style={{ padding:"8px" }}>
+                            <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+                              {deliverables.map(dl=>(
+                                <label key={dl.id} style={{ display:"flex",alignItems:"center",gap:4,fontSize:11,cursor:"pointer" }}>
+                                  <input type="checkbox" checked={d?.deliverables.includes(dl.name)||false} onChange={e=>toggleDeliverable(p.id,dl.name,e.target.checked)} />
+                                  {dl.name}
                                 </label>
                               ))}
+                              {deliverables.length===0 && <span style={{ fontSize:11,color:"#aaa" }}>Add deliverables above</span>}
                             </div>
                           </td>
-                          <td style={{ padding: "8px" }}>
-                            <input 
-                              type="number" 
-                              className="fi" 
-                              style={{ width: "120px" }}
-                              placeholder="Fee"
-                              value={partnerData?.fee || 0}
-                              onChange={(e) => updatePartnerFee(partner.id, parseFloat(e.target.value) || 0)}
-                            />
+                          <td style={{ padding:"8px" }}>
+                            <input type="number" style={{ ...fs,width:110 }} placeholder="$0" value={d?.fee||""} onChange={e=>setFee(p.id,parseFloat(e.target.value)||0)} />
                           </td>
                         </tr>
                       )
@@ -443,233 +291,25 @@ export default function NewCampaignModal({ isOpen, onClose, onCreate, partners }
               </div>
             </div>
           )}
+
+          {errMsg  && <div style={{ marginTop:12,padding:"8px 12px",background:"#fdecea",border:"0.5px solid #E24B4A",borderRadius:8,fontSize:12,color:"#a32d2d" }}>⚠ {errMsg}</div>}
+          {success && <div style={{ marginTop:12,padding:"8px 12px",background:"#e6f9ee",border:"0.5px solid #1FAE5B",borderRadius:8,fontSize:12,color:"#0F6B3E" }}>✓ Campaign created!</div>}
         </div>
 
-        {/* FOOTER */}
-        <div className="mf">
-          {currentStep > 0 && (
-            <button className="btn-outline" onClick={handleBack}>
-              ← Back
-            </button>
-          )}
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: "auto" }}>
-            <span className="db" style={{ fontSize: "11px", color: "#888" }}>
-              Will save as Draft
-            </span>
-            <button className="btn-outline" onClick={onClose}>
-              Cancel
-            </button>
-            <button className="btn-primary" onClick={handleNext}>
-              {currentStep === 2 ? "Save Draft" : "Next →"}
+        {/* Footer */}
+        <div style={{ padding:"14px 24px",borderTop:"0.5px solid rgba(0,0,0,0.08)",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          <div>
+            {step>0 && <button onClick={()=>setStep(s=>s-1)} style={{ padding:"7px 16px",borderRadius:8,border:"0.5px solid rgba(0,0,0,0.2)",background:"transparent",fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>← Back</button>}
+          </div>
+          <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+            <span style={{ fontSize:11,color:"#888" }}>Will save as Draft</span>
+            <button onClick={onClose} style={{ padding:"7px 16px",borderRadius:8,border:"0.5px solid rgba(0,0,0,0.2)",background:"transparent",fontSize:12,cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>
+            <button onClick={handleNext} disabled={saving||success} style={{ padding:"7px 20px",borderRadius:8,border:"none",background:saving||success?"#aaa":"#1FAE5B",color:"#fff",fontSize:12,fontWeight:500,cursor:saving||success?"not-allowed":"pointer",fontFamily:"inherit" }}>
+              {saving?"Saving…":success?"✓ Saved!":step===2?"Save Draft →":"Next →"}
             </button>
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .mo {
-          position: fixed;
-          inset: 0;
-          background: rgba(0,0,0,0.45);
-          z-index: 600;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .md {
-          background: #fff;
-          border-radius: 14px;
-          width: 700px;
-          max-width: 90%;
-          max-height: 85vh;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-        }
-        .mh {
-          padding: 18px 24px;
-          border-bottom: 0.5px solid rgba(0,0,0,0.08);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .mt {
-          font-size: 18px;
-          font-weight: 600;
-        }
-        .mc {
-          background: none;
-          border: none;
-          font-size: 24px;
-          cursor: pointer;
-          color: #888;
-        }
-        .msteps {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          padding: 20px 24px;
-          background: #fafaf9;
-          border-bottom: 0.5px solid rgba(0,0,0,0.08);
-        }
-        .mstep {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          color: #aaa;
-          font-size: 12px;
-        }
-        .mstep.active {
-          color: #1FAE5B;
-        }
-        .sc {
-          width: 28px;
-          height: 28px;
-          border-radius: 28px;
-          background: #e5e7eb;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 13px;
-          font-weight: 600;
-          color: #666;
-        }
-        .mstep.active .sc {
-          background: #1FAE5B;
-          color: #fff;
-        }
-        .sdiv {
-          width: 40px;
-          height: 1px;
-          background: #ddd;
-        }
-        .mb {
-          padding: 24px;
-          overflow-y: auto;
-          flex: 1;
-        }
-        .msc {
-          display: none;
-        }
-        .msc.active {
-          display: block;
-        }
-        .fr {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 16px;
-          margin-bottom: 16px;
-        }
-        .fg2 {
-          margin-bottom: 16px;
-        }
-        .fl {
-          font-size: 12px;
-          font-weight: 500;
-          margin-bottom: 6px;
-          color: #333;
-        }
-        .req {
-          color: #E24B4A;
-        }
-        .opt {
-          font-size: 10px;
-          font-weight: normal;
-          color: #888;
-        }
-        .fi {
-          width: 100%;
-          padding: 8px 12px;
-          border-radius: 8px;
-          border: 0.5px solid rgba(0,0,0,0.15);
-          font-size: 13px;
-          font-family: inherit;
-        }
-        textarea.fi {
-          resize: vertical;
-        }
-        .ppl {
-          border: 0.5px solid rgba(0,0,0,0.1);
-          border-radius: 8px;
-          padding: 4px;
-          max-height: 300px;
-          overflow-y: auto;
-        }
-        .ppr {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 10px;
-          border-radius: 7px;
-          cursor: pointer;
-        }
-        .ppr:hover {
-          background: #f7f9f8;
-        }
-        .ppr.sel {
-          background: #f0faf5;
-        }
-        .pck {
-          width: 18px;
-          height: 18px;
-          border-radius: 4px;
-          border: 1.5px solid #ccc;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 11px;
-        }
-        .ppr.sel .pck {
-          background: #1FAE5B;
-          border-color: #1FAE5B;
-          color: #fff;
-        }
-        .mf {
-          padding: 16px 24px;
-          border-top: 0.5px solid rgba(0,0,0,0.08);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .btn-outline {
-          background: transparent;
-          border: 0.5px solid rgba(0,0,0,0.2);
-          padding: 8px 16px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 12px;
-          font-weight: 500;
-        }
-        .btn-primary {
-          background: #1FAE5B;
-          color: #fff;
-          border: none;
-          padding: 8px 20px;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 12px;
-          font-weight: 500;
-        }
-        .cft {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        .cft th, .cft td {
-          padding: 10px 8px;
-          text-align: left;
-          border-bottom: 0.5px solid #eee;
-        }
-        .cft th {
-          font-weight: 600;
-          font-size: 11px;
-          color: #666;
-        }
-        .db {
-          font-size: 11px;
-          color: #888;
-        }
-      `}</style>
     </div>
   )
 }

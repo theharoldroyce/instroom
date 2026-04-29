@@ -35,71 +35,51 @@ import ProfileSidebar from "./profile-sidebar"
 import { useBrandTaxonomy } from "@/hooks/useBrandTaxonomy"
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   INSTROOM API — Auto-fetch influencer data
-   ═══════════════════════════════════════════════════════════════════════════════ */
-const INSTROOM_API: Record<string, (u: string) => string> = {
-  instagram: (u) => `https://api.instroom.io/v2/${u}/instagram`,
-  tiktok:    (u) => `https://api.instroom.io/${u}/tiktok`,
-}
-
-function parseFormattedNumber(val: string | number | undefined): string {
-  if (!val || val === "Not Available") return ""
-  const s = String(val).toLowerCase().trim()
-  if (s.includes("m")) return String(Math.round(parseFloat(s) * 1_000_000))
-  if (s.includes("k")) return String(Math.round(parseFloat(s) * 1_000))
-  const n = parseFloat(s)
-  return isNaN(n) ? "" : String(Math.round(n))
-}
-
-async function fetchInfluencerFromAPI(handle: string, platform: string): Promise<Partial<InfluencerRow> | null> {
-  const clean = handle.trim().replace(/^@/, "").toLowerCase()
-  if (!clean || clean.length < 2) return null
-  const endpointFn = INSTROOM_API[platform]
-  if (!endpointFn) return null
-  try {
-    const res = await fetch(endpointFn(clean))
-    if (!res.ok) return null
-    const json = await res.json()
-    const d = json.data || json.user || json
-    if (!d || typeof d !== "object") return null
-    const followerCount = Number(d.followers || d.follower_count || 0)
-    const engRate = parseFloat(String(d.engagement_rate || "0")) || 0
-    const profileUrl = platform === "tiktok" ? `https://tiktok.com/@${clean}` : `https://instagram.com/${clean}`
-    const email = d.email && d.email !== "Not Available" ? d.email : ""
-    const fullName = d.full_name || d.name || ""
-    return {
-      full_name: fullName, first_name: fullName.split(" ")[0] || "",
-      follower_count: String(followerCount), engagement_rate: String(engRate),
-      email, contact_info: email, social_link: profileUrl,
-      location: d.location || d.country || "",
-      niche: d.category || d.business_category || "",
-      gender: d.gender || "",
-      profile_image_url: d.photo || d.avatar || "",
-      avg_likes: parseFormattedNumber(d.avg_likes || d.avg_hearts),
-      avg_comments: parseFormattedNumber(d.avg_comments),
-      avg_views: parseFormattedNumber(d.avg_video_views || d.avg_views),
-    }
-  } catch (err) { console.error(`API fetch error for ${handle}:`, err); return null }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════════
    SORT TOGGLE
    ═══════════════════════════════════════════════════════════════════════════════ */
 import { IconArrowDown, IconArrowUp } from "@tabler/icons-react"
 
 function SortToggle({ sortOrder, onChange }: { sortOrder: SortOrder; onChange: (o: SortOrder) => void }) {
   return (
-    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-      <button onClick={() => onChange("newest")} title="Newest first"
-        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${sortOrder === "newest" ? "bg-green-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
-        <IconArrowDown size={13} /> Newest
-      </button>
-      <div className="w-px h-5 bg-gray-200" />
-      <button onClick={() => onChange("oldest")} title="Oldest first"
-        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${sortOrder === "oldest" ? "bg-green-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
-        <IconArrowUp size={13} /> Oldest
-      </button>
-    </div>
+    // <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+    //   <button onClick={() => onChange("newest")} title="Newest first"
+    //     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${sortOrder === "newest" ? "bg-green-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+    //     <IconArrowDown size={13} /> Newest
+    //   </button>
+    //   <div className="w-px h-5 bg-gray-200" />
+    //   <button onClick={() => onChange("oldest")} title="Oldest first"
+    //     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${sortOrder === "oldest" ? "bg-green-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+    //     <IconArrowUp size={13} /> Oldest
+    //   </button>
+    // </div>
+
+    <div className="inline-flex h-9 items-center rounded-lg border border-[#0F6B3E]/20 bg-white p-1">
+  <button
+    onClick={() => onChange("newest")}
+    title="Newest first"
+    className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+      sortOrder === "newest"
+        ? "bg-[#1FAE5B] text-white shadow-sm"
+        : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+    }`}
+  >
+    <IconArrowDown size={14} />
+    Newest
+  </button>
+
+  <button
+    onClick={() => onChange("oldest")}
+    title="Oldest first"
+    className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+      sortOrder === "oldest"
+        ? "bg-[#1FAE5B] text-white shadow-sm"
+        : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+    }`}
+  >
+    <IconArrowUp size={14} />
+    Oldest
+  </button>
+</div>
   )
 }
 
@@ -183,6 +163,14 @@ export default function TableSheet({
     onConfirm: () => void; variant: "danger" | "warning" | "info"
   }>({ isOpen: false, title: "", message: "", onConfirm: () => {}, variant: "danger" })
 
+  // ── API Error Modal State ────────────────────────────────────────────────────
+  const [apiErrorModal, setApiErrorModal] = useState<{
+    open: boolean
+    platform?: string
+    handle?: string
+    rowId?: string
+  }>({ open: false })
+
   // ── Selection ───────────────────────────────────────────────────────────────
   const [selectedRowId, setSelectedRowId]   = useState<string | null>(null)
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
@@ -202,14 +190,13 @@ export default function TableSheet({
   const [nicheOptions, setNicheOptions] = useState<string[]>(DEFAULT_NICHES)
   const [locationOptions, setLocationOptions] = useState<string[]>(DEFAULT_LOCATIONS)
 
-// BEFORE — only updates if dbNiches.length > 0
-useEffect(() => {
-  if (dbNiches.length > 0) setNicheOptions(dbNiches.map(n => n.name))
-}, [dbNiches])
+  useEffect(() => {
+    if (dbNiches.length > 0) setNicheOptions(dbNiches.map(n => n.name))
+  }, [dbNiches])
 
-useEffect(() => {
-  if (dbLocations.length > 0) setLocationOptions(dbLocations.map(l => l.name))
-}, [dbLocations])
+  useEffect(() => {
+    if (dbLocations.length > 0) setLocationOptions(dbLocations.map(l => l.name))
+  }, [dbLocations])
 
   // ── API fetch state ─────────────────────────────────────────────────────────
   const [fetchingRows, setFetchingRows]           = useState<Set<string>>(new Set())
@@ -233,6 +220,63 @@ useEffect(() => {
 
   // ── Toast ────────────────────────────────────────────────────────────────────
   const { toasts, addToast, dismissToast } = useToast()
+
+  /* ═══════════════════════════════════════════════════════════════════════════════
+     INSTROOM API — Auto-fetch influencer data (moved inside component)
+     ═══════════════════════════════════════════════════════════════════════════════ */
+  const INSTROOM_API: Record<string, (u: string) => string> = {
+    instagram: (u) => `https://api.instroom.io/v2/${u}/instagram`,
+    tiktok:    (u) => `https://api.instroom.io/${u}/tiktok`,
+  }
+
+  function parseFormattedNumber(val: string | number | undefined): string {
+    if (!val || val === "Not Available") return ""
+    const s = String(val).toLowerCase().trim()
+    if (s.includes("m")) return String(Math.round(parseFloat(s) * 1_000_000))
+    if (s.includes("k")) return String(Math.round(parseFloat(s) * 1_000))
+    const n = parseFloat(s)
+    return isNaN(n) ? "" : String(Math.round(n))
+  }
+
+  const fetchInfluencerFromAPI = useCallback(async (handle: string, platform: string): Promise<Partial<InfluencerRow> | null> => {
+    const clean = handle.trim().replace(/^@/, "").toLowerCase()
+    if (!clean || clean.length < 2) return null
+    const endpointFn = INSTROOM_API[platform]
+    if (!endpointFn) return null
+    try {
+      const res = await fetch(endpointFn(clean))
+      if (!res.ok) return null
+      const json = await res.json()
+      const d = json.data || json.user || json
+      if (!d || typeof d !== "object") return null
+      const followerCount = Number(d.followers || d.follower_count || 0)
+      const engRate = parseFloat(String(d.engagement_rate || "0")) || 0
+      const profileUrl = platform === "tiktok" ? `https://tiktok.com/@${clean}` : `https://instagram.com/${clean}`
+      const email = d.email && d.email !== "Not Available" ? d.email : ""
+      const fullName = d.full_name || d.name || ""
+      return {
+        full_name: fullName, first_name: fullName.split(" ")[0] || "",
+        follower_count: String(followerCount), engagement_rate: String(engRate),
+        email, contact_info: email, social_link: profileUrl,
+        location: d.location || d.country || "",
+        niche: d.category || d.business_category || "",
+        gender: d.gender || "",
+        profile_image_url: d.photo || d.avatar || "",
+        avg_likes: parseFormattedNumber(d.avg_likes || d.avg_hearts),
+        avg_comments: parseFormattedNumber(d.avg_comments),
+        avg_views: parseFormattedNumber(d.avg_video_views || d.avg_views),
+      }
+    } catch (err) { 
+      console.error(`API fetch error for ${handle}:`, err)
+      // Show the error modal
+      setApiErrorModal({
+        open: true,
+        platform,
+        handle: clean,
+      })
+      return null
+    }
+  }, [])
 
   // ── Column construction ──────────────────────────────────────────────────────
   const getEffectiveGroup = useCallback((cc: CustomColumn) => cc.assignedGroup, [])
@@ -378,14 +422,11 @@ useEffect(() => {
   }
 
   // ── Save row to DB ────────────────────────────────────────────────────────────
-  // Called internally after API fetch enriches a row. Handles both POST (new)
-  // and PUT (existing). Only sends fields that exist in the Influencer model.
   const saveRowToDatabase = useCallback(async (row: InfluencerRow): Promise<void> => {
     if (!row.handle || !row.platform) return
 
     const isTempId = row.id.startsWith("temp-")
 
-    // Only fields that exist in the Influencer prisma model
     const payload = {
       handle:            row.handle,
       platform:          row.platform,
@@ -402,12 +443,10 @@ useEffect(() => {
       avg_likes:         Number(row.avg_likes) || 0,
       avg_comments:      Number(row.avg_comments) || 0,
       avg_views:         Number(row.avg_views) || 0,
-      // Pass brandId so the API links the influencer to the brand
       ...(brandId ? { brandId } : {}),
     }
 
     if (isTempId) {
-      // POST — create new influencer
       try {
         const res = await fetch("/api/influencers/create", {
           method: "POST",
@@ -417,7 +456,6 @@ useEffect(() => {
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
-          // 409 = already exists in DB — fetch the existing record to get its real ID
           if (res.status === 409) {
             const existing = await fetch(
               `/api/influencers/find?handle=${encodeURIComponent(row.handle)}&platform=${encodeURIComponent(row.platform)}`
@@ -428,7 +466,6 @@ useEffect(() => {
             }
             return
           }
-          // 403 = subscription limit
           if (res.status === 403) {
             addToast("error", err.message || "Influencer limit reached for your plan")
             return
@@ -438,7 +475,6 @@ useEffect(() => {
         }
 
         const created = await res.json()
-        // Swap the temp ID for the real DB id everywhere in the table
         swapIdRef.current(row.id, created.id)
         onFetchComplete?.({ ...row, id: created.id })
       } catch (err) {
@@ -446,7 +482,6 @@ useEffect(() => {
         addToast("error", `Network error saving @${row.handle}`)
       }
     } else {
-      // PUT — update existing influencer (omit handle/platform — they're immutable)
       const { handle, platform, brandId: _b, ...updatePayload } = payload as any
       try {
         const res = await fetch(`/api/influencers/${row.id}`, {
@@ -457,7 +492,6 @@ useEffect(() => {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
           console.error(`PUT /api/influencers/${row.id} failed:`, err)
-          // Don't toast on PUT failures for auto-enrichment — silently log
         } else {
           onFetchComplete?.(row)
         }
@@ -473,7 +507,6 @@ useEffect(() => {
     if (!clean || clean.length < 2) return
     if (platform !== "instagram" && platform !== "tiktok") return
 
-    // Use functional state read to avoid stale closure on rows
     setRows(prev => {
       const existingRow = prev.find(r => r.id === rowId)
       if (existingRow && Number(existingRow.follower_count) > 0) return prev
@@ -490,15 +523,15 @@ useEffect(() => {
       return prev
     })
 
-    // Check again synchronously from a ref snapshot before starting the fetch
-    // (the setRows above is async so we re-read outside)
     setFetchingRows(prev => { const n = new Set(prev); n.add(rowId); return n })
 
     try {
       const data = await fetchInfluencerFromAPI(handle, platform)
-      if (!data) { addToast("error", `${clean} not found on ${platform}`); return }
+      if (!data) { 
+        addToast("error", `${clean} not found on ${platform}`)
+        return 
+      }
 
-      // Check email duplicates and build the enriched row
       let enrichedRow: InfluencerRow | null = null
 
       setRows(prev => {
@@ -536,13 +569,14 @@ useEffect(() => {
         return next
       })
 
-      // Save to DB after state update settles — use setTimeout to let React flush
       if (enrichedRow) {
         setTimeout(() => saveRowToDatabase(enrichedRow!), 0)
       }
-    } catch (err) { console.error("Auto-fetch failed:", err) }
+    } catch (err) { 
+      console.error("Auto-fetch failed:", err)
+    }
     finally { setFetchingRows(prev => { const n = new Set(prev); n.delete(rowId); return n }) }
-  }, [onRowsChange, addToast, saveRowToDatabase])
+  }, [onRowsChange, addToast, saveRowToDatabase, fetchInfluencerFromAPI])
 
   // ── Row add / delete ──────────────────────────────────────────────────────────
   const addRow = () => {
@@ -970,6 +1004,54 @@ useEffect(() => {
         onConfirm={() => { confirmDialog.onConfirm(); setConfirmDialog(p => ({ ...p, isOpen: false })) }}
         onClose={() => setConfirmDialog(p => ({ ...p, isOpen: false }))} variant={confirmDialog.variant}
       />
+
+      {/* API Error Modal */}
+      {apiErrorModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) setApiErrorModal({ open: false }) }}>
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 p-1.5 bg-red-100 rounded-full">
+                <IconAlertTriangle size={20} className="text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-base font-semibold text-gray-900">
+                  Influencer API unavailable
+                </h2>
+                <p className="mt-2 text-sm text-gray-600">
+                  We couldn't fetch data for <strong>@{apiErrorModal.handle}</strong>. You may retry or continue adding the influencer manually.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                onClick={() => setApiErrorModal({ open: false })}
+              >
+                Continue manually
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                onClick={() => {
+                  const handle = apiErrorModal.handle
+                  const platform = apiErrorModal.platform
+                  const rowId = apiErrorModal.rowId
+
+                  setApiErrorModal({ open: false })
+
+                  if (handle && platform && rowId) {
+                    autoFetchInfluencer(rowId, handle, platform)
+                  }
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingDuplicateInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
