@@ -4,6 +4,7 @@
 // Not Interested shows the NI reason pill, no forward actions
 // ADDED: Column info tooltips (ⓘ) on all column headers
 // ADDED: Niche + Location tag-based multi-select filters
+// ADDED: Collaboration type selection when moving to Post Tracker
 
 "use client"
 
@@ -34,6 +35,14 @@ import {
   IconLoader2,
   IconAlertCircle,
   IconArrowRight,
+  IconPackage,
+  IconGift,
+  IconCash,
+  IconLink,
+  IconCamera,
+  IconShoppingBag,
+  IconCoins,
+  IconStar,
 } from "@tabler/icons-react"
 
 import InfluencerProfileSidebar, {
@@ -81,14 +90,100 @@ const NI_REASONS = [
   { r: "Others",                                 bucket: "hard", color: "#D3D1C7" },
 ]
 
+// ─── Collaboration Types ──────────────────────────────────────────────────────
+const COLLAB_TYPES = [
+  {
+    id: "gifting",
+    title: "Gifting",
+    description: "Product sent, no payment, no commission",
+    icon: <IconGift size={20} />,
+    color: "bg-purple-50 text-purple-700 border-purple-200",
+    hoverColor: "hover:border-purple-400 hover:bg-purple-100",
+    selectedColor: "border-purple-500 bg-purple-100 ring-2 ring-purple-500/20",
+    dotColor: "bg-purple-500",
+  },
+  {
+    id: "paid",
+    title: "Paid",
+    description: "Product sent + flat fee",
+    icon: <IconCash size={20} />,
+    color: "bg-blue-50 text-blue-700 border-blue-200",
+    hoverColor: "hover:border-blue-400 hover:bg-blue-100",
+    selectedColor: "border-blue-500 bg-blue-100 ring-2 ring-blue-500/20",
+    dotColor: "bg-blue-500",
+  },
+  {
+    id: "affiliate",
+    title: "Affiliate",
+    description: "Product sent + commission link",
+    icon: <IconLink size={20} />,
+    color: "bg-green-50 text-green-700 border-green-200",
+    hoverColor: "hover:border-green-400 hover:bg-green-100",
+    selectedColor: "border-green-500 bg-green-100 ring-2 ring-green-500/20",
+    dotColor: "bg-green-500",
+  },
+  {
+    id: "ugc",
+    title: "UGC",
+    description: "Product sent, brand owns content, no post required",
+    icon: <IconCamera size={20} />,
+    color: "bg-orange-50 text-orange-700 border-orange-200",
+    hoverColor: "hover:border-orange-400 hover:bg-orange-100",
+    selectedColor: "border-orange-500 bg-orange-100 ring-2 ring-orange-500/20",
+    dotColor: "bg-orange-500",
+  },
+  {
+    id: "tiktok-shop",
+    title: "TikTok Shop",
+    description: "Product sent + in-app shop tagging + commission",
+    icon: <IconShoppingBag size={20} />,
+    color: "bg-pink-50 text-pink-700 border-pink-200",
+    hoverColor: "hover:border-pink-400 hover:bg-pink-100",
+    selectedColor: "border-pink-500 bg-pink-100 ring-2 ring-pink-500/20",
+    dotColor: "bg-pink-500",
+  },
+  {
+    id: "paid-affiliate",
+    title: "Paid + Affiliate",
+    description: "Product sent + flat fee + commission",
+    icon: <IconCoins size={20} />,
+    color: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    hoverColor: "hover:border-indigo-400 hover:bg-indigo-100",
+    selectedColor: "border-indigo-500 bg-indigo-100 ring-2 ring-indigo-500/20",
+    dotColor: "bg-indigo-500",
+  },
+  {
+    id: "ugc-paid",
+    title: "UGC + Paid",
+    description: "Product sent + flat fee + brand owns content",
+    icon: <IconStar size={20} />,
+    color: "bg-amber-50 text-amber-700 border-amber-200",
+    hoverColor: "hover:border-amber-400 hover:bg-amber-100",
+    selectedColor: "border-amber-500 bg-amber-100 ring-2 ring-amber-500/20",
+    dotColor: "bg-amber-500",
+  },
+  {
+    id: "tiktok-shop-paid",
+    title: "TikTok Shop + Paid",
+    description: "TikTok Shop + flat fee on top",
+    icon: <IconShoppingBag size={20} />,
+    color: "bg-rose-50 text-rose-700 border-rose-200",
+    hoverColor: "hover:border-rose-400 hover:bg-rose-100",
+    selectedColor: "border-rose-500 bg-rose-100 ring-2 ring-rose-500/20",
+    dotColor: "bg-rose-500",
+  },
+] as const
+
+type CollabType = (typeof COLLAB_TYPES)[number]["id"]
+
 // ─── Column definitions ──────────────────────────────────────────────────────
 const columns = [
-  { key: "for-outreach",       title: "For Outreach",       color: "bg-yellow-400", status: "For Outreach"       },
-  { key: "contacted",          title: "Contacted",           color: "bg-orange-400", status: "Contacted"          },
-  { key: "in-conversation",    title: "In Conversation",     color: "bg-blue-400",   status: "In Conversation"    },
-  { key: "deal-agreed",        title: "Deal Agreed",         color: "bg-green-500",  status: "Deal Agreed"        },
-  // { key: "for-order-creation", title: "For Order Creation",  color: "bg-[#1FAE5B]",  status: "For Order Creation" },
-  { key: "not-interested",     title: "Not Interested",      color: "bg-red-500",    status: "Not Interested"     },
+  { key: "for-outreach",       title: "For Outreach",       color: "bg-yellow-400", status: "For Outreach",       visible: true },
+  { key: "contacted",          title: "Contacted",           color: "bg-orange-400", status: "Contacted",          visible: true },
+  { key: "in-conversation",    title: "In Conversation",     color: "bg-blue-400",   status: "In Conversation",    visible: true },
+  { key: "deal-agreed",        title: "Deal Agreed",         color: "bg-green-500",  status: "Deal Agreed",        visible: true },
+  { key: "for-order-creation", title: "For Order Creation",  color: "bg-[#1FAE5B]",  status: "For Order Creation", visible: false },
+  { key: "not-interested",     title: "Not Interested",      color: "bg-red-500",    status: "Not Interested",     visible: true },
 ]
 
 // ─── Column tooltip descriptions ─────────────────────────────────────────────
@@ -106,13 +201,13 @@ const COLUMN_INFO: Record<string, { short: string; move?: string; terminal?: boo
     move:  "Move to Deal Agreed when terms are locked, or Not Interested if negotiations fall apart.",
   },
   "Deal Agreed": {
-    short: "Terms confirmed. Now collect their shipping address before the product can be sent.",
-    move:  "Check off \"Shipping address received\" on the card, then click Move to Post Tracker.",
+    short: "Terms confirmed. Click 'Move to Post Tracker' to select collaboration type and send product.",
+    move:  "Click the 'Move to Post Tracker' button on the card to proceed.",
   },
-  // "For Order Creation": {
-  //   short: "Address confirmed — ready to order and ship the product. Cards here also appear in Post Tracker for your fulfilment team.",
-  //   terminal: true,
-  // },
+  "For Order Creation": {
+    short: "Address confirmed — ready to order and ship the product. Cards here also appear in Post Tracker for your fulfilment team.",
+    terminal: true,
+  },
   "Not Interested": {
     short: "Collaboration didn't happen. Moving here requires a reason: Hard pass (don't contact again) or Soft pass (follow up next campaign).",
     terminal: true,
@@ -179,6 +274,7 @@ const getAvatarColor    = (name: string) => {
 
 const getNextStages = (currentStatus: string): string[] => {
   if (isTerminal(currentStatus)) return []
+  if (currentStatus === "Deal Agreed") return ["Not Interested"]
   const allStages = ["For Outreach", "Contacted", "In Conversation", "Deal Agreed"]
   return [...allStages.filter(s => s !== currentStatus), "Not Interested"]
 }
@@ -234,13 +330,12 @@ function influencerToPartner(inf: PipelineInfluencer): Partner {
 }
 
 // ─── Tag Multi-Select ─────────────────────────────────────────────────────────
-// Reusable tag pill selector used for Niche and Location filters
 interface TagSelectProps {
   label: string
   options: string[]
   selected: string[]
   onChange: (values: string[]) => void
-  colorClass?: string // Tailwind bg+text classes for selected pill
+  colorClass?: string
 }
 
 function TagSelect({ label, options, selected, onChange, colorClass = "bg-[#1FAE5B]/10 text-[#0F6B3E] border-[#1FAE5B]/30" }: TagSelectProps) {
@@ -389,19 +484,139 @@ function NotInterestedModal({ influencer, onConfirm, onCancel }: NIModalProps) {
   )
 }
 
-// ─── Deal Agreed Checklist ────────────────────────────────────────────────────
-function DealAgreedChecklist({ influencerId, onMarkOrderPlaced }: {
-  influencerId: string
-  onMarkOrderPlaced: (id: string) => void
+// ─── Collaboration Type Modal ─────────────────────────────────────────────────
+interface CollabTypeModalProps {
+  influencer: PipelineInfluencer
+  onConfirm: (collabType: CollabType) => void
+  onCancel: () => void
+}
+
+function CollabTypeModal({ influencer, onConfirm, onCancel }: CollabTypeModalProps) {
+  const [selectedType, setSelectedType] = useState<CollabType | null>(null)
+  const initials = influencer.influencer.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
+
+  const selectedCollab = COLLAB_TYPES.find((c) => c.id === selectedType)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-w-[95vw] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between px-7 pt-6 pb-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Select Collaboration Type</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Choose the type of collaboration before moving to Post Tracker.</p>
+          </div>
+          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition ml-4 mt-0.5">
+            <IconX size={18} />
+          </button>
+        </div>
+
+        {/* Influencer Info */}
+        <div className="px-7 pt-5 pb-2">
+          <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+            {influencer.profileImageUrl ? (
+              <img src={influencer.profileImageUrl} alt={influencer.influencer} className="w-10 h-10 rounded-full object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-semibold text-sm">{initials}</div>
+            )}
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{influencer.influencer}</p>
+              <p className="text-xs text-gray-500">{influencer.instagramHandle}</p>
+            </div>
+            <div className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
+              <IconPackage size={14} />
+              <span>Moving to Post Tracker</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Collaboration Types Grid */}
+        <div className="px-7 pt-5 pb-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Collaboration Type</p>
+          <div className="grid grid-cols-2 gap-3">
+            {COLLAB_TYPES.map((type) => (
+              <button
+                key={type.id}
+                onClick={() => setSelectedType(type.id)}
+                className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all ${
+                  selectedType === type.id
+                    ? type.selectedColor
+                    : `${type.color} ${type.hoverColor}`
+                }`}
+              >
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  selectedType === type.id ? "bg-white" : "bg-white/70"
+                }`}>
+                  {type.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{type.title}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{type.description}</p>
+                </div>
+                {selectedType === type.id && (
+                  <div className={`w-2.5 h-2.5 rounded-full ${type.dotColor} flex-shrink-0 mt-1.5`} />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Selected Type Summary */}
+        {selectedCollab && (
+          <div className="px-7 pb-3">
+            <div className="rounded-xl bg-gray-50 border border-gray-100 p-4">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Selected Collaboration</p>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${selectedCollab.dotColor}`} />
+                <span className="text-sm font-semibold text-gray-900">{selectedCollab.title}</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{selectedCollab.description}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-7 py-4 border-t border-gray-100 bg-gray-50/50 rounded-b-2xl">
+          <p className="text-[11px] text-gray-400">
+            This will move the influencer to Post Tracker
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 rounded-lg border border-gray-200 hover:bg-gray-50 transition bg-white"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => selectedType && onConfirm(selectedType)}
+              disabled={!selectedType}
+              className="px-6 py-2 text-sm font-medium text-white bg-[#1FAE5B] rounded-lg hover:bg-[#0f6b3e] transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              <IconPackage size={14} />
+              Move to Post Tracker
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Deal Agreed Move to Post Tracker ───────────────────────────────────────
+function DealAgreedMoveButton({ onMarkOrderPlaced }: {
+  onMarkOrderPlaced: () => void
 }) {
   return (
     <div className="mt-3 pt-3 border-t border-gray-100">
       <button
-        onClick={(e) => { e.stopPropagation(); onMarkOrderPlaced(influencerId) }}
-        className="w-full text-xs font-medium py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 bg-[#1FAE5B] text-white hover:bg-[#0f6b3e]"
+        onClick={(e) => {
+          e.stopPropagation()
+          onMarkOrderPlaced()
+        }}
+        className="w-full text-xs font-medium py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 bg-[#1FAE5B] text-white hover:bg-[#0f6b3e]"
       >
-        <IconArrowRight size={12} />
-        Move For Order Creation
+        <IconPackage size={12} />
+        Move to Post Tracker
       </button>
     </div>
   )
@@ -444,18 +659,33 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onMarkOrderPl
         )}
         {influencer.pipelineStatus === "For Order Creation" && (
           <div className="mt-2 flex items-center gap-1 text-xs text-emerald-700 bg-emerald-100 rounded-full px-2.5 py-1 inline-flex font-medium">
-            <IconArrowRight size={11} />
+            <IconPackage size={12} />
             In Post Tracker
           </div>
         )}
+        {/* Show collaboration type badge for For Order Creation */}
+        {influencer.pipelineStatus === "For Order Creation" && influencer.collabType && (
+          <div className="mt-1.5">
+            {(() => {
+              const collab = COLLAB_TYPES.find((c) => c.id === influencer.collabType)
+              if (!collab) return null
+              return (
+                <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${collab.color.split(" ")[0]} ${collab.color.split(" ")[1]}`}>
+                  {collab.icon}
+                  {collab.title}
+                </span>
+              )
+            })()}
+          </div>
+        )}
       </div>
-      {/* {influencer.pipelineStatus === "Deal Agreed" && onMarkOrderPlaced && (
-        <DealAgreedChecklist
-          influencerId={influencer.id}
-          onMarkOrderPlaced={onMarkOrderPlaced}
+      {influencer.pipelineStatus === "Deal Agreed" && onMarkOrderPlaced && (
+        <DealAgreedMoveButton
+          onMarkOrderPlaced={() => onMarkOrderPlaced(influencer.id)}
         />
-      )} */}
-      {nextStages.length > 0 && !terminal && (
+      )}
+      {/* Quick-move buttons: only show for non-Deal Agreed, non-terminal cards */}
+      {nextStages.length > 0 && !terminal && influencer.pipelineStatus !== "Deal Agreed" && (
         <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
           {nextStages.map((stage) => (
             <button key={stage}
@@ -468,6 +698,17 @@ function PipelineCard({ influencer, onOpenSidebar, onStatusChange, onMarkOrderPl
               {stage === "Not Interested" ? "✕ Not Interested" : `→ ${stage}`}
             </button>
           ))}
+        </div>
+      )}
+      {/* Show only NI button for Deal Agreed cards */}
+      {influencer.pipelineStatus === "Deal Agreed" && (
+        <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100 flex-wrap">
+          <button
+            onClick={(e) => { e.stopPropagation(); onStatusChange(influencer.id, "Not Interested") }}
+            className="text-xs px-2 py-1 rounded transition-all bg-red-50 text-red-600 hover:bg-red-100"
+          >
+            ✕ Not Interested
+          </button>
         </div>
       )}
     </div>
@@ -507,12 +748,14 @@ function StatusDropdown({ currentStatus, onStatusChange }: { currentStatus: stri
     return () => document.removeEventListener("mousedown", handler)
   }, [isOpen])
 
+  const visibleColumns = columns.filter((c) => c.visible)
+
   const dropdown = isOpen ? (
     <div id="status-dropdown-portal" style={dropdownStyle} className="bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
-      {columns.map((col, index) => (
+      {visibleColumns.map((col, index) => (
         <div key={col.status}
           onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStatusChange(col.status); setIsOpen(false) }}
-          className={`px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 flex items-center gap-2 ${index !== columns.length - 1 ? "border-b border-gray-100" : ""} ${currentStatus === col.status ? "bg-gray-50 font-semibold" : ""}`}>
+          className={`px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 flex items-center gap-2 ${index !== visibleColumns.length - 1 ? "border-b border-gray-100" : ""} ${currentStatus === col.status ? "bg-gray-50 font-semibold" : ""}`}>
           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getOptionDotColor(col.status)}`} />
           <span className="text-gray-700 whitespace-nowrap">{col.title}</span>
         </div>
@@ -564,8 +807,8 @@ function DraggableCard({ id, children }: { id: string; children: React.ReactNode
 interface FilterState {
   influencer: string
   handle:     string
-  locations:  string[]   // multi-select
-  niches:     string[]   // multi-select
+  locations:  string[]
+  niches:     string[]
 }
 
 const EMPTY_FILTERS: FilterState = {
@@ -591,6 +834,8 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
   const [niModalInfluencer,    setNiModalInfluencer]    = useState<PipelineInfluencer | null>(null)
   const [pendingNiId,          setPendingNiId]          = useState<string | null>(null)
   const [sortOrder,            setSortOrder]            = useState<"newest"|"oldest">("newest")
+  const [collabModalInfluencer, setCollabModalInfluencer] = useState<PipelineInfluencer | null>(null)
+  const [pendingCollabId,      setPendingCollabId]      = useState<string | null>(null)
 
   const { data, isLoading, error, updateStatus, refetch } = usePipelineData(brandId)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -600,15 +845,30 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     setTimeout(() => setShowSuccessMessage(null), duration)
   }
 
-  const handleMarkOrderPlaced = async (id: string) => {
+  const handleMarkOrderPlaced = (id: string) => {
     const influencer = data.find((i) => i.id === id)
     if (!influencer) return
-    const success = await updateStatus(id, "For Order Creation")
+    // Open the collaboration type modal instead of directly moving
+    setPendingCollabId(id)
+    setCollabModalInfluencer(influencer)
+  }
+
+  const handleCollabTypeConfirm = async (collabType: CollabType) => {
+    if (!pendingCollabId || !collabModalInfluencer) return
+    const success = await updateStatus(pendingCollabId, "For Order Creation",)
+    const collabName = COLLAB_TYPES.find((c) => c.id === collabType)?.title ?? collabType
     toast(
       success
-        ? `${influencer.influencer} moved to Post Tracker ✓`
-        : `Failed to move ${influencer.influencer}`
+        ? `${collabModalInfluencer.influencer} moved to Post Tracker · ${collabName} ✓`
+        : `Failed to move ${collabModalInfluencer.influencer}`
     )
+    setCollabModalInfluencer(null)
+    setPendingCollabId(null)
+  }
+
+  const handleCollabTypeCancel = () => {
+    setCollabModalInfluencer(null)
+    setPendingCollabId(null)
   }
 
   const handleDragStart = (event: DragStartEvent) => setActiveId(event.active.id as string)
@@ -631,11 +891,11 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
       return
     }
 
-    // const allowed = getNextStages(dragged.pipelineStatus)
-    // if (!allowed.includes(newStatus)) {
-    //   toast(`Cannot move from "${dragged.pipelineStatus}" to "${newStatus}"`, 2000)
-    //   return
-    // }
+    // Drag protection: Deal Agreed cannot be dragged directly to For Order Creation
+    if (dragged.pipelineStatus === "Deal Agreed" && newStatus === "For Order Creation") {
+      toast("Please use the Move to Post Tracker button on the card to select collaboration type.", 4000)
+      return
+    }
 
     if (newStatus === "Not Interested") {
       setPendingNiId(draggedId)
@@ -707,7 +967,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     return sortOrder === "newest" ? db - da : da - db
   })
 
-  // Count active filters for badge
   const activeFilterCount =
     (filters.influencer ? 1 : 0) +
     (filters.handle ? 1 : 0) +
@@ -732,6 +991,8 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     />
   )
 
+  const visibleColumns = columns.filter((c) => c.visible)
+
   if (isLoading) return (
     <div className="flex flex-col items-center justify-center gap-3 p-12 text-gray-500">
       <IconLoader2 size={32} className="animate-spin text-[#1FAE5B]" />
@@ -751,6 +1012,14 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
     <div className="flex flex-col gap-4 p-6">
       {niModalInfluencer && (
         <NotInterestedModal influencer={niModalInfluencer} onConfirm={handleNiConfirm} onCancel={handleNiCancel} />
+      )}
+
+      {collabModalInfluencer && (
+        <CollabTypeModal
+          influencer={collabModalInfluencer}
+          onConfirm={handleCollabTypeConfirm}
+          onCancel={handleCollabTypeCancel}
+        />
       )}
 
       {showSuccessMessage && (
@@ -826,7 +1095,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                   onChange={(v) => setFilters((p) => ({ ...p, niches: v }))}
                   colorClass="bg-[#1FAE5B]/10 text-[#0F6B3E] border-[#1FAE5B]/30" />
                 <div className="border-t border-gray-100" />
-                {/* Sort inside filter panel */}
                 <div>
                   <label className="text-xs text-gray-500 block mb-2">Sort by date</label>
                   <div className="flex gap-2">
@@ -889,7 +1157,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
           }`}
         >
           <IconLayoutKanban size={15} />
-          {/* Board */}
         </button>
 
         <button
@@ -904,7 +1171,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
           }`}
         >
           <IconList size={15} />
-          {/* List */}
         </button>
       </div>
       </div>
@@ -915,15 +1181,11 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
           <div className="rounded-xl border border-[#0F6B3E]/10 bg-white p-5 overflow-x-auto">
             <div className="flex gap-4 min-w-max">
 
-              {/* Main pipeline columns (everything except not-interested) */}
-              {columns.filter((c) => c.key !== "not-interested").map((col) => {
-                const items              = getItemsByColumn(col.key)
-                const isForOrderCreation = col.key === "for-order-creation"
+              {visibleColumns.filter((c) => c.key !== "not-interested").map((col) => {
+                const items = getItemsByColumn(col.key)
                 return (
                   <DroppableColumn key={col.key} id={col.key}>
-                    {/* Column header */}
                     <div className={`${col.color} text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between`}>
-                      {/* Title — clicking switches to list filtered by this column */}
                       <span
                         onClick={() => handleColumnClick(col)}
                         className="flex-1 cursor-pointer hover:opacity-90 transition-opacity truncate mr-2"
@@ -935,10 +1197,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                         <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-xs">{items.length}</span>
                       </div>
                     </div>
-
-                    {isForOrderCreation && (
-                      <p className="text-[10px] text-emerald-600 px-1">Also visible in Post Tracker</p>
-                    )}
 
                     <div className="flex flex-col gap-2 min-h-[400px]">
                       {items.map((inf) => (
@@ -967,7 +1225,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                 const items = getItemsByColumn(col.key)
                 return (
                   <DroppableColumn id={col.key}>
-                    {/* Column header — soft red style since it's an exit column */}
                     <div className="bg-red-100 text-red-700 border border-red-200 rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-between">
                       <span
                         onClick={() => handleColumnClick(col)}
@@ -1057,9 +1314,16 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                               <p className="text-[11px] text-red-500 mt-0.5">{inf.niReason}</p>
                             )}
                             {inf.pipelineStatus === "For Order Creation" && (
-                              <p className="text-[11px] text-emerald-600 mt-0.5 flex items-center gap-1">
-                                <IconArrowRight size={10} /> In Post Tracker
-                              </p>
+                              <>
+                                <p className="text-[11px] text-emerald-600 mt-0.5 flex items-center gap-1">
+                                  <IconPackage size={10} /> In Post Tracker
+                                </p>
+                                {inf.collabType && (
+                                  <p className="text-[10px] text-gray-400 mt-0.5">
+                                    {COLLAB_TYPES.find((c) => c.id === inf.collabType)?.title}
+                                  </p>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -1074,7 +1338,6 @@ export default function PipelinePage({ brandId }: PipelinePageProps) {
                       <td className="px-4 py-3">{inf.followerCount?.toLocaleString() || inf.followers}</td>
                       <td className="px-4 py-3">{inf.engagementRate}</td>
                       <td className="px-4 py-3">
-                        {/* Niche pill — clickable to quick-filter */}
                         {inf.niche ? (
                           <button
                             onClick={(e) => {

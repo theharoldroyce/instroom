@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 export interface PipelineInfluencer {
   id: string
   influencerId: string
+  collabType?: string
   campaignId: string | null
   campaignName: string | null
   influencer: string
