@@ -1,11 +1,45 @@
 "use client"
 
+import { useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { MainHeader } from "@/components/main-header"
 
 export default function FeaturesPage() {
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '')
+    if (hash) {
+      setTimeout(() => {
+        const target = document.getElementById(hash)
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+        // Highlight the matching jump nav link
+        document.querySelectorAll('.jumpnav a').forEach(a => {
+          a.classList.remove('jumpnav-active')
+          if ((a as HTMLAnchorElement).getAttribute('href') === `#${hash}`) {
+            a.classList.add('jumpnav-active')
+          }
+        })
+      }, 100)
+    }
+
+    // Keep jump nav in sync while scrolling
+    const sections = ['pipeline', 'email', 'crm', 'reporting', 'brand-partners']
+    const onScroll = () => {
+      let current = ''
+      sections.forEach(id => {
+        const el = document.getElementById(id)
+        if (el && window.scrollY >= el.offsetTop - 180) current = id
+      })
+      document.querySelectorAll('.jumpnav a').forEach(a => {
+        a.classList.toggle('jumpnav-active', (a as HTMLAnchorElement).getAttribute('href') === `#${current}`)
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   return (
     <div className="features-page">
       <style jsx>{`
@@ -100,6 +134,11 @@ export default function FeaturesPage() {
         .jumpnav a:hover {
           color: #1FAE5B;
           border-bottom-color: #1FAE5B;
+        }
+
+        .jumpnav-active {
+          color: #1FAE5B !important;
+          border-bottom-color: #1FAE5B !important;
         }
 
         /* ── Feature sections — alternating backgrounds ── */

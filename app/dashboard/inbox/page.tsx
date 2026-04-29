@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { signIn, useSession } from "next-auth/react"
 import { SubscriptionGate } from "@/components/ui/subscription-gate"
 import {
@@ -145,7 +146,7 @@ function mapGmailThreadToEmail(thread: any, index: number): Email {
   const nameMatch = fromHeader.match(/^([^<]+)</)
   const emailMatch = fromHeader.match(/<([^>]+)>/)
   const senderName = nameMatch ? nameMatch[1].trim() : fromHeader.split("@")[0] || "Unknown"
-  const senderEmail = emailMatch ? emailMatch[1] : fromHeader
+  const senderEmail = (emailMatch ? emailMatch[1] : fromHeader).toLowerCase().trim()
 
   // Build replies from all messages except the first
   const replies = messages.slice(1).map((msg: any) => {
@@ -202,6 +203,8 @@ function formatRelativeDate(timestamp: string): string {
 
 export default function InboxPage() {
   const { data: session } = useSession()
+  const searchParams = useSearchParams()
+  const brandId = searchParams.get("brandId")
 
   // ── Subscription gate ──────────────────────────────────────────────────────
   // null = still loading (no flash), true/false = resolved
@@ -232,6 +235,7 @@ export default function InboxPage() {
   const [sendError, setSendError] = useState<string | undefined>()
   const [searchQuery, setSearchQuery] = useState("")
   const [updateStageModal, setUpdateStageModal] = useState<{ open: boolean; email: Email | null }>({ open: false, email: null })
+  const [stageNotification, setStageNotification] = useState<{ show: boolean; message: string; type: "error" | "success" }>({ show: false, message: "", type: "error" })
   const [showPipelineBar, setShowPipelineBar] = useState(false)
   const [showActions, setShowActions] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -273,7 +277,9 @@ export default function InboxPage() {
 
   const checkGmailConnection = async () => {
     try {
-      const res = await fetch("/api/gmail/threads")
+      const url = new URL("/api/gmail/threads", window.location.origin)
+      if (brandId) url.searchParams.append("brandId", brandId)
+      const res = await fetch(url.toString())
       if (res.ok) {
         const data = await res.json()
         const mappedEmails = (data.threads || []).map((t: any, i: number) => mapGmailThreadToEmail(t, i))
@@ -300,7 +306,9 @@ export default function InboxPage() {
   const loadGmailThreads = async () => {
     setGmailSyncState("syncing")
     try {
-      const res = await fetch("/api/gmail/threads")
+      const url = new URL("/api/gmail/threads", window.location.origin)
+      if (brandId) url.searchParams.append("brandId", brandId)
+      const res = await fetch(url.toString())
       const data = await res.json()
 
       if (!res.ok) {
@@ -317,7 +325,6 @@ export default function InboxPage() {
       setGmailConnected(true)
       setGmailSyncState("connected")
     } catch (err: any) {
-      console.error("Gmail sync error:", err)
       setGmailError(err?.message || "Failed to load Gmail threads.")
       setGmailSyncState("error")
     }
@@ -388,6 +395,7 @@ export default function InboxPage() {
 
   const updateEmailStage = async (emailId: number | string, newStage: PipelineStage) => {
     // 1. Optimistically update UI
+    const previousStatus = emails.find((e) => e.id === emailId)?.status
     setEmails((prev) => prev.map((email) => (email.id === emailId ? { ...email, status: newStage } : email)))
     if (selectedEmail?.id === emailId) {
       setSelectedEmail((prev) => (prev ? { ...prev, status: newStage } : null))
@@ -401,14 +409,35 @@ export default function InboxPage() {
       const res = await fetch("/api/inbox/stage", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ senderEmail: email.fromEmail, stage: newStage }),
+        body: JSON.stringify({ senderEmail: email.fromEmail, stage: newStage, brandId }),
       })
       if (!res.ok) {
         const data = await res.json()
-        console.error("Failed to save stage:", data?.error)
+        // Revert optimistic update on error
+        setEmails((prev) => prev.map((e) => (e.id === emailId ? { ...e, status: previousStatus || null } : e)))
+        if (selectedEmail?.id === emailId) {
+          setSelectedEmail((prev) => (prev ? { ...prev, status: previousStatus || null } : null))
+        }
+        // Show notification
+        const errorMsg = data?.error === "Influencer not registered" 
+          ? `${email.fromEmail} is not registered as an influencer` 
+          : data?.error === "Influencer not found in this brand"
+          ? `${email.fromEmail} is not in your current brand`
+          : data?.error || "Failed to save stage"
+        setStageNotification({ show: true, message: errorMsg, type: "error" })
+        // Auto-hide notification after 5 seconds
+        setTimeout(() => setStageNotification({ show: false, message: "", type: "error" }), 5000)
+      } else {
+        // Show success notification
+        setStageNotification({ show: true, message: "Stage updated successfully!", type: "success" })
+        setTimeout(() => setStageNotification({ show: false, message: "", type: "success" }), 3000)
       }
     } catch (err) {
-      console.error("Failed to save stage:", err)
+      // Revert optimistic update on error
+      setEmails((prev) => prev.map((e) => (e.id === emailId ? { ...e, status: previousStatus || null } : e)))
+      if (selectedEmail?.id === emailId) {
+        setSelectedEmail((prev) => (prev ? { ...prev, status: previousStatus || null } : null))
+      }
     }
   }
 
@@ -1082,12 +1111,36 @@ export default function InboxPage() {
         </div>
       )}
 
+      {/* ── STAGE NOTIFICATION ── */}
+      {stageNotification.show && (
+        <div className="fixed bottom-6 right-6 z-40 animate-slideUp">
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg ${
+            stageNotification.type === "error" 
+              ? "bg-red-50 border border-red-200" 
+              : "bg-green-50 border border-green-200"
+          }`}>
+            <IconAlertCircle size={18} className={stageNotification.type === "error" ? "text-red-500" : "text-green-500"} />
+            <p className={`text-sm font-medium ${stageNotification.type === "error" ? "text-red-700" : "text-green-700"}`}>
+              {stageNotification.message}
+            </p>
+            <button
+              onClick={() => setStageNotification({ show: false, message: "", type: "error" })}
+              className="ml-2 p-1 hover:opacity-70 transition"
+            >
+              <IconX size={16} className={stageNotification.type === "error" ? "text-red-500" : "text-green-500"} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
         .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
         .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+        .animate-slideUp { animation: slideUp 0.3s ease-out; }
       `}</style>
     </div>
     </SubscriptionGate>

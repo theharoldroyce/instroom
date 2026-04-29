@@ -1,6 +1,7 @@
 import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import GoogleProvider from "next-auth/providers/google"
+import { redirect } from "next/navigation"
 import { prisma } from "./prisma"
 import { sendWelcomeEmail } from "./email"
 import { syncBrandActivityWithSubscription } from "./subscription-limits"
@@ -56,6 +57,12 @@ const nextAuthConfig = {
           })
 
           if (!user?.password_hash) {
+            // User exists but was created with Google signup (no password hash)
+            if (user) {
+              const error = new Error("GoogleSignupOnly")
+              error.message = "This account was created with Google. Please sign in using your Google account."
+              throw error
+            }
             return null
           }
 
@@ -75,12 +82,19 @@ const nextAuthConfig = {
             image: user.image,
           }
         } catch (error) {
+          // Re-throw custom auth method errors
+          if (error instanceof Error && error.message === "GoogleSignupOnly") {
+            throw error
+          }
           return null
         }
       },
     }),
   ],
-  pages: { signIn: "/login" },
+  pages: { 
+    signIn: "/login",
+    error: "/auth/error",
+  },
   callbacks: {
     async signIn({ user, account, profile }: any) {
       if (account?.provider === "google" && profile?.email) {
@@ -92,6 +106,14 @@ const nextAuthConfig = {
           })
           
           const isNewUser = !dbUser
+          
+          // Check if user exists with email/password signup
+          // If user has password_hash, they signed up with email/password only
+          if (dbUser && dbUser.password_hash) {
+            // User registered with email/password, cannot login with Google
+            // Redirect directly to login with message, bypassing error page
+            redirect('/login?authError=use-email-password')
+          }
           
           if (!dbUser) {
             dbUser = await prisma.user.create({

@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// Maps frontend PipelineStage → the DB fields to update on BrandInfluencer
 function stageToDbFields(stage: string): Record<string, any> | null {
   switch (stage) {
     case "PROSPECT":           return { contact_status: "not_contacted", stage: 1 }
@@ -32,8 +31,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "No user in session" }, { status: 403 })
   }
 
-  // Expects: { senderEmail: string, stage: string }
-  const { senderEmail, stage } = await req.json()
+  const { senderEmail, stage, brandId } = await req.json()
 
   if (!senderEmail || !stage) {
     return NextResponse.json({ error: "Missing senderEmail or stage" }, { status: 400 })
@@ -44,29 +42,61 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: `Invalid stage: ${stage}` }, { status: 400 })
   }
 
-  // Get the user's active brand
-  const brandMember = await prisma.brandMember.findFirst({
-    where: { user_id: userId },
-    select: { brand_id: true },
-    orderBy: { created_at: "desc" },
-  })
+  let brand_id = brandId
+  if (!brand_id) {
+    const brandMember = await prisma.brandMember.findFirst({
+      where: { user_id: userId },
+      select: { brand_id: true },
+      orderBy: { created_at: "desc" },
+    })
+    brand_id = brandMember?.brand_id
+  }
 
-  if (!brandMember) {
+  if (!brand_id) {
     return NextResponse.json({ error: "No brand found for user" }, { status: 404 })
   }
 
-  // Update the matching BrandInfluencer record
-  const updated = await prisma.brandInfluencer.updateMany({
-    where: {
-      brand_id: brandMember.brand_id,
-      influencer: { email: senderEmail },
-    },
-    data: dbFields,
+  const normalizedEmail = senderEmail.toLowerCase().trim()
+  
+  let influencer = await prisma.influencer.findFirst({
+    where: { email: normalizedEmail },
+    select: { id: true },
   })
 
-  if (updated.count === 0) {
-    return NextResponse.json({ error: "No matching influencer found for that email" }, { status: 404 })
+  if (!influencer) {
+    const allInfluencers = await prisma.influencer.findMany({
+      select: { id: true, email: true },
+    })
+    influencer = allInfluencers.find(inf => inf.email?.toLowerCase() === normalizedEmail) || null
   }
 
-  return NextResponse.json({ success: true })
+  if (!influencer) {
+    return NextResponse.json({ error: "Influencer not registered" }, { status: 404 })
+  }
+
+  const existingBi = await prisma.brandInfluencer.findFirst({
+    where: {
+      brand_id: brand_id,
+      influencer_id: influencer.id,
+    },
+    select: { id: true },
+  })
+
+  if (!existingBi) {
+    return NextResponse.json({ error: "Influencer not found in this brand" }, { status: 404 })
+  }
+
+  const updated = await prisma.brandInfluencer.update({
+    where: { id: existingBi.id },
+    data: dbFields,
+    select: {
+      id: true,
+      contact_status: true,
+      stage: true,
+      order_status: true,
+      content_posted: true,
+    },
+  })
+
+  return NextResponse.json({ success: true, data: updated })
 }

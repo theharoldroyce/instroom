@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 import Image from "next/image";
 import { getActivePlans } from "@/prisma/plans";
@@ -8,6 +7,9 @@ import { prisma } from  "@/lib/prisma";
 import { PricingPlanButton } from "@/components/pricing-plan-button";
 
 function getPlanSummary(plan: any) {
+  if (plan.name === "basic") {
+    return "1 workspace (30-day free trial)";
+  }
   if (plan.name === "solo") {
     return "1 workspace (cannot add more)";
   }
@@ -21,10 +23,22 @@ function getPlanSummary(plan: any) {
 }
 
 const planHierarchy: { [key: string]: number } = {
+  basic: 0,
   solo: 1,
   team: 2,
   agency: 3,
 };
+
+const additionalFeatures = [
+  {
+    name: "Instroom Post Tracker",
+    tooltip: "Track influencer posts and performance across all your campaigns.",
+  },
+  {
+    name: "Instroom Chrome Extension",
+    tooltip: "Discover and save influencer profiles directly from your browser.",
+  },
+];
 
 export default async function PricingPage({ searchParams }: { searchParams?: { cycle?: string } }) {
   const session = await getServerSession(authOptions);
@@ -51,9 +65,13 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
   }
 
   const allPlans = await getActivePlans();
-  const plans = allPlans.filter((plan: any) => plan.name !== "agency");
+  // Sort by sort_order from DB, exclude agency
+  const plans = allPlans
+    .filter((plan: any) => plan.name !== "agency")
+    .sort((a: any, b: any) => a.sort_order - b.sort_order);
+
   const params = await searchParams;
-  const cycle = params?.cycle === "yearly" ? "yearly" : "monthly";
+  const cycle = params?.cycle === "monthly" ? "monthly" : "yearly";
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#F7F9F8] text-[#1E1E1E]">
@@ -108,21 +126,22 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-6 pb-8">
+      <section className="mx-auto max-w-5xl px-6 pb-16">
         <div className="flex flex-col lg:flex-row justify-center items-end gap-8 lg:gap-6">
           {plans.map((plan, idx) => {
             const price = cycle === "yearly" ? plan.price_yearly : plan.price_monthly;
             const priceLabel = cycle === "yearly" ? "/yr" : "/mo";
+            const showAdditionalFeatures = plan.name === "solo" || plan.name === "team";
             return (
               <div
                 key={plan.id}
                 className={`relative w-full lg:w-80 rounded-2xl border transition-all duration-300 shadow-lg group ${
-                  idx === 1
+                  idx === 2
                     ? "border-[#1FAE5B]/60 bg-gradient-to-br from-white to-[#1FAE5B]/5 ring-2 ring-[#1FAE5B]/30 lg:scale-105"
                     : "border-[#0F6B3E]/15 bg-white hover:shadow-xl hover:border-[#0F6B3E]/25"
                 }`}
               >
-                {idx === 1 && (
+                {idx === 2 && (
                   <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-20">
                     <span className="inline-block rounded-full bg-gradient-to-r from-[#1FAE5B] to-[#0F6B3E] px-4 py-1.5 text-xs font-bold text-white shadow-lg">
                       ⭐ MOST POPULAR
@@ -166,14 +185,13 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
                       <span className="text-[#1FAE5B] font-bold mt-0.5">✓</span>
                       <span className="text-[#1E1E1E]">
                         <b className="font-semibold">{plan.included_brands} workspaces</b>
-                        {plan.max_brands ? ` (up to ${plan.max_brands})` : ""}
                       </span>
                     </li>
                     {plan.max_influencers && (
                       <li className="flex items-start gap-3">
                         <span className="text-[#1FAE5B] font-bold mt-0.5">✓</span>
                         <span className="text-[#1E1E1E]">
-                          <b className="font-semibold">{plan.max_influencers}</b> influencers per brand
+                          <b className="font-semibold">{plan.name !== "basic" ? "Unlimited" : plan.max_influencers}</b> influencers per brand
                         </span>
                       </li>
                     )}
@@ -185,14 +203,13 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
                         </span>
                       </li>
                     )}
-
                   </ul>
 
                   <PricingPlanButton
                     planName={plan.name}
                     cycle={cycle}
                     isCurrentPlan={currentPlanName === plan.name}
-                    isPopular={idx === 1}
+                    isPopular={idx === 2}
                     currentPlanName={currentPlanName}
                     isPlanHigher={
                       currentPlanName
@@ -200,6 +217,32 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
                         : false
                     }
                   />
+
+                  {showAdditionalFeatures && (
+                    <div className="mt-5 pt-4 border-t border-[#0F6B3E]/10">
+                      <p className="text-[0.625rem] font-bold uppercase tracking-widest text-[#a1a1aa] mb-2">
+                        Additional Features
+                      </p>
+                      <ul>
+                        {additionalFeatures.map((feature, i) => (
+                          <li
+                            key={feature.name}
+                            className={`flex items-center justify-between py-2 group/feature ${
+                              i < additionalFeatures.length - 1 ? "border-b border-[#0F6B3E]/08" : ""
+                            }`}
+                          >
+                            <span className="text-[0.8125rem] text-[#52525b]">{feature.name}</span>
+                            <span
+                              title={feature.tooltip}
+                              className="flex items-center justify-center w-4 h-4 rounded-full border-[1.5px] border-[#d4d4d8] text-[#a1a1aa] text-[0.5625rem] font-bold cursor-default leading-none flex-shrink-0 transition-colors duration-150 group-hover/feature:border-[#1FAE5B] group-hover/feature:text-[#1FAE5B]"
+                            >
+                              i
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -207,64 +250,6 @@ export default async function PricingPage({ searchParams }: { searchParams?: { c
         </div>
       </section>
 
-
-
-      <section className="mx-auto max-w-3xl px-6 pb-20">
-        <h2 className="text-3xl font-bold mb-12 text-center text-[#1E1E1E]">Frequently Asked Questions</h2>
-        <div className="space-y-4">
-          {[
-            {
-              q: "Can I try Instroom for free?",
-              a: "Yes! The Solo plan is free forever. You can also try Team with a free trial.",
-            },
-            {
-              q: "Can I cancel or change plans anytime?",
-              a: "Absolutely. You can upgrade, downgrade, or cancel your subscription at any time from your dashboard with no penalties.",
-            },
-            {
-              q: "Do you offer discounts for agencies or teams?",
-              a: "Yes, the Team plan offers better value for collaboration. For custom enterprise needs, contact our sales team.",
-            },
-            {
-              q: "What payment methods do you accept?",
-              a: "We accept all major credit cards (Visa, Mastercard, AmEx). For annual billing or custom arrangements, contact us.",
-            },
-          ].map(({ q, a }) => (
-            <div
-              key={q}
-              className="rounded-xl bg-white p-6 border border-[#0F6B3E]/10 hover:border-[#0F6B3E]/30 transition-colors"
-            >
-              <p className="font-semibold text-[#1E1E1E] text-lg mb-2">{q}</p>
-              <p className="text-[#666666] leading-relaxed">{a}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <footer className="border-t border-[#0F6B3E]/10 px-6 py-12 lg:px-10">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 text-sm text-[#999999] lg:flex-row">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-[#1FAE5B]">
-              <svg className="h-3.5 w-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
-              </svg>
-            </span>
-            <span className="font-semibold text-[#1E1E1E]">Instroom</span>
-          </div>
-          <p>© {new Date().getFullYear()} Instroom. All rights reserved.</p>
-          <div className="flex gap-6">
-            <a href="#" className="transition-colors hover:text-[#1FAE5B]">
-              Terms
-            </a>
-            <a href="#" className="transition-colors hover:text-[#1FAE5B]">
-              Privacy
-            </a>
-            <a href="#" className="transition-colors hover:text-[#1FAE5B]">
-              Contact
-            </a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

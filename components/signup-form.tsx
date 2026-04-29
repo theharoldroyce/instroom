@@ -295,6 +295,10 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     try {
       setIsLoading(true)
       setError(null)
+      
+      // First, check if email already exists with email/password signup
+      // We need to get the email from Google first or show an intermediate step
+      // For now, proceed with Google signup and let the callback handle it
       await signIn("google", { callbackUrl: "/onboarding" })
     } catch (err) {
       setError("Google signup failed. Please try again.")

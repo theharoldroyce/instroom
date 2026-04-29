@@ -3,11 +3,27 @@
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { MainHeader } from "@/components/main-header"
 
 export function LandingPage() {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null)
+
+  useEffect(() => {
+    const tabs = document.querySelectorAll('.inside-feat-tab')
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = (tab as HTMLElement).dataset.tab
+        const container = tab.closest('.inside-tabbed')
+        if (!container || !target) return
+        container.querySelectorAll('.inside-feat-tab').forEach(t => t.classList.remove('tab-active'))
+        container.querySelectorAll('.inside-feat-panel').forEach(p => p.classList.remove('panel-active'))
+        tab.classList.add('tab-active')
+        const panel = container.querySelector(`[data-panel="${target}"]`)
+        if (panel) panel.classList.add('panel-active')
+      })
+    })
+  }, [])
 
   const faqs = [
     { q: "Do I need the full platform, or can I start with just the Chrome Extension?", a: "Either works. The Chrome Extension and Post Tracker are standalone products with their own pricing. You can use them without ever signing up for the full platform. If you want everything in one workspace later, you can connect them to Instroom and your data carries over." },
@@ -72,8 +88,12 @@ export function LandingPage() {
           padding: 0 24px;
         }
 
-        .section       { padding: 96px 0; border-bottom: 1px solid rgba(30,30,30,0.07); }
+        .section       { padding: 96px 0; }
         .section-alt   { background: var(--off-white); }
+
+        /* ── Alternating section backgrounds (mirrors feature page) ── */
+        .sec-odd  { background: #ffffff; }
+        .sec-even { background: #F4F7F5; }
 
         .section-header {
           text-align: center;
@@ -98,12 +118,10 @@ export function LandingPage() {
         .hero {
           padding: 96px 0 72px;
           text-align: center;
-          background: var(--off-white);
-          /* subtle dot grid */
+          /* base color comes from sec-odd / sec-even; dot grid overlays on top */
           background-image:
             radial-gradient(circle, rgba(31,174,91,0.12) 1px, transparent 1px);
           background-size: 28px 28px;
-          border-bottom: 1px solid rgba(30,30,30,0.07);
         }
 
         .hero h1 {
@@ -156,9 +174,7 @@ export function LandingPage() {
         /* ── Stats ── */
         .stats {
           padding: 64px 0 48px;
-          background: white;
           text-align: center;
-          border-bottom: 1px solid rgba(30,30,30,0.07);
         }
 
         .stats-row {
@@ -192,8 +208,6 @@ export function LandingPage() {
         /* ── Trust bar ── */
         .trust {
           padding: 48px 0 56px;
-          background: white;
-          border-bottom: 1px solid rgba(30,30,30,0.09);
         }
 
         .trust-label {
@@ -213,7 +227,7 @@ export function LandingPage() {
           overflow: hidden;
           opacity: 0.7;
           position: relative;
-          height: 70px;
+          height: 90px;
         }
 
         .trust-carousel {
@@ -237,8 +251,8 @@ export function LandingPage() {
         }
 
         .trust-logo {
-          height: 36px;
-          padding: 0 12px;
+          height: 52px;
+          padding: 0 16px;
           background: #f3f3f3;
           border-radius: 8px;
           display: flex;
@@ -246,6 +260,13 @@ export function LandingPage() {
           justify-content: center;
           flex-shrink: 0;
           border: 1px solid #e5e5e5;
+        }
+
+        .trust-logo img {
+          height: 40px !important;
+          width: auto !important;
+          max-width: 140px !important;
+          object-fit: contain !important;
         }
 
         /* ── Problem cards ── */
@@ -630,10 +651,8 @@ export function LandingPage() {
 
         /* ── Early / testimonial placeholder ── */
         .early {
-          background: linear-gradient(135deg, #EDF5F0 0%, #D9EDE2 100%);
           text-align: center;
           padding: 80px 0;
-          border-bottom: 1px solid rgba(30,30,30,0.07);
         }
 
         .early-inner {
@@ -660,8 +679,6 @@ export function LandingPage() {
         /* ── FAQ ── */
         .faq {
           padding: 96px 0;
-          background: white;
-          border-bottom: 1px solid rgba(30,30,30,0.07);
         }
 
         .faq-list {
@@ -912,8 +929,203 @@ export function LandingPage() {
           margin: 0 auto;
         }
 
+        /* ── What's Inside — Tabbed ── */
+        .inside-tabbed-intro {
+          text-align: center;
+          max-width: 720px;
+          margin: 0 auto 48px;
+        }
+
+        .inside-tabbed-intro h2 {
+          font-family: 'Manrope', sans-serif;
+          font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          color: #1E1E1E;
+          margin-bottom: 14px;
+          line-height: 1.2;
+        }
+
+        .inside-tabbed-intro p {
+          font-size: 1.0625rem;
+          color: #52525b;
+          line-height: 1.65;
+        }
+
+        .inside-feat-tabs {
+          display: flex;
+          justify-content: center;
+          gap: 8px;
+          margin-bottom: 48px;
+          flex-wrap: wrap;
+          padding: 6px;
+          background: #F7F9F8;
+          border: 0.5px solid rgba(30,30,30,0.08);
+          border-radius: 14px;
+          max-width: max-content;
+          margin-left: auto;
+          margin-right: auto;
+        }
+
+        .inside-feat-tab {
+          background: transparent;
+          border: none;
+          padding: 12px 22px;
+          border-radius: 10px;
+          font-family: 'Inter', sans-serif;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          color: #6B7280;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+        }
+
+        .inside-feat-tab:hover { color: #1E1E1E; }
+
+        .inside-feat-tab.tab-active {
+          background: #0F6B3E;
+          color: white;
+          box-shadow: 0 2px 8px rgba(15, 107, 62, 0.18);
+        }
+
+        .inside-feat-tab.tab-active:hover { color: white; }
+
+        .inside-feat-panel {
+          display: none;
+          animation: insideFadeIn 0.25s ease;
+        }
+
+        .inside-feat-panel.panel-active { display: block; }
+
+        @keyframes insideFadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .inside-feat-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 64px;
+          align-items: center;
+        }
+
+        .inside-feat-visual {
+          background: linear-gradient(135deg, #F7F9F8 0%, #EEF4F0 100%);
+          border: 0.5px solid rgba(30,30,30,0.08);
+          border-radius: 18px;
+          aspect-ratio: 4 / 3;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 32px;
+          box-shadow: 0 8px 32px rgba(15, 107, 62, 0.04);
+        }
+
+        .inside-feat-visual-icon {
+          width: 72px;
+          height: 72px;
+          border-radius: 18px;
+          background: #1FAE5B;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 2rem;
+          font-family: 'Manrope', sans-serif;
+          font-weight: 800;
+        }
+
+        .inside-feat-visual-label {
+          font-size: 0.75rem;
+          color: #6B7280;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-top: 4px;
+          text-align: center;
+        }
+
+        .inside-feat-eyebrow {
+          font-size: 0.75rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: #1FAE5B;
+          margin-bottom: 14px;
+        }
+
+        .inside-feat-text h3 {
+          font-family: 'Manrope', sans-serif;
+          font-size: clamp(1.5rem, 2.5vw, 1.875rem);
+          font-weight: 700;
+          color: #1E1E1E;
+          line-height: 1.2;
+          margin-bottom: 16px;
+        }
+
+        .inside-feat-lead {
+          color: #3F3F46;
+          font-size: 1.0625rem;
+          line-height: 1.7;
+          margin-bottom: 24px;
+        }
+
+        .inside-feat-bullets {
+          list-style: none;
+          padding: 0;
+          margin: 0 0 24px;
+        }
+
+        .inside-feat-bullets li {
+          padding: 8px 0 8px 28px;
+          position: relative;
+          color: #3F3F46;
+          font-size: 0.9375rem;
+          line-height: 1.55;
+        }
+
+        .inside-feat-bullets li::before {
+          content: "✓";
+          color: #1FAE5B;
+          font-weight: 700;
+          position: absolute;
+          left: 0;
+        }
+
+        .inside-feat-link {
+          font-weight: 600;
+          color: #1FAE5B;
+          font-size: 0.9375rem;
+          text-decoration: none;
+          display: inline-block;
+        }
+
+        .inside-feat-link:hover { text-decoration: underline; }
+
         /* ── Responsive ── */
         @media (max-width: 900px) {
+          .inside-feat-grid {
+            grid-template-columns: 1fr;
+            gap: 32px;
+          }
+
+          .inside-feat-tabs {
+            gap: 4px;
+            overflow-x: auto;
+            justify-content: flex-start;
+            flex-wrap: nowrap;
+            max-width: 100%;
+            padding: 4px;
+          }
+
+          .inside-feat-tab {
+            padding: 10px 14px;
+            font-size: 0.875rem;
+          }
+
           .problem-cards,
           .outcomes-grid,
           .how-grid,
@@ -980,7 +1192,7 @@ export function LandingPage() {
       <MainHeader />
 
       {/* HERO */}
-      <section className="hero">
+      <section className="hero sec-even">
         <div className="container-md">
           <p className="text-xs font-bold uppercase tracking-widest text-green-600 mb-5">
             Influencer marketing, organized
@@ -1012,7 +1224,7 @@ export function LandingPage() {
       </section>
 
       {/* STATS */}
-      <section className="stats">
+      <section className="stats sec-odd">
         <div className="container-md">
           <div className="stats-row">
             <div className="stat">
@@ -1033,20 +1245,72 @@ export function LandingPage() {
       </section>
 
       {/* TRUST BAR */}
-      <section className="trust">
+      <section className="trust sec-even">
         <div className="container-md">
           <p className="trust-label">Brands we've managed campaigns for</p>
           <div className="trust-logos">
             <div className="trust-carousel">
-              {Array.from({ length: 17 }, (_, i) => 15 + i).map(n => (
-                <div key={n} className="trust-logo">
-                  <Image src={`/images/brandLogo/${n}.png`} alt={`Brand ${n}`} width={100} height={36} />
+              {[
+                { name: "Alcanside", ext: "png" },
+                { name: "AwesomeMaps", ext: "jpg" },
+                { name: "Chapters", ext: "jpg" },
+                { name: "Comfit", ext: "png" },
+                { name: "CuliStack", ext: "jpg" },
+                { name: "Dadafunk", ext: "png" },
+                { name: "Dreamfully", ext: "jpg" },
+                { name: "Ease", ext: "png" },
+                { name: "Formulation", ext: "jpg" },
+                { name: "Heroka", ext: "jpg" },
+                { name: "Lotgenootje", ext: "jpeg" },
+                { name: "MoomHealth", ext: "jpg" },
+                { name: "Muse", ext: "png" },
+                { name: "Nonoise", ext: "jpg" },
+                { name: "Okura", ext: "png" },
+                { name: "OralAdvance", ext: "jpg" },
+                { name: "Pacdora", ext: "jpg" },
+                { name: "Remodius", ext: "png" },
+                { name: "Royo", ext: "png" },
+                { name: "Shihiko", ext: "jpg" },
+                { name: "SylvianGrant", ext: "png" },
+                { name: "TapOut", ext: "jpg" },
+                { name: "TWGR", ext: "gif" },
+                { name: "Yummii", ext: "png" },
+                { name: "Zippit", ext: "png" },
+              ].map(({ name, ext }) => (
+                <div key={name} className="trust-logo">
+                  <Image src={`/images/brandLogo/${name}.${ext}`} alt={name} width={140} height={40} style={{ objectFit: "contain", height: "40px", width: "auto", maxWidth: "140px" }} />
                 </div>
               ))}
               {/* Duplicate logos for seamless loop */}
-              {Array.from({ length: 17 }, (_, i) => 15 + i).map(n => (
-                <div key={`dup-${n}`} className="trust-logo">
-                  <Image src={`/images/brandLogo/${n}.png`} alt={`Brand ${n}`} width={100} height={36} />
+              {[
+                { name: "Alcanside", ext: "png" },
+                { name: "AwesomeMaps", ext: "jpg" },
+                { name: "Chapters", ext: "jpg" },
+                { name: "Comfit", ext: "png" },
+                { name: "CuliStack", ext: "jpg" },
+                { name: "Dadafunk", ext: "png" },
+                { name: "Dreamfully", ext: "jpg" },
+                { name: "Ease", ext: "png" },
+                { name: "Formulation", ext: "jpg" },
+                { name: "Heroka", ext: "jpg" },
+                { name: "Lotgenootje", ext: "jpeg" },
+                { name: "MoomHealth", ext: "jpg" },
+                { name: "Muse", ext: "png" },
+                { name: "Nonoise", ext: "jpg" },
+                { name: "Okura", ext: "png" },
+                { name: "OralAdvance", ext: "jpg" },
+                { name: "Pacdora", ext: "jpg" },
+                { name: "Remodius", ext: "png" },
+                { name: "Royo", ext: "png" },
+                { name: "Shihiko", ext: "jpg" },
+                { name: "SylvianGrant", ext: "png" },
+                { name: "TapOut", ext: "jpg" },
+                { name: "TWGR", ext: "gif" },
+                { name: "Yummii", ext: "png" },
+                { name: "Zippit", ext: "png" },
+              ].map(({ name, ext }) => (
+                <div key={`dup-${name}`} className="trust-logo">
+                  <Image src={`/images/brandLogo/${name}.${ext}`} alt={name} width={140} height={40} style={{ objectFit: "contain", height: "40px", width: "auto", maxWidth: "140px" }} />
                 </div>
               ))}
             </div>
@@ -1055,7 +1319,7 @@ export function LandingPage() {
       </section>
 
       {/* PROBLEM */}
-      <section className="section section-alt">
+      <section className="section sec-odd">
         <div className="container-md">
           <div className="section-header">
             <h2>You didn't start your brand to live in a spreadsheet.</h2>
@@ -1074,7 +1338,7 @@ export function LandingPage() {
       </section>
 
       {/* OUTCOMES */}
-      <section className="section" style={{ background: "white" }}>
+      <section className="section sec-even">
         <div className="container-md">
           <div className="section-header">
             <h2>Here's what changes with Instroom.</h2>
@@ -1093,32 +1357,138 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* WHAT'S INSIDE */}
-      <section className="section section-alt" id="features">
+      {/* WHAT'S INSIDE — Tabbed */}
+      <section className="section sec-odd inside-tabbed" id="features">
         <div className="container-md">
-          <div className="section-header">
-            <h2>What's inside</h2>
-            <p>A closer look at the parts you'll actually use every day.</p>
+          <div className="inside-tabbed-intro">
+            <h2>What&rsquo;s inside Instroom.</h2>
+            <p>Five core tools that replace the stack you&rsquo;ve been duct-taping together. Click through to see each one.</p>
           </div>
 
-          {features.map((feature, index) => (
-            <div key={index} className={`inside-row ${index % 2 === 1 ? 'reverse' : ''}`}>
-              <div className="inside-text">
-                <div className="inside-eyebrow">{feature.eyebrow}</div>
-                <h3>{feature.title}</h3>
-                <p>{feature.desc}</p>
-                <a href={feature.link} className="inside-link">Learn more →</a>
-              </div>
-              <div className="inside-visual">
-                [Feature screenshot]
+          <div className="inside-feat-tabs">
+            <button className="inside-feat-tab tab-active" data-tab="pipeline">Pipeline</button>
+            <button className="inside-feat-tab" data-tab="email">Email</button>
+            <button className="inside-feat-tab" data-tab="crm">Creator CRM</button>
+            <button className="inside-feat-tab" data-tab="reporting">Reporting</button>
+            <button className="inside-feat-tab" data-tab="brand-partners">Brand Partners</button>
+          </div>
+
+          <div>
+            {/* Pipeline */}
+            <div className="inside-feat-panel panel-active" data-panel="pipeline">
+              <div className="inside-feat-grid">
+                <div className="inside-feat-visual">
+                  <div className="inside-feat-visual-icon">⊞</div>
+                  <div className="inside-feat-visual-label">Pipeline management preview coming soon</div>
+                </div>
+                <div className="inside-feat-text">
+                  <div className="inside-feat-eyebrow">Pipeline management</div>
+                  <h3>Work the way you want. List, board, or both.</h3>
+                  <p className="inside-feat-lead">The same data in two views. See everything in a Kanban board or scan fast in a spreadsheet view. Switch between them in one click.</p>
+                  <ul className="inside-feat-bullets">
+                    <li>Pre-built pipeline stages per campaign</li>
+                    <li>List or Kanban view, your choice</li>
+                    <li>Drag and drop to update stages</li>
+                    <li>Bulk actions: update or assign in one move</li>
+                  </ul>
+                  <a href="landing-nav/features#pipeline" className="inside-feat-link">See full details &rarr;</a>
+                </div>
               </div>
             </div>
-          ))}
+
+            {/* Email */}
+            <div className="inside-feat-panel" data-panel="email">
+              <div className="inside-feat-grid">
+                <div className="inside-feat-visual">
+                  <div className="inside-feat-visual-icon">✉</div>
+                  <div className="inside-feat-visual-label">Embedded email preview coming soon</div>
+                </div>
+                <div className="inside-feat-text">
+                  <div className="inside-feat-eyebrow">Embedded Email</div>
+                  <h3>Reach out, reply, and track without leaving Instroom.</h3>
+                  <p className="inside-feat-lead">Your inbox lives inside the workspace. Every email auto-tagged to the right campaign and stage, so context never gets lost.</p>
+                  <ul className="inside-feat-bullets">
+                    <li>Connect Gmail or Outlook in one click</li>
+                    <li>Auto-tagged to campaign and pipeline stage</li>
+                    <li>Templates with creator variables</li>
+                    <li>Full thread history on every creator profile</li>
+                  </ul>
+                  <a href="landing-nav/features#email" className="inside-feat-link">See full details &rarr;</a>
+                </div>
+              </div>
+            </div>
+
+            {/* Creator CRM */}
+            <div className="inside-feat-panel" data-panel="crm">
+              <div className="inside-feat-grid">
+                <div className="inside-feat-visual">
+                  <div className="inside-feat-visual-icon">👤</div>
+                  <div className="inside-feat-visual-label">Creator CRM preview coming soon</div>
+                </div>
+                <div className="inside-feat-text">
+                  <div className="inside-feat-eyebrow">Creator CRM</div>
+                  <h3>Profiles that remember everything.</h3>
+                  <p className="inside-feat-lead">Every campaign, every post, every payment, every conversation. When you come back to a creator six months later, the full history is waiting.</p>
+                  <ul className="inside-feat-bullets">
+                    <li>Full campaign and content history</li>
+                    <li>Payment and deal records attached</li>
+                    <li>Tags, custom fields, and team notes</li>
+                    <li>Shared across your team with roles</li>
+                  </ul>
+                  <a href="landing-nav/features#crm" className="inside-feat-link">See full details &rarr;</a>
+                </div>
+              </div>
+            </div>
+
+            {/* Reporting */}
+            <div className="inside-feat-panel" data-panel="reporting">
+              <div className="inside-feat-grid">
+                <div className="inside-feat-visual">
+                  <div className="inside-feat-visual-icon">⚑</div>
+                  <div className="inside-feat-visual-label">Reporting preview coming soon</div>
+                </div>
+                <div className="inside-feat-text">
+                  <div className="inside-feat-eyebrow">Reporting</div>
+                  <h3>Client-ready reports, one click away.</h3>
+                  <p className="inside-feat-lead">Stop building reports the night before a client call. Pull performance by creator, campaign, or deliverable. Export PDFs or share live links.</p>
+                  <ul className="inside-feat-bullets">
+                    <li>One-click campaign summaries</li>
+                    <li>Per-creator performance breakdowns</li>
+                    <li>Live-updating shareable links</li>
+                    <li>Clean PDF exports for clients</li>
+                  </ul>
+                  <a href="landing-nav/features#reporting" className="inside-feat-link">See full details &rarr;</a>
+                </div>
+              </div>
+            </div>
+
+            {/* Brand Partners */}
+            <div className="inside-feat-panel" data-panel="brand-partners">
+              <div className="inside-feat-grid">
+                <div className="inside-feat-visual">
+                  <div className="inside-feat-visual-icon">★</div>
+                  <div className="inside-feat-visual-label">Brand Partners preview coming soon</div>
+                </div>
+                <div className="inside-feat-text">
+                  <div className="inside-feat-eyebrow">Brand Partners</div>
+                  <h3>Creators worth more than a campaign.</h3>
+                  <p className="inside-feat-lead">Some creators keep delivering, campaign after campaign. Brand Partners gives those relationships structure: tiered status, retainers, full history.</p>
+                  <ul className="inside-feat-bullets">
+                    <li>Auto tier assignment based on revenue</li>
+                    <li>Retainer and recurring deal tracking</li>
+                    <li>Full performance history across campaigns</li>
+                    <li>Community status: Invited, Joined, Pending</li>
+                  </ul>
+                  <a href="landing-nav/features#brand-partners" className="inside-feat-link">See full details &rarr;</a>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="section" style={{ background: "white" }}>
+      <section className="section sec-even">
         <div className="container-md">
           <div className="section-header">
             <h2>Get started in minutes.</h2>
@@ -1145,7 +1515,7 @@ export function LandingPage() {
       </section>
 
       {/* COMPARISON */}
-      <section className="section section-alt">
+      <section className="section sec-odd">
         <div className="container-md">
           <div className="section-header">
             <h2>Instroom vs. a spreadsheet.</h2>
@@ -1169,7 +1539,7 @@ export function LandingPage() {
       </section>
 
       {/* FOUNDER */}
-      <section className="section" style={{ background: "linear-gradient(180deg, var(--off-white) 0%, #DFF0E7 100%)" }}>
+      <section className="section sec-even">
         <div className="container-md">
           <div className="founder-inner">
             <div className="founder-label">A note from our founder</div>
@@ -1199,7 +1569,7 @@ export function LandingPage() {
       </section>
 
       {/* STANDALONE */}
-      <section className="section section-alt" id="standalone">
+      <section className="section sec-odd" id="standalone">
         <div className="container-md">
           <div className="section-header">
             <h2>Not ready for the full workspace? Start with a piece.</h2>
@@ -1221,7 +1591,7 @@ export function LandingPage() {
       </section>
 
       {/* EARLY USERS / TESTIMONIAL PLACEHOLDER */}
-      <section className="early">
+      <section className="early sec-even">
         <div className="early-inner">
           <h2>No testimonials yet</h2>
           <p className="early-body">We're not going to make any up. Right now, we are our own testimonials. We use Instroom every day to run our agency across 30 brands, and that's the honest proof that it works.</p>
@@ -1237,7 +1607,7 @@ export function LandingPage() {
       </section>
 
       {/* FAQ */}
-      <section className="faq" id="faq">
+      <section className="faq sec-odd" id="faq">
         <div className="container-md">
           <div className="section-header">
             <h2>Questions you're probably asking.</h2>
@@ -1265,7 +1635,7 @@ export function LandingPage() {
       </section>
 
       {/* PRICING */}
-      <section className="section section-alt" id="pricing">
+      <section className="section sec-even" id="pricing">
         <div className="container-md">
           <div className="section-header">
             <h2>Simple pricing. No per-seat games.</h2>
