@@ -3,8 +3,6 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function getHeader(headers: { name: string; value: string }[], name: string): string {
   return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || ""
 }
@@ -31,8 +29,6 @@ function extractText(payload: any): string {
   }
   return ""
 }
-
-// ─── Token refresh helper ────────────────────────────────────────────────────
 
 async function refreshToken(refresh_token: string, userId: string): Promise<string | null> {
   try {
@@ -65,10 +61,10 @@ async function refreshToken(refresh_token: string, userId: string): Promise<stri
   }
 }
 
-// ─── Main handler ─────────────────────────────────────────────────────────────
-
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions) as any
+  const { searchParams } = new URL(req.url)
+  const brandId = searchParams.get("brandId")
 
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
@@ -204,13 +200,21 @@ export async function GET(req: NextRequest) {
 
     // 4. Look up BrandInfluencer records for all sender emails in one Prisma query
     const userId = session.user?.id
-    const brandMember = userId
-      ? await prisma.brandMember.findFirst({
-          where: { user_id: userId },
-          select: { brand_id: true },
-          orderBy: { created_at: "desc" },
-        })
-      : null
+    
+    // Use provided brandId or find the most recent brand for this user
+    let brand_id = brandId
+    if (!brand_id && userId) {
+      const brandMember = await prisma.brandMember.findFirst({
+        where: { user_id: userId },
+        select: { brand_id: true },
+        orderBy: { created_at: "desc" },
+      })
+      brand_id = brandMember?.brand_id || null
+    }
+
+    if (!brand_id) {
+      return NextResponse.json({ error: "No brand context found" }, { status: 400 })
+    }
 
     const senderEmails = [...new Set(shapedThreads.map((t) => t.senderEmail).filter(Boolean))]
 
@@ -222,28 +226,27 @@ export async function GET(req: NextRequest) {
       influencer: { email: string | null }
     }
 
-    const brandInfluencers: BrandInfluencerRow[] = brandMember
-      ? await prisma.brandInfluencer.findMany({
-          where: {
-            brand_id: brandMember.brand_id,
-            influencer: { email: { in: senderEmails } },
-          },
-          select: {
-            contact_status: true,
-            content_posted: true,
-            stage: true,
-            order_status: true,
-            influencer: { select: { email: true } },
-          },
-        })
-      : []
+    const brandInfluencers: BrandInfluencerRow[] = await prisma.brandInfluencer.findMany({
+      where: {
+        brand_id: brand_id,
+        influencer: { email: { in: senderEmails } },
+      },
+      select: {
+        contact_status: true,
+        content_posted: true,
+        stage: true,
+        order_status: true,
+        influencer: { select: { email: true } },
+      },
+    })
 
     // Build email → brandInfluencer map
     const biByEmail = new Map(
       brandInfluencers.map((bi) => [bi.influencer.email?.toLowerCase(), bi])
     )
 
-    // 5. Attach brandInfluencer to each thread (null for unknown senders → falls back to PROSPECT)
+    // 5. Attach brandInfluencer to each thread (null for unknown senders)
+    // This allows inbox to show all emails, but stage updates require existing BrandInfluencer
     const threads = shapedThreads.map(({ senderEmail, ...thread }) => ({
       ...thread,
       brandInfluencer: biByEmail.get(senderEmail) ?? null,
@@ -251,7 +254,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ threads })
   } catch (err: any) {
-    console.error("Gmail threads error:", err)
     return NextResponse.json({ error: err.message || "Failed to fetch threads" }, { status: 500 })
   }
 }

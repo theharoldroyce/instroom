@@ -38,11 +38,17 @@ export function LoginForm({
     password: "",
   })
 
-  // Check for error from query parameters (e.g., from OAuth duplicate account)
+  // Check for error from query parameters (e.g., from OAuth duplicate account or auth method mismatch)
   useEffect(() => {
     const errorParam = searchParams?.get("error")
     const messageParam = searchParams?.get("message")
-    if (errorParam === "account-exists" && messageParam) {
+    const authErrorParam = searchParams?.get("authError")
+    
+    if (authErrorParam === "use-email-password") {
+      setError("This account was created with email and password. Please sign in using your email and password.")
+    } else if (authErrorParam === "account-exists-with-password") {
+      setError("This email is already registered with email and password. Please sign in using your email and password.")
+    } else if (errorParam === "account-exists" && messageParam) {
       setError(decodeURIComponent(messageParam))
     }
   }, [searchParams])
@@ -85,6 +91,11 @@ export function LoginForm({
       })
 
       if (result?.error) {
+        // Check for custom auth method errors
+        if (result.error === "GoogleSignupOnly") {
+          setError("This account was created with Google. Please sign in using your Google account.")
+          return
+        }
         setError("Invalid email or password")
         return
       }
@@ -116,6 +127,11 @@ export function LoginForm({
     try {
       setIsLoading(true)
       setError(null)
+      
+      // Check what signup method was used for this email
+      // Note: We can't check email before Google signin since user hasn't entered it
+      // This will be caught in the auth callback and error page
+      
       await signIn("google", {
         callbackUrl: "/api/auth/redirect",
         redirect: true

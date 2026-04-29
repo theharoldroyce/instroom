@@ -20,9 +20,9 @@ export function PricingPlanButton({
   isPlanHigher,
 }: PricingPlanButtonProps) {
   let buttonText = "Get Started"
-  
+
   if (isCurrentPlan) {
-    buttonText = "Renew"
+    buttonText = "Current Plan"
   } else if (currentPlanName && isPlanHigher) {
     buttonText = "Upgrade"
   } else if (currentPlanName && !isPlanHigher) {
@@ -30,6 +30,14 @@ export function PricingPlanButton({
   }
 
   const isHighlighted = isPopular || isCurrentPlan
+
+  if (isCurrentPlan) {
+    return (
+      <span className="w-full block rounded-lg py-3 text-center text-base font-semibold cursor-default bg-[#1FAE5B]/10 text-[#1FAE5B] border-2 border-[#1FAE5B]/30">
+        {buttonText}
+      </span>
+    )
+  }
 
   return (
     <Link
@@ -44,4 +52,3 @@ export function PricingPlanButton({
     </Link>
   )
 }
-
