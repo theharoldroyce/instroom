@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { signIn, useSession } from "next-auth/react"
 import { SubscriptionGate } from "@/components/ui/subscription-gate"
@@ -201,7 +201,7 @@ function formatRelativeDate(timestamp: string): string {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function InboxPage() {
+function InboxContent() {
   const { data: session } = useSession()
   const searchParams = useSearchParams()
   const brandId = searchParams.get("brandId")
@@ -1144,5 +1144,13 @@ export default function InboxPage() {
       `}</style>
     </div>
     </SubscriptionGate>
+  )
+}
+
+export default function InboxPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <InboxContent />
+    </Suspense>
   )
 }
