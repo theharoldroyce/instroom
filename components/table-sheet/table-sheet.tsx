@@ -12,7 +12,6 @@ import {
   IconSettings, IconChevronDown, IconLoader2, IconArrowsSort,
 } from "@tabler/icons-react"
 
-// ── Local split modules ───────────────────────────────────────────────────────
 import type { InfluencerRow, CustomColumn, AnyColDef, CustomColDef, CellAddress, FilterState, ToastNotification, SortOrder } from "./types"
 import {
   DEFAULT_NICHES, DEFAULT_LOCATIONS, DEFAULT_GENDERS, DEFAULT_CONTACT_STATUSES,
@@ -34,52 +33,120 @@ import { ToastContainer } from "./toast"
 import ProfileSidebar from "./profile-sidebar"
 import { useBrandTaxonomy } from "@/hooks/useBrandTaxonomy"
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   SORT TOGGLE
-   ═══════════════════════════════════════════════════════════════════════════════ */
 import { IconArrowDown, IconArrowUp } from "@tabler/icons-react"
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   EMPTY STATE
+   ═══════════════════════════════════════════════════════════════════════════════ */
+function EmptyState({
+  onAddRow,
+  onOpenAddRowsModal,
+}: {
+  onAddRow: () => void
+  onOpenAddRowsModal: () => void
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+      {/* Icon */}
+      <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mb-5">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <circle cx="10" cy="7" r="4" stroke="#3B6D11" strokeWidth="1.5" />
+          <path
+            d="M2 21c0-4 3.6-7 8-7"
+            stroke="#3B6D11"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M17 14v6M14 17h6"
+            stroke="#1FAE5B"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+
+      {/* Heading */}
+      <p className="text-[15px] font-medium text-gray-900 mb-1.5">
+        No influencers yet
+      </p>
+      <p className="text-[13px] text-gray-500 mb-7 max-w-xs leading-relaxed">
+        Add your first influencer manually or import a CSV file to get started.
+      </p>
+
+      {/* CTAs */}
+      <div className="flex items-center gap-2 flex-wrap justify-center">
+        <button
+          onClick={onAddRow}
+          className="flex items-center gap-1.5 px-4 py-2 bg-[#1FAE5B] text-white rounded-lg text-[13px] font-medium hover:bg-[#189e4f] transition"
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          Add influencer
+        </button>
+        <button
+          onClick={onOpenAddRowsModal}
+          className="flex items-center gap-1.5 px-4 py-2 bg-white text-gray-700 border border-gray-200 rounded-lg text-[13px] hover:bg-gray-50 transition"
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+            <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+          </svg>
+          Add multiple rows
+        </button>
+      </div>
+
+      {/* Hints */}
+      <div className="flex items-center justify-center gap-5 mt-8 pt-6 border-t border-gray-100 flex-wrap">
+        {[
+          "Type a handle to auto-fetch profile data",
+          "Instagram & TikTok supported",
+          "Drag columns to reorder",
+        ].map((hint) => (
+          <div key={hint} className="flex items-center gap-1.5 text-[11px] text-gray-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1FAE5B] flex-shrink-0" />
+            {hint}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SORT TOGGLE  — now used inside FilterPopover via props (see toolbar below)
+   ═══════════════════════════════════════════════════════════════════════════════ */
 function SortToggle({ sortOrder, onChange }: { sortOrder: SortOrder; onChange: (o: SortOrder) => void }) {
   return (
-    // <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-    //   <button onClick={() => onChange("newest")} title="Newest first"
-    //     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${sortOrder === "newest" ? "bg-green-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
-    //     <IconArrowDown size={13} /> Newest
-    //   </button>
-    //   <div className="w-px h-5 bg-gray-200" />
-    //   <button onClick={() => onChange("oldest")} title="Oldest first"
-    //     className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition ${sortOrder === "oldest" ? "bg-green-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
-    //     <IconArrowUp size={13} /> Oldest
-    //   </button>
-    // </div>
-
     <div className="inline-flex h-9 items-center rounded-lg border border-[#0F6B3E]/20 bg-white p-1">
-  <button
-    onClick={() => onChange("newest")}
-    title="Newest first"
-    className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
-      sortOrder === "newest"
-        ? "bg-[#1FAE5B] text-white shadow-sm"
-        : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
-    }`}
-  >
-    <IconArrowDown size={14} />
-    Newest
-  </button>
-
-  <button
-    onClick={() => onChange("oldest")}
-    title="Oldest first"
-    className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
-      sortOrder === "oldest"
-        ? "bg-[#1FAE5B] text-white shadow-sm"
-        : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
-    }`}
-  >
-    <IconArrowUp size={14} />
-    Oldest
-  </button>
-</div>
+      <button
+        onClick={() => onChange("newest")}
+        title="Newest first"
+        className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+          sortOrder === "newest"
+            ? "bg-[#1FAE5B] text-white shadow-sm"
+            : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+        }`}
+      >
+        <IconArrowDown size={14} />
+        Newest
+      </button>
+      <button
+        onClick={() => onChange("oldest")}
+        title="Oldest first"
+        className={`h-7 px-3 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+          sortOrder === "oldest"
+            ? "bg-[#1FAE5B] text-white shadow-sm"
+            : "text-gray-600 hover:bg-gray-50 hover:text-[#0F6B3E]"
+        }`}
+      >
+        <IconArrowUp size={14} />
+        Oldest
+      </button>
+    </div>
   )
 }
 
@@ -109,7 +176,6 @@ export default function TableSheet({
   const [customCols, setCustomCols] = useState<CustomColumn[]>(initialCustomColumns)
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest")
 
-  // ── Register id swap so parent can also call it if needed ────────────────────
   const swapIdRef = useRef<(tempId: string, realId: string) => void>(() => {})
   useEffect(() => {
     const swapFn = (tempId: string, realId: string) => {
@@ -126,24 +192,20 @@ export default function TableSheet({
   }, [initialRows])
   useEffect(() => { setCustomCols(initialCustomColumns) }, [initialCustomColumns])
 
-  // ── Cell state ──────────────────────────────────────────────────────────────
   const [activeCell, setActiveCell] = useState<CellAddress | null>(null)
   const [editCell, setEditCell]     = useState<CellAddress | null>(null)
   const [editValue, setEditValue]   = useState("")
   const [popupCell, setPopupCell]   = useState<CellAddress | null>(null)
 
-  // ── Pagination ──────────────────────────────────────────────────────────────
   const [rowsPerPage, setRowsPerPage] = useState(100)
   const [currentPage, setCurrentPage] = useState(1)
 
-  // ── Column drag ─────────────────────────────────────────────────────────────
   const [addingCol, setAddingCol]       = useState(false)
   const [colOrder, setColOrder]         = useState<number[] | null>(null)
   const [dragIdx, setDragIdx]           = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx]   = useState<number | null>(null)
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null)
 
-  // ── Search / filter ─────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery]         = useState("")
   const [showFilterPopover, setShowFilterPopover] = useState(false)
   const [filters, setFilters] = useState<FilterState>({
@@ -151,7 +213,6 @@ export default function TableSheet({
     approval: "all", dateFrom: "", dateTo: "",
   })
 
-  // ── Modals ──────────────────────────────────────────────────────────────────
   const [showAddRowsModal, setShowAddRowsModal]   = useState(false)
   const [showDeclineModal, setShowDeclineModal]   = useState(false)
   const [pendingDeclineRowIdx, setPendingDeclineRowIdx] = useState<number | null>(null)
@@ -163,7 +224,6 @@ export default function TableSheet({
     onConfirm: () => void; variant: "danger" | "warning" | "info"
   }>({ isOpen: false, title: "", message: "", onConfirm: () => {}, variant: "danger" })
 
-  // ── API Error Modal State ────────────────────────────────────────────────────
   const [apiErrorModal, setApiErrorModal] = useState<{
     open: boolean
     platform?: string
@@ -171,12 +231,10 @@ export default function TableSheet({
     rowId?: string
   }>({ open: false })
 
-  // ── Selection ───────────────────────────────────────────────────────────────
   const [selectedRowId, setSelectedRowId]   = useState<string | null>(null)
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set())
   const [sidebarRowId, setSidebarRowId]     = useState<string | null>(null)
 
-  // ── Options (DB-backed via useBrandTaxonomy) ─────────────────────────────────
   const {
     niches: dbNiches,
     locations: dbLocations,
@@ -186,7 +244,6 @@ export default function TableSheet({
     removeLocation: dbRemoveLocation,
   } = useBrandTaxonomy(brandId ?? null)
 
-  // Merge DB entries with DEFAULT fallbacks so dropdowns always have options.
   const [nicheOptions, setNicheOptions] = useState<string[]>(DEFAULT_NICHES)
   const [locationOptions, setLocationOptions] = useState<string[]>(DEFAULT_LOCATIONS)
 
@@ -198,17 +255,14 @@ export default function TableSheet({
     if (dbLocations.length > 0) setLocationOptions(dbLocations.map(l => l.name))
   }, [dbLocations])
 
-  // ── API fetch state ─────────────────────────────────────────────────────────
   const [fetchingRows, setFetchingRows]           = useState<Set<string>>(new Set())
   const [duplicateRowIds, setDuplicateRowIds]     = useState<Set<string>>(new Set())
   const [pendingDuplicateInfo, setPendingDuplicateInfo] = useState<{ rowId: string; handle: string; existingName: string } | null>(null)
 
-  // ── Bulk actions ────────────────────────────────────────────────────────────
   const [showBulkStatusMenu, setShowBulkStatusMenu]       = useState(false)
   const [showBulkTransferConfirm, setShowBulkTransferConfirm] = useState(false)
   const bulkStatusRef = useRef<HTMLDivElement>(null)
 
-  // ── Refs ─────────────────────────────────────────────────────────────────────
   const commitGuardRef     = useRef(false)
   const editInputRef       = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
   const containerRef       = useRef<HTMLDivElement>(null)
@@ -218,12 +272,8 @@ export default function TableSheet({
   const importExportRef    = useRef<HTMLDivElement>(null)
   const fileInputRef       = useRef<HTMLInputElement>(null)
 
-  // ── Toast ────────────────────────────────────────────────────────────────────
   const { toasts, addToast, dismissToast } = useToast()
 
-  /* ═══════════════════════════════════════════════════════════════════════════════
-     INSTROOM API — Auto-fetch influencer data (moved inside component)
-     ═══════════════════════════════════════════════════════════════════════════════ */
   const INSTROOM_API: Record<string, (u: string) => string> = {
     instagram: (u) => `https://api.instroom.io/v2/${u}/instagram`,
     tiktok:    (u) => `https://api.instroom.io/${u}/tiktok`,
@@ -266,19 +316,13 @@ export default function TableSheet({
         avg_comments: parseFormattedNumber(d.avg_comments),
         avg_views: parseFormattedNumber(d.avg_video_views || d.avg_views),
       }
-    } catch (err) { 
+    } catch (err) {
       console.error(`API fetch error for ${handle}:`, err)
-      // Show the error modal
-      setApiErrorModal({
-        open: true,
-        platform,
-        handle: clean,
-      })
+      setApiErrorModal({ open: true, platform, handle: clean })
       return null
     }
   }, [])
 
-  // ── Column construction ──────────────────────────────────────────────────────
   const getEffectiveGroup = useCallback((cc: CustomColumn) => cc.assignedGroup, [])
   const STATIC_COLS = getStaticCols(nicheOptions, locationOptions)
   const rawCols: AnyColDef[] = [
@@ -298,7 +342,6 @@ export default function TableSheet({
   const allCols = order.map(i => rawCols[i])
   const totalCols = allCols.length
 
-  // ── Close import/export menu on outside click ────────────────────────────────
   useEffect(() => {
     if (!showImportExportMenu) return
     const h = (e: MouseEvent) => {
@@ -309,7 +352,6 @@ export default function TableSheet({
     document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h)
   }, [showImportExportMenu])
 
-  // ── Filter + sort ────────────────────────────────────────────────────────────
   const filteredRows = (() => {
     const filtered = rows.filter(row => {
       if (searchQuery.trim()) {
@@ -351,7 +393,6 @@ export default function TableSheet({
 
   const sidebarRow = rows.find(r => r.id === sidebarRowId) || null
 
-  // ── Row selection ─────────────────────────────────────────────────────────────
   const handleRowSelect = (id: string, e?: React.MouseEvent) => {
     if (e?.ctrlKey || e?.metaKey) {
       setSelectedRowIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -393,7 +434,6 @@ export default function TableSheet({
     setCurrentPage(1)
   }
 
-  // ── Bulk actions ─────────────────────────────────────────────────────────────
   const handleBulkStatusChange = (newStatus: string) => {
     if (!selectedRowIds.size) return
     setRows(prev => {
@@ -421,12 +461,9 @@ export default function TableSheet({
     setSelectedRowIds(new Set())
   }
 
-  // ── Save row to DB ────────────────────────────────────────────────────────────
   const saveRowToDatabase = useCallback(async (row: InfluencerRow): Promise<void> => {
     if (!row.handle || !row.platform) return
-
     const isTempId = row.id.startsWith("temp-")
-
     const payload = {
       handle:            row.handle,
       platform:          row.platform,
@@ -445,7 +482,6 @@ export default function TableSheet({
       avg_views:         Number(row.avg_views) || 0,
       ...(brandId ? { brandId } : {}),
     }
-
     if (isTempId) {
       try {
         const res = await fetch("/api/influencers/create", {
@@ -453,27 +489,19 @@ export default function TableSheet({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         })
-
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
           if (res.status === 409) {
             const existing = await fetch(
               `/api/influencers/find?handle=${encodeURIComponent(row.handle)}&platform=${encodeURIComponent(row.platform)}`
             ).then(r => r.ok ? r.json() : null).catch(() => null)
-            if (existing?.id) {
-              swapIdRef.current(row.id, existing.id)
-              onFetchComplete?.({ ...row, id: existing.id })
-            }
+            if (existing?.id) { swapIdRef.current(row.id, existing.id); onFetchComplete?.({ ...row, id: existing.id }) }
             return
           }
-          if (res.status === 403) {
-            addToast("error", err.message || "Influencer limit reached for your plan")
-            return
-          }
+          if (res.status === 403) { addToast("error", err.message || "Influencer limit reached for your plan"); return }
           addToast("error", `Failed to save @${row.handle}: ${err.error || res.statusText}`)
           return
         }
-
         const created = await res.json()
         swapIdRef.current(row.id, created.id)
         onFetchComplete?.({ ...row, id: created.id })
@@ -492,16 +520,11 @@ export default function TableSheet({
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
           console.error(`PUT /api/influencers/${row.id} failed:`, err)
-        } else {
-          onFetchComplete?.(row)
-        }
-      } catch (err) {
-        console.error("saveRowToDatabase PUT error:", err)
-      }
+        } else { onFetchComplete?.(row) }
+      } catch (err) { console.error("saveRowToDatabase PUT error:", err) }
     }
   }, [brandId, addToast, onFetchComplete])
 
-  // ── Auto fetch ───────────────────────────────────────────────────────────────
   const autoFetchInfluencer = useCallback(async (rowId: string, handle: string, platform: string) => {
     const clean = handle.trim().replace(/^@/, "").toLowerCase()
     if (!clean || clean.length < 2) return
@@ -510,7 +533,6 @@ export default function TableSheet({
     setRows(prev => {
       const existingRow = prev.find(r => r.id === rowId)
       if (existingRow && Number(existingRow.follower_count) > 0) return prev
-
       const duplicate = prev.find(r =>
         r.id !== rowId && cleanHandle(r.handle).toLowerCase() === clean && r.platform === platform
       )
@@ -527,13 +549,8 @@ export default function TableSheet({
 
     try {
       const data = await fetchInfluencerFromAPI(handle, platform)
-      if (!data) { 
-        addToast("error", `${clean} not found on ${platform}`)
-        return 
-      }
-
+      if (!data) { addToast("error", `${clean} not found on ${platform}`); return }
       let enrichedRow: InfluencerRow | null = null
-
       setRows(prev => {
         if (data.email) {
           const emailLower = data.email.toLowerCase()
@@ -543,7 +560,6 @@ export default function TableSheet({
           )
           if (emailDuplicate) addToast("warning", `@${clean} shares an email with @${emailDuplicate.handle} — possible duplicate`)
         }
-
         const next = prev.map(row => {
           if (row.id !== rowId) return row
           const u = { ...row }
@@ -563,22 +579,15 @@ export default function TableSheet({
           if (data.avg_views !== undefined)           u.avg_views = data.avg_views
           return u
         })
-
         onRowsChange?.(next)
         enrichedRow = next.find(r => r.id === rowId) ?? null
         return next
       })
-
-      if (enrichedRow) {
-        setTimeout(() => saveRowToDatabase(enrichedRow!), 0)
-      }
-    } catch (err) { 
-      console.error("Auto-fetch failed:", err)
-    }
+      if (enrichedRow) setTimeout(() => saveRowToDatabase(enrichedRow!), 0)
+    } catch (err) { console.error("Auto-fetch failed:", err) }
     finally { setFetchingRows(prev => { const n = new Set(prev); n.delete(rowId); return n }) }
   }, [onRowsChange, addToast, saveRowToDatabase, fetchInfluencerFromAPI])
 
-  // ── Row add / delete ──────────────────────────────────────────────────────────
   const addRow = () => {
     const r = newEmptyRow(customCols)
     setRows(prev => { const n = [...prev, r]; onRowsChange?.(n); return n })
@@ -631,7 +640,6 @@ export default function TableSheet({
     })
   }
 
-  // ── Import ────────────────────────────────────────────────────────────────────
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return
     const reader = new FileReader()
@@ -639,10 +647,8 @@ export default function TableSheet({
       const t = ev.target?.result as string; if (!t) return
       const { rows: imported, niches: importedNiches, locations: importedLocations } = importFromCSV(t, customCols)
       if (!imported.length) { alert("No valid rows found. Make sure your CSV matches the template headers."); return }
-
       const existingHandleKeys = new Set(rows.map(r => `${cleanHandle(r.handle).toLowerCase()}@${r.platform}`))
       const existingEmails     = new Set(rows.map(r => (r.contact_info || r.email || "").toLowerCase().trim()).filter(Boolean))
-
       let handleDupeCount = 0, emailDupeCount = 0
       const fresh = imported.filter(row => {
         const hk = `${row.handle.toLowerCase()}@${row.platform}`
@@ -651,7 +657,6 @@ export default function TableSheet({
         if (em && existingEmails.has(em)) { emailDupeCount++; return false }
         return true
       })
-
       const totalSkipped = handleDupeCount + emailDupeCount
       if (!fresh.length) {
         const parts = [
@@ -660,10 +665,8 @@ export default function TableSheet({
         ].filter(Boolean).join(", ")
         addToast("warning", `All rows already exist in the table (${parts})`); e.target.value = ""; return
       }
-
       if (importedNiches.length)    setNicheOptions(prev => [...new Set([...prev, ...importedNiches])])
       if (importedLocations.length) setLocationOptions(prev => [...new Set([...prev, ...importedLocations])])
-
       setRows(prev => { const n = [...prev, ...fresh]; onRowsChange?.(n); return n })
       setCurrentPage(1)
       onImportRows?.(fresh)
@@ -674,7 +677,6 @@ export default function TableSheet({
     reader.readAsText(f); e.target.value = ""; setShowImportExportMenu(false)
   }
 
-  // ── Column drag ────────────────────────────────────────────────────────────────
   const onColDragStart = (vi: number, e: DragEvent) => {
     setDragIdx(vi); e.dataTransfer.effectAllowed = "move"
     e.dataTransfer.setDragImage(e.currentTarget as HTMLElement, 40, 18)
@@ -702,7 +704,6 @@ export default function TableSheet({
     setDragIdx(null); setDragOverIdx(null); setDragOverGroup(null)
   }
 
-  // ── Cell helpers ───────────────────────────────────────────────────────────────
   const getCellValue = useCallback((row: InfluencerRow, key: string): string => {
     if (key.startsWith("custom.")) return row.custom[key.slice(7)] ?? ""
     return String((row as Record<string, unknown>)[key] ?? "")
@@ -727,25 +728,21 @@ export default function TableSheet({
     const actualRow = filteredRows[rowIdx]; const actualRowIdx = rows.findIndex(r => r.id === actualRow.id); if (actualRowIdx === -1) return
     if (actualRow.approval_status === "Declined" && isOutreachField(colKey)) return
     if (colKey === "approval_status" && value === "Declined") { setPendingDeclineRowIdx(rowIdx); setShowDeclineModal(true); return }
-
     const currentRow = rows[actualRowIdx]
     let shouldFetch = false, fetchRowId = currentRow.id, fetchHandle = "", fetchPlatform = ""
     let cleanedValue = value
     if (colKey === "handle") cleanedValue = cleanHandle(value)
     if (colKey === "handle" && cleanedValue && cleanedValue.length >= 2) { shouldFetch = true; fetchHandle = cleanedValue; fetchPlatform = currentRow.platform }
     if (colKey === "platform" && currentRow.handle && cleanHandle(currentRow.handle).length >= 2) { shouldFetch = true; fetchHandle = currentRow.handle; fetchPlatform = value }
-
     setRows(prev => {
       const next = [...prev]; let row = { ...next[actualRowIdx] }
       if (colKey === "approval_status") { row = handleApprovalChange(row, cleanedValue) }
       else if (colKey.startsWith("custom.")) { row.custom = { ...row.custom, [colKey.slice(7)]: cleanedValue } }
       else { (row as Record<string, unknown>)[colKey] = cleanedValue }
-
       if (colKey === "first_name") {
         const lastName = row.full_name ? row.full_name.split(" ").slice(1).join(" ") : ""
         row.full_name = cleanedValue ? (lastName ? `${cleanedValue} ${lastName}` : cleanedValue) : lastName
       }
-
       if (colKey === "handle" || colKey === "platform") {
         const nH = colKey === "handle" ? cleanedValue : row.handle
         const nP = colKey === "platform" ? cleanedValue : row.platform
@@ -766,7 +763,6 @@ export default function TableSheet({
     setCustomCols(prev => { const n = prev.map(c => c.field_key !== fk ? c : { ...c, field_options: [...(c.field_options ?? []), no] }); onCustomColumnsChange?.(n); return n })
   }, [onCustomColumnsChange])
 
-  // ── Edit mode ──────────────────────────────────────────────────────────────────
   const startEdit = useCallback((ri: number, ci: number) => {
     if (readOnly) return
     const col = allCols[ci]; const row = filteredRows[ri]
@@ -825,7 +821,6 @@ export default function TableSheet({
     }
   }
 
-  // ── Custom column add / delete ─────────────────────────────────────────────────
   const confirmAddCol = (name: string, description: string, type: CustomColumn["field_type"], group: "Influencer Details" | "Approval Details" | "Outreach Details", options: string) => {
     const fk  = name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
     const ho  = type === "dropdown" || type === "multi-select"
@@ -856,7 +851,6 @@ export default function TableSheet({
     })
   }
 
-  // ── Group / header helpers ─────────────────────────────────────────────────────
   const getGroupBgClass = (g: string) => {
     switch (g) {
       case "Influencer Details": return "bg-blue-50 text-blue-700"
@@ -884,7 +878,7 @@ export default function TableSheet({
     filters.location !== "all" || filters.gender !== "all" ||
     filters.approval !== "all" || !!filters.dateFrom || !!filters.dateTo
 
-  // ── Cell renderer ──────────────────────────────────────────────────────────────
+  // ── Cell renderer (unchanged) ──────────────────────────────────────────────
   const renderCell = (row: InfluencerRow, rowIdx: number, col: AnyColDef, colIdx: number) => {
     const isActive   = activeCell?.rowIdx === rowIdx && activeCell?.colIdx === colIdx
     const isEditing  = editCell?.rowIdx === rowIdx && editCell?.colIdx === colIdx
@@ -909,7 +903,6 @@ export default function TableSheet({
       </td>
     )
 
-    // Handle column
     if (col.key === "handle") {
       if (isEditing) return (
         <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{ minWidth: col.minWidth }}>
@@ -935,7 +928,6 @@ export default function TableSheet({
       )
     }
 
-    // Editing state
     if (isEditing) {
       if (col.type === "select" && col.options && col.key !== "platform" && col.key !== "niche" && col.key !== "location")
         return <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{ minWidth: col.minWidth }}><select ref={editInputRef as any} value={editValue} onChange={e => setEditValue(e.target.value)} onBlur={handleEditBlur} onKeyDown={handleEditKeyDown} onMouseDown={e => e.stopPropagation()} className="w-full h-full px-1.5 py-1 text-xs outline-none bg-white appearance-none">{col.options.map(o => <option key={o} value={o}>{o || "—"}</option>)}</select></td>
@@ -946,7 +938,6 @@ export default function TableSheet({
       return <td key={col.key} className={`border border-gray-200 p-0 relative ${ringCls}`} style={{ minWidth: col.minWidth }}><input ref={editInputRef as any} type={col.type === "number" ? "number" : "text"} value={editValue} onChange={e => setEditValue(e.target.value)} onBlur={handleEditBlur} onKeyDown={handleEditKeyDown} onMouseDown={e => e.stopPropagation()} className="w-full h-full px-1.5 py-1 text-xs outline-none bg-white" /></td>
     }
 
-    // Popup state
     if (isPopup) {
       const closeP = () => { setPopupCell(null); containerRef.current?.focus() }
       if (col.key === "platform") return (
@@ -968,7 +959,6 @@ export default function TableSheet({
       }
     }
 
-    // Default display
     const tdCls  = `border border-gray-200 px-1.5 py-1 text-xs cursor-cell select-none relative hover:bg-blue-50/20 ${ringCls}`
     const onClick = () => startEdit(rowIdx, colIdx)
     const onFocus = () => setActiveCell({ rowIdx, colIdx })
@@ -994,7 +984,7 @@ export default function TableSheet({
     return <td key={col.key} className={tdCls} style={{ minWidth: col.minWidth }} onClick={onClick} onFocus={onFocus}><span className="block truncate">{value || <span className="text-gray-300">—</span>}</span></td>
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-3 text-gray-700 text-sm">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
@@ -1014,56 +1004,33 @@ export default function TableSheet({
                 <IconAlertTriangle size={20} className="text-red-600" />
               </div>
               <div className="flex-1">
-                <h2 className="text-base font-semibold text-gray-900">
-                  Influencer API unavailable
-                </h2>
+                <h2 className="text-base font-semibold text-gray-900">Influencer API unavailable</h2>
                 <p className="mt-2 text-sm text-gray-600">
                   We couldn't fetch data for <strong>@{apiErrorModal.handle}</strong>. You may retry or continue adding the influencer manually.
                 </p>
               </div>
             </div>
-
             <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
-                onClick={() => setApiErrorModal({ open: false })}
-              >
-                Continue manually
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              <button type="button" className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition" onClick={() => setApiErrorModal({ open: false })}>Continue manually</button>
+              <button type="button" className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                 onClick={() => {
-                  const handle = apiErrorModal.handle
-                  const platform = apiErrorModal.platform
-                  const rowId = apiErrorModal.rowId
-
+                  const { handle, platform, rowId } = apiErrorModal
                   setApiErrorModal({ open: false })
-
-                  if (handle && platform && rowId) {
-                    autoFetchInfluencer(rowId, handle, platform)
-                  }
-                }}
-              >
-                Retry
-              </button>
+                  if (handle && platform && rowId) autoFetchInfluencer(rowId, handle, platform)
+                }}>Retry</button>
             </div>
           </div>
         </div>
       )}
 
       {pendingDuplicateInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={e => { if (e.target === e.currentTarget) setPendingDuplicateInfo(null) }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) setPendingDuplicateInfo(null) }}>
           <div className="bg-white rounded-xl shadow-xl w-[420px] p-5">
             <div className="flex items-start gap-2.5 mb-3">
               <div className="p-1.5 bg-amber-100 rounded-full flex-shrink-0"><IconAlertTriangle size={18} className="text-amber-600" /></div>
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">Duplicate Influencer</h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  <strong>@{pendingDuplicateInfo.handle}</strong> already exists as <strong>{pendingDuplicateInfo.existingName}</strong>.
-                </p>
+                <p className="text-xs text-gray-500 mt-0.5"><strong>@{pendingDuplicateInfo.handle}</strong> already exists as <strong>{pendingDuplicateInfo.existingName}</strong>.</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -1081,50 +1048,26 @@ export default function TableSheet({
         </div>
       )}
 
-      {addingCol && (
-        <AddColumnModal
-          isOpen={addingCol} onClose={() => setAddingCol(false)} onConfirm={confirmAddCol}
-          customCols={customCols}
-        />
-      )}
+      {addingCol && <AddColumnModal isOpen={addingCol} onClose={() => setAddingCol(false)} onConfirm={confirmAddCol} customCols={customCols} />}
 
       {showManageNiches && (
-        <ManageOptionsModal
-          isOpen={showManageNiches}
-          title="Manage Niches" options={nicheOptions}
-          onAdd={async (name) => {
-            await dbAddNiche(name)
-            setNicheOptions(p => [...p, name])
-          }}
-          onRemove={async (name) => {
-            const match = dbNiches.find(n => n.name === name)
-            if (match) await dbRemoveNiche(match.id)
-            setNicheOptions(p => p.filter(n => n !== name))
-          }}
-          onClose={() => setShowManageNiches(false)}
-        />
+        <ManageOptionsModal isOpen={showManageNiches} title="Manage Niches" options={nicheOptions}
+          onAdd={async (name) => { await dbAddNiche(name); setNicheOptions(p => [...p, name]) }}
+          onRemove={async (name) => { const match = dbNiches.find(n => n.name === name); if (match) await dbRemoveNiche(match.id); setNicheOptions(p => p.filter(n => n !== name)) }}
+          onClose={() => setShowManageNiches(false)} />
       )}
 
       {showManageLocations && (
-        <ManageOptionsModal
-          isOpen={showManageLocations}
-          title="Manage Locations" options={locationOptions}
-          onAdd={async (name) => {
-            await dbAddLocation(name)
-            setLocationOptions(p => [...p, name])
-          }}
-          onRemove={async (name) => {
-            const match = dbLocations.find(l => l.name === name)
-            if (match) await dbRemoveLocation(match.id)
-            setLocationOptions(p => p.filter(l => l !== name))
-          }}
-          onClose={() => setShowManageLocations(false)}
-        />
+        <ManageOptionsModal isOpen={showManageLocations} title="Manage Locations" options={locationOptions}
+          onAdd={async (name) => { await dbAddLocation(name); setLocationOptions(p => [...p, name]) }}
+          onRemove={async (name) => { const match = dbLocations.find(l => l.name === name); if (match) await dbRemoveLocation(match.id); setLocationOptions(p => p.filter(l => l !== name)) }}
+          onClose={() => setShowManageLocations(false)} />
       )}
 
       {/* ── Toolbar ── */}
       {!readOnly && (
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Search */}
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <IconSearch size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
@@ -1134,6 +1077,7 @@ export default function TableSheet({
             />
           </div>
 
+          {/* Filters button */}
           <div className="relative">
             <button ref={filterBtnRef} onClick={() => setShowFilterPopover(v => !v)}
               className={`flex items-center gap-1.5 px-3 py-2 text-xs border rounded-lg transition ${hasActiveFilters ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
@@ -1149,20 +1093,19 @@ export default function TableSheet({
             )}
           </div>
 
+          {/* ── Sort toggle — moved here from its own row ── */}
           <SortToggle sortOrder={sortOrder} onChange={v => { setSortOrder(v); setCurrentPage(1) }} />
 
+          {/* Right-side controls */}
           <div className="flex items-center gap-1.5 ml-auto">
             <button onClick={() => setShowManageNiches(true)} className="flex items-center gap-1.5 px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition" title="Manage niches"><IconTags size={13} /> Niches</button>
             <button onClick={() => setShowManageLocations(true)} className="flex items-center gap-1.5 px-2.5 py-2 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition" title="Manage locations"><IconMapPin size={13} /> Locations</button>
 
             <div className="relative">
-              <button 
-                ref={importExportBtnRef} 
+              <button
+                ref={importExportBtnRef}
                 onClick={() => {
-                  if (subscriptionStatus?.status === "trialing") {
-                    onShowTrialModal?.()
-                    return
-                  }
+                  if (subscriptionStatus?.status === "trialing") { onShowTrialModal?.(); return }
                   setShowImportExportMenu(v => !v)
                 }}
                 disabled={subscriptionStatus?.status === "trialing"}
@@ -1177,18 +1120,9 @@ export default function TableSheet({
               </button>
               {showImportExportMenu && (
                 <div ref={importExportRef} className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-52 py-1">
-                  <button onClick={() => { fileInputRef.current?.click(); setShowImportExportMenu(false) }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700">
-                    <IconUpload size={13} className="text-blue-500" /> Import from CSV
-                  </button>
-                  <button onClick={() => { exportToCSV(rows, customCols); setShowImportExportMenu(false) }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700">
-                    <IconDownload size={13} className="text-green-500" /> Export to CSV
-                  </button>
-                  <button onClick={() => { downloadTemplate(customCols); setShowImportExportMenu(false) }}
-                    className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700">
-                    <IconDownload size={13} className="text-gray-400" /> Download template
-                  </button>
+                  <button onClick={() => { fileInputRef.current?.click(); setShowImportExportMenu(false) }} className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700"><IconUpload size={13} className="text-blue-500" /> Import from CSV</button>
+                  <button onClick={() => { exportToCSV(rows, customCols); setShowImportExportMenu(false) }} className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700"><IconDownload size={13} className="text-green-500" /> Export to CSV</button>
+                  <button onClick={() => { downloadTemplate(customCols); setShowImportExportMenu(false) }} className="flex items-center gap-2 w-full text-left px-3 py-2 text-xs hover:bg-gray-50 transition text-gray-700"><IconDownload size={13} className="text-gray-400" /> Download template</button>
                 </div>
               )}
             </div>
@@ -1330,7 +1264,27 @@ export default function TableSheet({
                   </tr>
                 )
               })}
-              {totalRows === 0 && <tr><td colSpan={totalCols + 3} className="py-10 text-center text-sm text-gray-400">No influencers found.</td></tr>}
+
+              {/* ── Empty state — shown inside tbody when no rows ── */}
+              {totalRows === 0 && !readOnly && (
+                <tr>
+                  <td colSpan={totalCols + 3} className="p-0 border-0">
+                    <EmptyState
+                      onAddRow={addRow}
+                      onOpenAddRowsModal={() => setShowAddRowsModal(true)}
+                    />
+                  </td>
+                </tr>
+              )}
+
+              {/* Read-only empty */}
+              {totalRows === 0 && readOnly && (
+                <tr>
+                  <td colSpan={totalCols + 3} className="py-10 text-center text-sm text-gray-400">
+                    No influencers found.
+                  </td>
+                </tr>
+              )}
             </tbody>
             {!readOnly && (
               <tfoot>
