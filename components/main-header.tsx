@@ -317,8 +317,7 @@ export function MainHeader() {
       className="nav"
       style={{
         width: "100%",
-        borderBottom: "0.5px solid #e5e7eb",
-        background: "rgba(255,255,255,0.95)",
+        background: "#F4F7F5",
         position: "sticky",
         top: 0,
         zIndex: 100,

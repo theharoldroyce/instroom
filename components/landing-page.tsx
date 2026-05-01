@@ -114,41 +114,116 @@ export function LandingPage() {
           line-height: 1.65;
         }
 
-        /* ── Hero ── */
+        /* ── Hero — split two-column layout ── */
         .hero {
-          padding: 96px 0 72px;
-          text-align: center;
-          /* base color comes from sec-odd / sec-even; dot grid overlays on top */
-          background-image:
-            radial-gradient(circle, rgba(31,174,91,0.12) 1px, transparent 1px);
+          padding: 0;
+          background-image: radial-gradient(circle, rgba(31,174,91,0.12) 1px, transparent 1px);
           background-size: 28px 28px;
+          /* keeps the original sec-even #F4F7F5 bg from the section class */
+        }
+
+        .hero-inner {
+          max-width: 1140px;
+          margin: 0 auto;
+          padding: 0 24px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          align-items: center;
+          gap: 64px;
+          min-height: 580px;
+        }
+
+        /* ── Hero Left: text ── */
+        .hero-left {
+          padding: 80px 32px 80px 32px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          position: relative;
+        }
+
+        /* Dotted corner bracket — top-left */
+        .hero-left::before {
+          content: '';
+          position: absolute;
+          top: 36px;
+          left: -4px;
+          width: 88px;
+          height: 88px;
+          border-top: 2px dashed #1FAE5B;
+          border-left: 2px dashed #1FAE5B;
+          opacity: 0.75;
+          pointer-events: none;
+        }
+
+        /* Dotted corner bracket — bottom-right */
+        .hero-left::after {
+          content: '';
+          position: absolute;
+          bottom: 36px;
+          right: -4px;
+          width: 88px;
+          height: 88px;
+          border-bottom: 2px dashed #1FAE5B;
+          border-right: 2px dashed #1FAE5B;
+          opacity: 0.75;
+          pointer-events: none;
+        }
+
+        .hero-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: rgba(31,174,91,0.1);
+          border: 1px solid rgba(31,174,91,0.28);
+          border-radius: 100px;
+          padding: 5px 14px 5px 10px;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          color: #0F6B3E;
+          margin-bottom: 28px;
+          width: fit-content;
+        }
+
+        .hero-eyebrow-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #1FAE5B;
+          animation: hero-pulse 1.6s ease-in-out infinite;
+          flex-shrink: 0;
+        }
+
+        @keyframes hero-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: 0.35; transform: scale(0.7); }
         }
 
         .hero h1 {
           font-family: 'Manrope', sans-serif;
           font-weight: 800;
-          font-size: clamp(2rem, 5vw, 3.625rem);
-          line-height: 1.12;
-          letter-spacing: -0.02em;
+          font-size: clamp(1.875rem, 3.2vw, 2.875rem);
+          line-height: 1.1;
+          letter-spacing: -0.025em;
           color: #1E1E1E;
-          max-width: 860px;
-          margin: 0 auto 24px;
+          margin-bottom: 20px;
         }
 
         .hero-lead {
-          max-width: 640px;
-          margin: 0 auto 36px;
-          font-size: 1.1875rem;
+          max-width: 480px;
+          font-size: 1.0625rem;
           color: #3f3f46;
-          line-height: 1.65;
+          line-height: 1.68;
+          margin-bottom: 36px;
         }
 
         .hero-ctas {
           display: flex;
           gap: 12px;
-          justify-content: center;
           flex-wrap: wrap;
-          margin-bottom: 14px;
+          margin-bottom: 16px;
         }
 
         .hero-sub {
@@ -156,9 +231,28 @@ export function LandingPage() {
           color: #52525b;
         }
 
+        /* ── Hero Right: mockup ── */
+        .hero-right {
+          padding: 40px 0;
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        /* Subtle left divider line */
+        .hero-right::before {
+          content: '';
+          position: absolute;
+          left: -32px;
+          top: 10%;
+          bottom: 10%;
+          width: 1px;
+          background: linear-gradient(to bottom, transparent, rgba(31,174,91,0.3), transparent);
+        }
+
         .hero-mockup {
-          max-width: 960px;
-          margin: 60px auto 0;
+          width: 100%;
           border-radius: 16px;
           overflow: hidden;
           box-shadow: 0 24px 64px rgba(15,107,62,0.14), 0 0 0 1px var(--border);
@@ -169,6 +263,53 @@ export function LandingPage() {
           justify-content: center;
           color: var(--muted);
           font-size: 0.875rem;
+        }
+
+        /* Floating decorative badge */
+        .hero-badge {
+          position: absolute;
+          bottom: 36px;
+          left: -16px;
+          background: white;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 10px 14px;
+          box-shadow: 0 8px 24px rgba(15,107,62,0.12);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #1E1E1E;
+          white-space: nowrap;
+        }
+
+        .hero-badge-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #1FAE5B;
+          flex-shrink: 0;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 900px) {
+          .hero-inner {
+            grid-template-columns: 1fr;
+            gap: 0;
+            min-height: auto;
+          }
+          .hero-left {
+            padding: 56px 0 32px;
+            text-align: center;
+            align-items: center;
+          }
+          .hero-lead { max-width: 100%; }
+          .hero-right {
+            padding: 0 0 56px;
+          }
+          .hero-right::before { display: none; }
+          .hero-badge { display: none; }
         }
 
         /* ── Stats ── */
@@ -207,7 +348,7 @@ export function LandingPage() {
 
         /* ── Trust bar ── */
         .trust {
-          padding: 48px 0 56px;
+          padding: 40px 0 44px;
         }
 
         .trust-label {
@@ -217,7 +358,7 @@ export function LandingPage() {
           text-transform: uppercase;
           letter-spacing: 0.12em;
           color: #52525b;
-          margin-bottom: 32px;
+          margin-bottom: 28px;
         }
 
         .trust-logos {
@@ -225,7 +366,6 @@ export function LandingPage() {
           align-items: center;
           gap: 24px;
           overflow: hidden;
-          opacity: 0.7;
           position: relative;
           height: 90px;
         }
@@ -251,22 +391,20 @@ export function LandingPage() {
         }
 
         .trust-logo {
-          height: 52px;
+          height: 70px;
           padding: 0 16px;
-          background: #f3f3f3;
-          border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          border: 1px solid #e5e5e5;
         }
 
         .trust-logo img {
-          height: 40px !important;
+          height: 50px !important;
           width: auto !important;
-          max-width: 140px !important;
+          max-width: 200px !important;
           object-fit: contain !important;
+          filter: invert(1) grayscale(1) opacity(0.85);
         }
 
         /* ── Problem cards ── */
@@ -1193,33 +1331,74 @@ export function LandingPage() {
 
       {/* HERO */}
       <section className="hero sec-even">
-        <div className="container-md">
-          <p className="text-xs font-bold uppercase tracking-widest text-green-600 mb-5">
-            Influencer marketing, organized
-          </p>
-          <h1>Influencer marketing isn't complicated. Managing it without the right system is.</h1>
-          <p className="hero-lead">
-            Instroom is the system. Every creator, every campaign, every result — in one workspace. Built by people who've done the work.
-          </p>
-          <div className="hero-ctas">
-            <Link href="/signup">
-              <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold h-12 px-8 hover:from-[#0a5a2f] hover:to-[#158a48] shadow-lg shadow-emerald-500/25 rounded-xl">
-                Start Free Trial
-              </Button>
-            </Link>
-            {/* FIX: "Learn More" was previously styled as white text on a light background.
-                Now using a solid visible style: dark border + dark text on the light hero bg. */}
-            <a href="#features">
-              <Button
-                variant="outline"
-                className="h-12 px-8 rounded-xl border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 hover:border-zinc-400 font-semibold"
-              >
-                See how it works
-              </Button>
-            </a>
+        <div className="hero-inner">
+
+          {/* LEFT: text column */}
+          <div className="hero-left">
+            <div className="hero-eyebrow">
+              <div className="hero-eyebrow-dot" />
+              Influencer marketing, organized
+            </div>
+            <h1>Influencer marketing isn't <span style={{ textDecoration: "line-through", textDecorationColor: "#a1a1aa", textDecorationThickness: "3px", color: "#a1a1aa" }}>complicated</span>. Managing it without the <span style={{ color: "#1FAE5B" }}>right system is.</span></h1>
+            <p className="hero-lead">
+              Instroom is the system. Every creator, every campaign, every result — in one workspace. Built by people who've done the work.
+            </p>
+            <div className="hero-ctas">
+              <Link href="/signup">
+                <Button className="bg-gradient-to-r from-[#0F6B3E] to-[#1FAE5B] text-white font-semibold h-12 px-8 hover:from-[#0a5a2f] hover:to-[#158a48] shadow-lg shadow-emerald-500/25 rounded-xl">
+                  Start Free Trial
+                </Button>
+              </Link>
+              <a href="#features">
+                <Button
+                  variant="outline"
+                  className="h-12 px-8 rounded-xl border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 hover:border-zinc-400 font-semibold"
+                >
+                  See how it works
+                </Button>
+              </a>
+            </div>
+            <p className="hero-sub">No credit card required · 30-day free trial</p>
           </div>
-          <p className="hero-sub">No credit card required · 30-day free trial</p>
-          <div className="hero-mockup">[Product screenshot / dashboard hero image]</div>
+
+        {/* RIGHT: product mockup */}
+        <div className="hero-right">
+          <div className="hero-mockup">
+            <img 
+              src="/images/InstroomDisplay.png" 
+              alt="Instroom Dashboard Preview"
+              style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left", display: "block" }}
+            />
+          </div>
+
+          <div className="hero-badge">
+            <div className="hero-badge-dot" />
+            200+ campaigns managed
+          </div>
+        </div>
+
+        </div>
+      </section>
+
+            {/* TRUST BAR */}
+      <section className="trust sec-even">
+        <div className="container-md">
+          <p className="trust-label">Brands we've managed campaigns for</p>
+          <div className="trust-logos">
+            <div className="trust-carousel">
+              {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17].map((num) => (
+                <div key={num} className="trust-logo">
+                  <Image src={`/images/brandLogo/${num}.png`} alt={`Brand ${num}`} width={380} height={105} style={{ objectFit: "contain", height: "105px", width: "auto", maxWidth: "380px", filter: "invert(1) grayscale(1) opacity(0.85)" }} />
+                </div>
+              ))}
+              {/* Duplicate logos for seamless loop */}
+              {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17].map((num) => (
+                <div key={`dup-${num}`} className="trust-logo">
+                  <Image src={`/images/brandLogo/${num}.png`} alt={`Brand ${num}`} width={380} height={105} style={{ objectFit: "contain", height: "105px", width: "auto", maxWidth: "380px", filter: "invert(1) grayscale(1) opacity(0.85)" }} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1244,82 +1423,9 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* TRUST BAR */}
-      <section className="trust sec-even">
-        <div className="container-md">
-          <p className="trust-label">Brands we've managed campaigns for</p>
-          <div className="trust-logos">
-            <div className="trust-carousel">
-              {[
-                { name: "Alcanside", ext: "png" },
-                { name: "AwesomeMaps", ext: "jpg" },
-                { name: "Chapters", ext: "jpg" },
-                { name: "Comfit", ext: "png" },
-                { name: "CuliStack", ext: "jpg" },
-                { name: "Dadafunk", ext: "png" },
-                { name: "Dreamfully", ext: "jpg" },
-                { name: "Ease", ext: "png" },
-                { name: "Formulation", ext: "jpg" },
-                { name: "Heroka", ext: "jpg" },
-                { name: "Lotgenootje", ext: "jpeg" },
-                { name: "MoomHealth", ext: "jpg" },
-                { name: "Muse", ext: "png" },
-                { name: "Nonoise", ext: "jpg" },
-                { name: "Okura", ext: "png" },
-                { name: "OralAdvance", ext: "jpg" },
-                { name: "Pacdora", ext: "jpg" },
-                { name: "Remodius", ext: "png" },
-                { name: "Royo", ext: "png" },
-                { name: "Shihiko", ext: "jpg" },
-                { name: "SylvianGrant", ext: "png" },
-                { name: "TapOut", ext: "jpg" },
-                { name: "TWGR", ext: "gif" },
-                { name: "Yummii", ext: "png" },
-                { name: "Zippit", ext: "png" },
-              ].map(({ name, ext }) => (
-                <div key={name} className="trust-logo">
-                  <Image src={`/images/brandLogo/${name}.${ext}`} alt={name} width={140} height={40} style={{ objectFit: "contain", height: "40px", width: "auto", maxWidth: "140px" }} />
-                </div>
-              ))}
-              {/* Duplicate logos for seamless loop */}
-              {[
-                { name: "Alcanside", ext: "png" },
-                { name: "AwesomeMaps", ext: "jpg" },
-                { name: "Chapters", ext: "jpg" },
-                { name: "Comfit", ext: "png" },
-                { name: "CuliStack", ext: "jpg" },
-                { name: "Dadafunk", ext: "png" },
-                { name: "Dreamfully", ext: "jpg" },
-                { name: "Ease", ext: "png" },
-                { name: "Formulation", ext: "jpg" },
-                { name: "Heroka", ext: "jpg" },
-                { name: "Lotgenootje", ext: "jpeg" },
-                { name: "MoomHealth", ext: "jpg" },
-                { name: "Muse", ext: "png" },
-                { name: "Nonoise", ext: "jpg" },
-                { name: "Okura", ext: "png" },
-                { name: "OralAdvance", ext: "jpg" },
-                { name: "Pacdora", ext: "jpg" },
-                { name: "Remodius", ext: "png" },
-                { name: "Royo", ext: "png" },
-                { name: "Shihiko", ext: "jpg" },
-                { name: "SylvianGrant", ext: "png" },
-                { name: "TapOut", ext: "jpg" },
-                { name: "TWGR", ext: "gif" },
-                { name: "Yummii", ext: "png" },
-                { name: "Zippit", ext: "png" },
-              ].map(({ name, ext }) => (
-                <div key={`dup-${name}`} className="trust-logo">
-                  <Image src={`/images/brandLogo/${name}.${ext}`} alt={name} width={140} height={40} style={{ objectFit: "contain", height: "40px", width: "auto", maxWidth: "140px" }} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* PROBLEM */}
-      <section className="section sec-odd">
+      <section className="section sec-odd" style={{ paddingTop: "48px" }}>
         <div className="container-md">
           <div className="section-header">
             <h2>You didn't start your brand to live in a spreadsheet.</h2>
@@ -1688,18 +1794,16 @@ export function LandingPage() {
         <div className="container-md final-cta-content">
           <h2>The system is ready. Your next campaign is waiting.</h2>
           <p className="final-cta-lead">Stop building the process. Start running the campaign.</p>
-          <div className="hero-ctas">
+          <div className="hero-ctas" style={{ justifyContent: "center" }}>
             <Link href="/signup">
-              {/* FIX: was text-black on green gradient — changed to text-white for proper contrast */}
-              <Button className="bg-gradient-to-r from-[#1FAE5B] to-[#28c96a] text-white font-semibold h-12 px-8 rounded-xl hover:from-[#158a48] hover:to-[#1FAE5B] shadow-lg shadow-emerald-500/30">
+              <Button className="bg-[#1FAE5B] text-white font-bold h-13 px-9 rounded-xl hover:bg-[#158a48] shadow-lg shadow-emerald-500/40 text-base transition-all duration-150" style={{ height: "52px", fontSize: "1rem" }}>
                 Start free for 30 days
               </Button>
             </Link>
-            {/* FIX: outline button on dark bg now uses white text + visible border */}
             <a href="#faq">
               <Button
                 variant="outline"
-                className="h-12 px-8 rounded-xl border-white/20 text-white bg-white/5 hover:bg-white/10 hover:border-white/30 font-semibold"
+                className="h-13 px-9 rounded-xl border-2 border-white/40 text-white bg-transparent hover:bg-white/10 hover:border-white/60 font-semibold text-base transition-all duration-150" style={{ height: "52px", fontSize: "1rem" }}
               >
                 Book a demo
               </Button>

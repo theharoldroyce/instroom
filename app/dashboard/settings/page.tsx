@@ -1,350 +1,419 @@
 "use client"
+// app/dashboard/settings/page.tsx
 
-import { useEffect, useState, Suspense } from "react"
 import { useSession } from "next-auth/react"
-import { useSearchParams } from "next/navigation"
-import Link from "next/link"
-import {
-  IconArrowRight,
-  IconUpload,
-  IconUser,
-  IconAlertCircle,
-} from "@tabler/icons-react"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 
-// ─── Inner component (useSearchParams requires Suspense boundary) ─────────────
+type Toast = { message: string; type: "success" | "error" }
 
-function SettingsContent() {
-  const { data: session, status } = useSession()
-  const searchParams = useSearchParams()
-  const brandId = searchParams.get("brandId")
-
-  // ── Account ──────────────────────────────────────────────────────────────
-  const [fullName, setFullName]               = useState("")
-  const [savingName, setSavingName]           = useState(false)
-  const [nameSaved, setNameSaved]             = useState(false)
-
-  const [currentPassword, setCurrentPassword] = useState("")
-  const [newPassword, setNewPassword]         = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [savingPassword, setSavingPassword]   = useState(false)
-  const [passwordError, setPasswordError]     = useState("")
-  const [passwordSaved, setPasswordSaved]     = useState(false)
-
-  const [subscription, setSubscription]       = useState<any>(null)
-  const [brandCount, setBrandCount]           = useState<number>(0)
-
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Data fetching
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // Seed name from session
-  useEffect(() => {
-    if (session?.user?.name) setFullName(session.user.name)
-  }, [session?.user?.name])
-
-  // Subscription
-  useEffect(() => {
-    if (!session?.user?.id) return
-    fetch("/api/subscription/check", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: session.user.id }),
-    })
-      .then(r => r.json())
-      .then(d => setSubscription(d.subscription))
-      .catch(() => {})
-  }, [session?.user?.id])
-
-  // Brand count
-  useEffect(() => {
-    if (!session?.user?.id) return
-    fetch("/api/user/brand-usage")
-      .then(r => r.json())
-      .then(d => setBrandCount(d.brandCount || 0))
-      .catch(() => {})
-  }, [session?.user?.id])
-
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Handlers
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const handleSaveName = async () => {
-    if (!fullName.trim() || !session?.user?.id) return
-    try {
-      setSavingName(true)
-      await fetch("/api/user/update-name", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: session.user.id, name: fullName }),
-      })
-      setNameSaved(true)
-      setTimeout(() => setNameSaved(false), 3000)
-    } finally {
-      setSavingName(false)
-    }
+function useToast() {
+  const [toast, setToast] = useState<Toast | null>(null)
+  const show = (message: string, type: Toast["type"]) => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
   }
+  return { toast, show }
+}
 
-  const handleUpdatePassword = async () => {
-    setPasswordError("")
-    if (newPassword !== confirmPassword) { setPasswordError("New passwords don't match."); return }
-    if (newPassword.length < 8)          { setPasswordError("Password must be at least 8 characters."); return }
+export default function ProfilePage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const { toast, show } = useToast()
+
+  const [firstName, setFirstName]   = useState("")
+  const [lastName, setLastName]     = useState("")
+  const [email, setEmail]           = useState("")
+  const [jobTitle, setJobTitle]     = useState("")
+  const [timezone, setTimezone]     = useState("Asia/Manila (UTC+8)")
+  const [currency, setCurrency]     = useState("USD ($)")
+  const [dateFormat, setDateFormat] = useState("MM/DD/YYYY")
+
+  const [savingProfile, setSavingProfile]   = useState(false)
+  const [savingPrefs, setSavingPrefs]       = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [confirmDelete, setConfirmDelete]   = useState(false)
+
+  const initials = session?.user?.name
+    ? session.user.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
+    : "??"
+
+  // Load profile + prefs on mount
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login")
+      return
+    }
+    if (status !== "authenticated") return
+
+    fetch("/api/settings/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.name) {
+          const parts = data.name.split(" ")
+          setFirstName(parts[0] ?? "")
+          setLastName(parts.slice(1).join(" ") ?? "")
+        }
+        if (data.email) setEmail(data.email)
+        if (data.jobTitle) setJobTitle(data.jobTitle)
+      })
+      .catch(() => {
+        // Fallback to session data
+        if (session?.user?.name) {
+          const parts = session.user.name.split(" ")
+          setFirstName(parts[0] ?? "")
+          setLastName(parts.slice(1).join(" ") ?? "")
+        }
+        if (session?.user?.email) setEmail(session.user.email)
+      })
+
+    fetch("/api/settings/preferences")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.timezone)   setTimezone(data.timezone)
+        if (data.currency)   setCurrency(data.currency)
+        if (data.dateFormat) setDateFormat(data.dateFormat)
+      })
+      .catch(() => {})
+  }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSaveProfile() {
+    setSavingProfile(true)
     try {
-      setSavingPassword(true)
-      const res  = await fetch("/api/user/update-password", {
-        method: "POST",
+      const res = await fetch("/api/settings/profile", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({ firstName, lastName, email, jobTitle }),
       })
       const data = await res.json()
-      if (!res.ok) { setPasswordError(data.error || "Failed to update password"); return }
-      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("")
-      setPasswordSaved(true)
-      setTimeout(() => setPasswordSaved(false), 3000)
+      if (!res.ok) throw new Error(data.error || "Failed to save profile")
+      show("Profile saved successfully", "success")
+    } catch (err: any) {
+      show(err.message || "Something went wrong", "error")
     } finally {
-      setSavingPassword(false)
+      setSavingProfile(false)
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Subscription display helpers
-  // ─────────────────────────────────────────────────────────────────────────
-
-  const planColors: Record<string, string> = {
-    solo:   "bg-stone-100 text-stone-700",
-    team:   "bg-emerald-50 text-emerald-800",
-    agency: "bg-amber-50 text-amber-800",
-  }
-  const planName  = subscription?.plan?.name?.toLowerCase() || "solo"
-  const planLabel = ({ solo: "Solo", team: "Team", agency: "Agency" } as Record<string,string>)[planName] || "Solo"
-  const planColor = planColors[planName] || planColors.solo
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Loading
-  // ─────────────────────────────────────────────────────────────────────────
-
-  if (status === "loading") {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="h-8 w-8 rounded-full border-2 border-[#1FAE5B] border-t-transparent animate-spin" />
-      </div>
-    )
+  async function handleSavePrefs() {
+    setSavingPrefs(true)
+    try {
+      const res = await fetch("/api/settings/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timezone, currency, dateFormat }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to save preferences")
+      show("Preferences saved", "success")
+    } catch (err: any) {
+      show(err.message || "Something went wrong", "error")
+    } finally {
+      setSavingPrefs(false)
+    }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────
+  async function handleDeleteAccount() {
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
+    setDeletingAccount(true)
+    try {
+      const res = await fetch("/api/settings/account", { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to delete account")
+      router.push("/login")
+    } catch (err: any) {
+      show(err.message || "Something went wrong", "error")
+      setDeletingAccount(false)
+      setConfirmDelete(false)
+    }
+  }
 
   return (
-    <div className="p-6 pb-16 space-y-0">
+    <div style={{ padding: "28px 36px", maxWidth: 780 }}>
+      {/* Toast */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 20,
+            right: 24,
+            zIndex: 9999,
+            padding: "10px 18px",
+            borderRadius: 10,
+            fontSize: 13,
+            fontWeight: 500,
+            color: "#fff",
+            background: toast.type === "success" ? "#1FAE5B" : "#E24B4A",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
 
-      {/* ═══════════════════════════════════════════════════
-          SECTION 1 — ACCOUNT SETTINGS
-      ═══════════════════════════════════════════════════ */}
-      <section id="account" className="space-y-6">
-        <div className="flex items-center gap-3 pt-2 pb-1">
-          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gray-100">
-            <IconUser size={18} className="text-gray-600" />
+      <div style={{ fontSize: 18, fontWeight: 600, color: "#1E1E1E", marginBottom: 4 }}>Profile</div>
+      <div style={{ fontSize: 12, color: "#888", marginBottom: 24 }}>Manage your personal account information</div>
+
+      {/* Personal Information Card */}
+      <div style={card}>
+        <div style={cardHeader}>
+          <div style={cardIcon}>
+            <svg viewBox="0 0 16 16" fill="none" stroke="#1FAE5B" strokeWidth="1.5" width={16} height={16}>
+              <circle cx="8" cy="5" r="3" />
+              <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+            </svg>
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Account Settings</h2>
-            <p className="text-sm text-muted-foreground">Manage your personal information and preferences</p>
+            <div style={cardTitle}>Personal Information</div>
+            <div style={cardDesc}>Your name and email visible across the workspace</div>
           </div>
         </div>
-
-        {/* Profile + Password */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-
-          {/* LEFT — Profile */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Profile</CardTitle>
-              <CardDescription>Update your name and profile photo</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage src={session?.user?.image ?? undefined} alt={session?.user?.name ?? "User"} />
-                  <AvatarFallback className="text-lg font-bold bg-[#0F6B3E] text-white">
-                    {session?.user?.name?.charAt(0)?.toUpperCase() ?? "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <IconUpload size={14} />
-                    Change Photo
-                  </Button>
-                  <p className="text-xs text-gray-500 mt-1.5">PNG, JPG up to 2MB</p>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  placeholder="Your full name"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={session?.user?.email ?? ""}
-                  readOnly
-                  className="bg-gray-50 text-gray-500 cursor-default"
-                />
-                <p className="text-xs text-gray-400">Email cannot be changed here</p>
-              </div>
-
-              <div className="pt-2 border-t border-gray-100">
-                <Button onClick={handleSaveName} disabled={savingName} className="bg-[#1FAE5B] hover:bg-[#0F6B3E]">
-                  {savingName ? "Saving..." : nameSaved ? "✓ Saved!" : "Save Changes"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* RIGHT — Password */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Password</CardTitle>
-              <CardDescription>Change your account password</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {passwordError && (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-                  <IconAlertCircle size={16} className="shrink-0" />
-                  {passwordError}
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label htmlFor="currentPassword">Current Password</Label>
-                <Input id="currentPassword" type="password" value={currentPassword}
-                  onChange={e => setCurrentPassword(e.target.value)} placeholder="••••••••" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="newPassword">New Password</Label>
-                <Input id="newPassword" type="password" value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input id="confirmPassword" type="password" value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" />
-              </div>
-              <div className="pt-2 border-t border-gray-100">
-                <Button onClick={handleUpdatePassword} disabled={savingPassword} className="bg-[#1FAE5B] hover:bg-[#0F6B3E]">
-                  {savingPassword ? "Updating..." : passwordSaved ? "✓ Updated!" : "Update Password"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Subscription + Plan Usage */}
-        {subscription && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base">Subscription</CardTitle>
-                    <CardDescription>Your current plan and billing info</CardDescription>
-                  </div>
-                  <span className={`text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-md ${planColor}`}>
-                    {planLabel}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                {[
-                  { label: "Current Plan",  value: subscription.plan?.display_name || planLabel },
-                  { label: "Billing Cycle", value: subscription.billing_cycle },
-                  { label: "Status",        value: subscription.status },
-                  { label: "Renewal Date",  value: subscription.current_period_end
-                      ? new Date(subscription.current_period_end).toLocaleDateString() : "—" },
-                ].map(row => (
-                  <div key={row.label} className="flex justify-between items-center py-2.5 border-b border-dashed border-gray-100 last:border-0 text-sm">
-                    <span className="text-gray-500 font-medium">{row.label}</span>
-                    <span className="text-gray-900 font-medium capitalize">{row.value}</span>
-                  </div>
-                ))}
-                <div className="pt-3">
-                  <Link href="/pricing?cycle=monthly">
-                    <Button variant="outline" size="sm" className="text-[#0F6B3E] border-[#1FAE5B] hover:bg-[#1FAE5B] hover:text-white gap-1">
-                      Manage Plan <IconArrowRight size={14} />
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Plan Usage &amp; Limits</CardTitle>
-                <CardDescription>How much of your plan you&apos;re using</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-1">
-                {(() => {
-                  const maxBrands = subscription.plan?.max_brands || subscription.plan?.included_brands
-                  const maxSeats  = subscription.plan?.max_seats  || subscription.plan?.included_seats
-                  const items: { icon: string; text: string }[] = []
-
-                  if (maxBrands === null || maxBrands > 100) items.push({ icon: "▸", text: `${brandCount} Brands — Unlimited` })
-                  else items.push({ icon: "▸", text: `${brandCount} of ${maxBrands} Brands used` })
-
-                  if (maxSeats === null || maxSeats > 100) items.push({ icon: "▸", text: "Collaborators — Unlimited" })
-                  else items.push({ icon: "▸", text: `Up to ${maxSeats} collaborators` })
-
-                  if (subscription.plan?.can_use_api)      items.push({ icon: "★", text: "API Access — Active" })
-                  if (subscription.plan?.custom_branding)  items.push({ icon: "★", text: "Custom Branding — Active" })
-                  if (subscription.plan?.priority_support) items.push({ icon: "★", text: "Priority Support — Active" })
-
-                  return items.map((item, i) => (
-                    <div key={i} className="flex items-center gap-3 py-2.5 border-b border-dashed border-gray-100 last:border-0 text-sm">
-                      <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs font-bold shrink-0">
-                        {item.icon}
-                      </div>
-                      <span className="text-gray-700">{item.text}</span>
-                    </div>
-                  ))
-                })()}
-              </CardContent>
-            </Card>
+        <div style={cardBody}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+            <div style={avatar}>{initials}</div>
+            <div>
+              <button style={auBtn}>Change photo</button>
+              <div style={hint}>PNG, JPG or WebP · max 5MB</div>
+            </div>
           </div>
+
+          <div style={fGrid}>
+            <div style={fGroup}>
+              <label style={fLabel}>First name</label>
+              <input
+                style={fInput}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="First name"
+              />
+            </div>
+            <div style={fGroup}>
+              <label style={fLabel}>Last name</label>
+              <input
+                style={fInput}
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Last name"
+              />
+            </div>
+            <div style={{ ...fGroup, gridColumn: "1 / -1" }}>
+              <label style={fLabel}>Email address</label>
+              <input
+                style={fInput}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </div>
+            <div style={{ ...fGroup, gridColumn: "1 / -1" }}>
+              <label style={fLabel}>
+                Job title <span style={{ color: "#aaa", fontWeight: 400 }}>(optional)</span>
+              </label>
+              <input
+                style={fInput}
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                placeholder="e.g. Marketing Manager"
+              />
+            </div>
+          </div>
+
+          <div style={btnRow}>
+            <button style={btnPrimary} onClick={handleSaveProfile} disabled={savingProfile}>
+              {savingProfile ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Preferences Card */}
+      <div style={card}>
+        <div style={cardHeader}>
+          <div style={cardIcon}>
+            <svg viewBox="0 0 16 16" fill="none" stroke="#1FAE5B" strokeWidth="1.5" width={16} height={16}>
+              <rect x="1" y="4" width="14" height="9" rx="2" />
+              <path d="M1 8h14" />
+            </svg>
+          </div>
+          <div>
+            <div style={cardTitle}>Preferences</div>
+            <div style={cardDesc}>Language, timezone and display settings</div>
+          </div>
+        </div>
+        <div style={cardBody}>
+          <div style={fGrid}>
+            <div style={fGroup}>
+              <label style={fLabel}>Timezone</label>
+              <select style={fInput} value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+                <option>Asia/Manila (UTC+8)</option>
+                <option>Asia/Singapore (UTC+8)</option>
+                <option>America/New_York (UTC-5)</option>
+                <option>Europe/London (UTC+0)</option>
+              </select>
+            </div>
+            <div style={fGroup}>
+              <label style={fLabel}>Currency display</label>
+              <select style={fInput} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                <option>USD ($)</option>
+                <option>PHP (₱)</option>
+                <option>SGD (S$)</option>
+                <option>EUR (€)</option>
+              </select>
+            </div>
+            <div style={fGroup}>
+              <label style={fLabel}>Date format</label>
+              <select style={fInput} value={dateFormat} onChange={(e) => setDateFormat(e.target.value)}>
+                <option>MM/DD/YYYY</option>
+                <option>DD/MM/YYYY</option>
+                <option>YYYY-MM-DD</option>
+              </select>
+            </div>
+          </div>
+          <div style={btnRow}>
+            <button style={btnPrimary} onClick={handleSavePrefs} disabled={savingPrefs}>
+              {savingPrefs ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Danger Zone */}
+      <div style={dangerZone}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#a32d2d", marginBottom: 4 }}>Danger zone</div>
+        <div style={{ fontSize: 11, color: "#888", marginBottom: 12 }}>
+          {confirmDelete
+            ? "Are you sure? This permanently deletes your account and all data. Click again to confirm."
+            : "Permanently delete your account and all associated data. This action cannot be undone."}
+        </div>
+        <button
+          style={{
+            ...btnDanger,
+            ...(confirmDelete ? { background: "#E24B4A", color: "#fff" } : {}),
+          }}
+          onClick={handleDeleteAccount}
+          disabled={deletingAccount}
+        >
+          {deletingAccount ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete account"}
+        </button>
+        {confirmDelete && (
+          <button
+            style={{ ...auBtn, marginLeft: 8 }}
+            onClick={() => setConfirmDelete(false)}
+          >
+            Cancel
+          </button>
         )}
-      </section>
-
+      </div>
     </div>
   )
 }
 
-// Suspense wrapper required for useSearchParams
-export default function SettingsPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="h-8 w-8 rounded-full border-2 border-[#1FAE5B] border-t-transparent animate-spin" />
-      </div>
-    }>
-      <SettingsContent />
-    </Suspense>
-  )
+// ── Shared styles ──────────────────────────────────────────────
+const card: React.CSSProperties = {
+  background: "#fff",
+  border: "0.5px solid rgba(0,0,0,0.08)",
+  borderRadius: 12,
+  marginBottom: 16,
+  overflow: "hidden",
+}
+const cardHeader: React.CSSProperties = {
+  padding: "16px 20px",
+  borderBottom: "0.5px solid rgba(0,0,0,0.07)",
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+}
+const cardIcon: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: 9,
+  background: "#f0faf5",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+}
+const cardTitle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: "#1E1E1E" }
+const cardDesc: React.CSSProperties  = { fontSize: 11, color: "#888", marginTop: 2 }
+const cardBody: React.CSSProperties  = { padding: 20 }
+const fGrid: React.CSSProperties     = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }
+const fGroup: React.CSSProperties    = { display: "flex", flexDirection: "column", gap: 4 }
+const fLabel: React.CSSProperties    = { fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: "0.02em" }
+const fInput: React.CSSProperties    = {
+  width: "100%",
+  fontSize: 12,
+  padding: "9px 12px",
+  borderRadius: 8,
+  border: "0.5px solid rgba(0,0,0,0.15)",
+  background: "#fff",
+  color: "#1E1E1E",
+  fontFamily: "inherit",
+}
+const hint: React.CSSProperties   = { fontSize: 10, color: "#aaa", marginTop: 2 }
+const avatar: React.CSSProperties = {
+  width: 64,
+  height: 64,
+  borderRadius: "50%",
+  background: "#1FAE5B",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 22,
+  fontWeight: 700,
+  color: "#fff",
+  flexShrink: 0,
+}
+const auBtn: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 500,
+  padding: "6px 14px",
+  borderRadius: 8,
+  border: "0.5px solid rgba(0,0,0,0.15)",
+  background: "#fff",
+  color: "#555",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  display: "inline-block",
+  marginBottom: 4,
+}
+const btnRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 8,
+  marginTop: 16,
+  paddingTop: 14,
+  borderTop: "0.5px solid rgba(0,0,0,0.06)",
+}
+const btnPrimary: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 500,
+  padding: "8px 18px",
+  borderRadius: 9,
+  border: "none",
+  background: "#1FAE5B",
+  color: "#fff",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  opacity: 1,
+}
+const btnDanger: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 500,
+  padding: "8px 14px",
+  borderRadius: 9,
+  border: "0.5px solid #E24B4A",
+  background: "#fff",
+  color: "#E24B4A",
+  cursor: "pointer",
+  fontFamily: "inherit",
+}
+const dangerZone: React.CSSProperties = {
+  border: "0.5px solid rgba(226,75,74,0.25)",
+  borderRadius: 10,
+  padding: "16px 18px",
+  background: "#fdf5f5",
 }
